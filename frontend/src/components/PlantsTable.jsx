@@ -1,0 +1,86 @@
+import React from 'react';
+import { Factory } from 'lucide-react';
+
+// ─── Lista de plantas — reemplaza el antiguo "Centro de alertas" en el Dashboard ──
+export default function PlantsTable({ puntos, loading, error, selectedPunto, onSelectPunto }) {
+  return (
+    <div style={{
+      background: 'var(--bg-card)', border: '1px solid var(--border)',
+      borderRadius: 8, display: 'flex', flexDirection: 'column',
+      height: '100%', minHeight: 0, overflow: 'hidden',
+    }}>
+      {/* Header */}
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+        <div style={{
+          fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 13,
+          letterSpacing: '0.1em', color: 'var(--text-primary)',
+        }}>
+          PLANTAS REGISTRADAS
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginTop: 2 }}>
+          {loading ? 'Cargando…' : `${puntos.length} PLANTAS`}
+        </div>
+      </div>
+
+      {/* Lista */}
+      <div style={{ flex: 1, overflow: 'auto', padding: 8 }}>
+        {loading && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 80 }}>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>Cargando…</span>
+          </div>
+        )}
+        {!loading && error && (
+          <div style={{ padding: 12, fontSize: 11, color: 'var(--accent-red)' }}>Error: {error}</div>
+        )}
+        {!loading && !error && puntos.length === 0 && (
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', height: '100%', color: 'var(--text-muted)', gap: 8, padding: 20,
+          }}>
+            <Factory size={22} opacity={0.4} />
+            <div style={{ fontSize: 11, letterSpacing: '0.12em', textAlign: 'center' }}>
+              Sin plantas registradas.
+            </div>
+          </div>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {puntos.map((p, i) => (
+            <PlantRow
+              key={p.id_punto}
+              punto={p}
+              index={i}
+              selected={selectedPunto?.id_punto === p.id_punto}
+              onClick={() => onSelectPunto(p)}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PlantRow({ punto, index, selected, onClick }) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        padding: '10px 12px',
+        background: selected ? 'rgba(20,50,163,0.08)' : 'var(--bg-page)',
+        border: `1px solid ${selected ? 'var(--accent-blue)' : 'var(--border)'}`,
+        borderLeft: `3px solid ${selected ? 'var(--accent-blue)' : 'var(--border-bright)'}`,
+        cursor: 'pointer',
+        animation: `fade-in-up 0.3s ease ${index * 0.04}s both`,
+        transition: 'background 0.12s',
+      }}
+      onMouseEnter={e => { if (!selected) e.currentTarget.style.background = 'var(--bg-card-hover)'; }}
+      onMouseLeave={e => { if (!selected) e.currentTarget.style.background = 'var(--bg-page)'; }}
+    >
+      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 3 }}>
+        {punto.sede ?? punto.id_punto}
+      </div>
+      <div style={{ fontSize: 10, color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
+        <span>{punto.ciudad ?? '—'}{punto.departamento ? ` · ${punto.departamento}` : ''}</span>
+      </div>
+    </div>
+  );
+}

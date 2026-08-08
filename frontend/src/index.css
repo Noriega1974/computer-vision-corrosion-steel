@@ -37,7 +37,7 @@
   --section-kpi:     #ffffff;
   --section-map:     #f0f7ff;
   --section-detail:  #f0f4ff;
-  --section-alerts:  #fff5f5;
+  --section-plants:  #f0f7ff;
   --section-charts:  #f4faf4;
 
   /* Nav active state */
@@ -79,7 +79,7 @@
   --section-kpi:     #0f151c;
   --section-map:     #0c1520;
   --section-detail:  #0f1a14;
-  --section-alerts:  #1a0f0f;
+  --section-plants:  #0c1520;
   --section-charts:  #0c1a12;
 
   --nav-active-bg:   rgba(77, 127, 255, 0.14);
@@ -114,7 +114,7 @@ body {
 .section-kpi    { background: var(--section-kpi); }
 .section-map    { background: var(--section-map); }
 .section-detail { background: var(--section-detail); }
-.section-alerts { background: var(--section-alerts); }
+.section-plants { background: var(--section-plants); }
 .section-charts { background: var(--section-charts); }
 
 /* ── CARD ───────────────────────────────────────────────────────────── */

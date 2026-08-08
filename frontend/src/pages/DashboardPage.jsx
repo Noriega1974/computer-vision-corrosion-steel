@@ -4,7 +4,7 @@ import { Upload } from 'lucide-react';
 import KPIBar from '../components/KPIBar';
 import ColombiaMap from '../components/ColombiaMap';
 import PlantDetail from '../components/PlantDetail';
-import AlertsPanel from '../components/AlertsPanel';
+import PlantsTable from '../components/PlantsTable';
 import ChartsRow from '../components/ChartsRow';
 import { usePuntos } from '../hooks/usePuntos';
 
@@ -24,7 +24,7 @@ function useLeaflet() {
 export default function DashboardPage() {
   const [selectedPunto, setSelectedPunto] = useState(null);
   const leafletReady = useLeaflet();
-  const { puntos } = usePuntos();
+  const { puntos, loading: loadingPuntos, error: errorPuntos } = usePuntos();
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
@@ -135,19 +135,25 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Alertas */}
-        <div className="section-alerts" style={{
+        {/* Plantas */}
+        <div className="section-plants" style={{
           padding: '16px', display: 'flex', flexDirection: 'column',
           gap: 8, height: '100%', minHeight: 0, overflow: 'hidden',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <span style={{ background: 'var(--accent-red)', width: 3, height: 16, borderRadius: 2, display: 'inline-block' }} />
+            <span style={{ background: 'var(--accent-blue)', width: 3, height: 16, borderRadius: 2, display: 'inline-block' }} />
             <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-              Centro de alertas
+              Plantas
             </span>
           </div>
           <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            <AlertsPanel />
+            <PlantsTable
+              puntos={puntos}
+              loading={loadingPuntos}
+              error={errorPuntos}
+              selectedPunto={selectedPunto}
+              onSelectPunto={setSelectedPunto}
+            />
           </div>
         </div>
       </div>
