@@ -96,8 +96,6 @@ export default function PlantDetail({ punto }) {
         {/* Meta info */}
         <div style={{ display: 'flex', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
           {[
-            { l: 'Estructura', v: punto.tipo_estructura || '—' },
-            { l: 'Espesor', v: punto.grosor_mm != null ? `${punto.grosor_mm} mm` : '—' },
             { l: 'Mediciones', v: mediciones.length },
           ].map(({ l, v }) => (
             <div key={l} style={{ textAlign: 'center', minWidth: 50 }}>

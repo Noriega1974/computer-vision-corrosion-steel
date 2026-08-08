@@ -4,6 +4,13 @@ import { useGestionPuntos } from '../hooks/usePunto';
 import { useMedicionesPunto } from '../hooks/useMedicionesPunto';
 import { useAuth } from '../auth/AuthContext';
 import { nivelLabel, nivelColor, nivelBg } from '../lib/statusUtils';
+import SearchableSelect from '../components/SearchableSelect';
+import colombiaData from '../data/colombia-divipola.json';
+
+const DEPARTAMENTOS = colombiaData.departamentos.map(d => d.nombre);
+const MUNICIPIOS_POR_DEPARTAMENTO = Object.fromEntries(
+  colombiaData.departamentos.map(d => [d.nombre, d.municipios])
+);
 
 // ─── Skeleton ────────────────────────────────────────────────────────────────
 function SkeletonRow() {
@@ -75,20 +82,22 @@ const LABEL_STYLE = { display: 'block', fontFamily: 'var(--font-data)', fontSize
 
 function PuntoForm({ initial = {}, onSubmit, saving, error }) {
   const [form, setForm] = useState({
-    nombre_punto: initial.nombre_punto ?? '',
+    sede: initial.sede ?? '',
     ciudad: initial.ciudad ?? '',
     departamento: initial.departamento ?? '',
     descripcion: initial.descripcion ?? '',
     latitud: initial.coordenadas?.lat ?? initial.latitud ?? '',
     longitud: initial.coordenadas?.lng ?? initial.longitud ?? '',
-    tipo_estructura: initial.tipo_estructura ?? '',
-    grosor_mm: initial.grosor_mm ?? '',
   });
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoError, setGeoError] = useState(null);
   const [showManual, setShowManual] = useState(false);
+  const [validationError, setValidationError] = useState(null);
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
+  const setField = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
+
+  const municipiosDisponibles = MUNICIPIOS_POR_DEPARTAMENTO[form.departamento] ?? [];
 
   // Auto-detect on mount if no coordinates already set
   useEffect(() => {
@@ -114,10 +123,20 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    // El combobox solo permite escribir; validar que lo elegido sea una
+    // opción real de la lista DIVIPOLA antes de enviar.
+    if (!DEPARTAMENTOS.includes(form.departamento)) {
+      setValidationError('Selecciona un departamento válido de la lista.');
+      return;
+    }
+    if (!municipiosDisponibles.includes(form.ciudad)) {
+      setValidationError('Selecciona una ciudad válida del departamento elegido.');
+      return;
+    }
+    setValidationError(null);
     const payload = { ...form };
     if (payload.latitud !== '') payload.latitud = Number(payload.latitud);
     if (payload.longitud !== '') payload.longitud = Number(payload.longitud);
-    if (payload.grosor_mm !== '') payload.grosor_mm = Number(payload.grosor_mm);
     if (payload.latitud !== '' && payload.longitud !== '') {
       payload.coordenadas = { lat: payload.latitud, lng: payload.longitud };
     }
@@ -126,38 +145,39 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
 
   return (
     <form onSubmit={handleSubmit} style={{ padding: '20px' }}>
-      {[
-        { key: 'nombre_punto', label: 'Nombre de la planta', required: true },
-        { key: 'ciudad', label: 'Ciudad', required: true },
-        { key: 'departamento', label: 'Departamento' },
-        { key: 'descripcion', label: 'Descripción' },
-      ].map(f => (
-        <div key={f.key} style={{ marginBottom: 14 }}>
-          <label style={LABEL_STYLE}>{f.label}{f.required && ' *'}</label>
-          <input value={form[f.key]} onChange={set(f.key)} required={f.required} style={inputStyle} />
-        </div>
-      ))}
-
-      {/* Tipo de estructura */}
       <div style={{ marginBottom: 14 }}>
-        <label style={LABEL_STYLE}>Tipo de estructura</label>
-        <select value={form.tipo_estructura} onChange={set('tipo_estructura')} style={inputStyle}>
-          <option value="">Seleccionar...</option>
-          <option value="Láminas">Láminas</option>
-          <option value="Tuberías">Tuberías</option>
-        </select>
+        <label style={LABEL_STYLE}>Nombre de la planta *</label>
+        <input value={form.sede} onChange={set('sede')} required style={inputStyle} />
       </div>
 
-      {/* Grosor de lámina/tubería */}
+      {/* Departamento — combobox cerrado, solo acepta divisiones DIVIPOLA reales */}
       <div style={{ marginBottom: 14 }}>
-        <label style={LABEL_STYLE}>Espesor nominal (mm)</label>
-        <input
-          type="number" step="0.001" min="0"
-          placeholder="Ej: 3.527"
-          value={form.grosor_mm}
-          onChange={set('grosor_mm')}
-          style={inputStyle}
+        <label style={LABEL_STYLE}>Departamento *</label>
+        <SearchableSelect
+          options={DEPARTAMENTOS}
+          value={form.departamento}
+          onChange={(v) => setForm(f => ({ ...f, departamento: v, ciudad: v === f.departamento ? f.ciudad : '' }))}
+          placeholder="Buscar departamento"
+          emptyMessage="Sin coincidencias"
         />
+      </div>
+
+      {/* Ciudad — depende del departamento seleccionado */}
+      <div style={{ marginBottom: 14 }}>
+        <label style={LABEL_STYLE}>Ciudad *</label>
+        <SearchableSelect
+          options={municipiosDisponibles}
+          value={form.ciudad}
+          onChange={setField('ciudad')}
+          placeholder={form.departamento ? 'Buscar ciudad' : 'Selecciona un departamento primero'}
+          disabled={!form.departamento}
+          emptyMessage="Sin coincidencias"
+        />
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <label style={LABEL_STYLE}>Descripción</label>
+        <input value={form.descripcion} onChange={set('descripcion')} style={inputStyle} />
       </div>
 
       {/* Ubicación */}
@@ -206,9 +226,9 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
           </div>
         )}
       </div>
-      {error && (
+      {(validationError || error) && (
         <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, color: '#dc2626', fontSize: 12, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <AlertCircle size={13} /> {error}
+          <AlertCircle size={13} /> {validationError || error}
         </div>
       )}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
@@ -253,8 +273,6 @@ function PuntoDetail({ punto, onEdit, isAdmin }) {
                 ['ID', punto.id_punto],
                 ['Ciudad', punto.ciudad],
                 ['Departamento', punto.departamento],
-                ['Tipo de estructura', punto.tipo_estructura || '—'],
-                ['Espesor nominal', punto.grosor_mm != null ? `${punto.grosor_mm} mm` : '—'],
                 ['Latitud', punto.coordenadas?.lat ?? punto.latitud],
                 ['Longitud', punto.coordenadas?.lng ?? punto.longitud],
               ].map(([label, value]) => (
@@ -363,7 +381,7 @@ export default function PlantsPage() {
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return puntos.filter(p =>
-      (p.nombre_punto ?? '').toLowerCase().includes(q) ||
+      (p.sede ?? '').toLowerCase().includes(q) ||
       (p.ciudad ?? '').toLowerCase().includes(q) ||
       (p.departamento ?? '').toLowerCase().includes(q)
     );
@@ -453,7 +471,7 @@ export default function PlantsPage() {
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
                       <td style={{ padding: '10px 14px' }}>
-                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.nombre_punto}</div>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.sede}</div>
                         <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2 }}>{p.id_punto}</div>
                       </td>
                       <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>{p.ciudad ?? '—'}</td>
@@ -487,7 +505,7 @@ export default function PlantsPage() {
 
       {/* ── Modal: Detalle de planta ── */}
       {selectedPunto && (
-        <Modal title={selectedPunto.nombre_punto} onClose={() => setSelectedPunto(null)}>
+        <Modal title={selectedPunto.sede} onClose={() => setSelectedPunto(null)}>
           <PuntoDetail
             punto={selectedPunto}
             isAdmin={isAdmin}
@@ -498,7 +516,7 @@ export default function PlantsPage() {
 
       {/* ── Modal: Editar planta ── */}
       {editPunto && (
-        <Modal title={`Editar: ${editPunto.nombre_punto}`} onClose={() => setEditPunto(null)}>
+        <Modal title={`Editar: ${editPunto.sede}`} onClose={() => setEditPunto(null)}>
           <PuntoForm initial={editPunto} onSubmit={handleEdit} saving={mutating} error={formError} />
         </Modal>
       )}
