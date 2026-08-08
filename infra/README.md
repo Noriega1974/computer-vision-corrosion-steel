@@ -91,10 +91,8 @@ source system (`corria-inference-deps`, verified: onnxruntime==1.16.3,
 numpy==1.26.4, Pillow==10.4.0 — see
 `pf_corrosion_infra/lambda_src/inference/layer/requirements.txt`).
 
-This scaffolding session could not build that layer's contents (needs
-manylinux-compatible wheels downloaded for the Lambda runtime target, which
-this sandboxed session doesn't have network/docker access to do reliably).
-Before deploying, populate the layer asset:
+This directory is gitignored (~130MB of third-party wheels — don't commit
+binaries). Populate it locally before every deploy:
 
 ```bash
 cd pf_corrosion_infra/lambda_src/inference/layer
@@ -103,13 +101,24 @@ pip install -r requirements.txt -t python \
   --python-version 3.11 --only-binary=:all:
 ```
 
-This produces a `python/` subdirectory that CDK will zip into the layer
-asset on the next `cdk synth`/`cdk deploy`.
+This produces a `python/` subdirectory (~131MB) that CDK zips into the
+layer asset on the next `cdk synth`/`cdk deploy`.
 
 The ONNX model itself (`yolov8n-seg.onnx`, ~13MB) IS already packaged
 directly in the Lambda's own asset folder
 (`pf_corrosion_infra/lambda_src/inference/model/`) — not in S3, not in the
 layer — matching how the source system shipped it.
+
+**Gotcha found and fixed while building the layer**: the inference
+function's `Code.from_asset()` originally zipped its whole source
+directory, which — once the layer's `python/` subfolder existed on disk —
+would have bundled the same ~131MB of wheels a second time into the
+function's own code. Function (144MB) + layer (131MB) combined would have
+exceeded Lambda's 250MB unzipped deployment-package limit. Fixed with
+`exclude=["layer", "__pycache__"]` on that asset in `compute_stack.py`;
+function code is now ~13MB (handler + model) as intended. If you ever
+restructure this Lambda's source layout, re-verify combined unzipped size
+stays under 250MB.
 
 ## Project layout
 

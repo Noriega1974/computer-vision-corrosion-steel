@@ -169,7 +169,14 @@ class CorriaComputeStack(Stack):
             function_name="pf-corrosion-inference",
             runtime=_lambda.Runtime.PYTHON_3_11,
             handler="handler.lambda_handler",
-            code=_lambda.Code.from_asset(os.path.join(LAMBDA_SRC, "inference")),
+            code=_lambda.Code.from_asset(
+                os.path.join(LAMBDA_SRC, "inference"),
+                # "layer" ships separately as InferenceDepsLayer above — without
+                # this exclude, the function zip would duplicate its ~130MB of
+                # wheels and push the function+layer combined unzipped size
+                # past Lambda's 250MB hard limit.
+                exclude=["layer", "__pycache__"],
+            ),
             layers=[inference_deps_layer],
             memory_size=1024,
             timeout=Duration.seconds(30),

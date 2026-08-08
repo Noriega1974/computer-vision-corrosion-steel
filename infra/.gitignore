@@ -7,6 +7,11 @@ __pycache__/
 cdk.out/
 cdk.context.json
 
+# Downloaded manylinux wheels for the inference Lambda layer — rebuild
+# locally with the pip command in README.md before deploying, don't commit
+# ~130MB of third-party binaries.
+pf_corrosion_infra/lambda_src/inference/layer/python/
+
 node_modules/
 
 *.zip
