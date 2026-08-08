@@ -162,7 +162,6 @@ def lambda_handler(event: dict, context) -> dict:
             item = {
                 "id_punto": id_punto_nuevo,
                 "sk": SK_METADATA,
-                "nombre_punto": body.get("nombre_punto", ""),
                 "clave_logica": f"{sede}-{ciudad}",
                 "coordenadas": body.get("coordenadas", {}),
                 "ciudad": ciudad,
