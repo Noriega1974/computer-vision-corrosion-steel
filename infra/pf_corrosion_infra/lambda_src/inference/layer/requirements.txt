@@ -1,0 +1,6 @@
+# Runtime dependencies for the inference Lambda (python3.11, x86_64).
+# Pinned to match the versions verified in the source account's
+# corria-inference-deps layer (read-only inspection during this migration).
+onnxruntime==1.16.3
+numpy==1.26.4
+Pillow==10.4.0

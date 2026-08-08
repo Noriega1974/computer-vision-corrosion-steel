@@ -1,0 +1,17 @@
+.venv/
+*.egg-info/
+__pycache__/
+*.py[cod]
+*$py.class
+
+cdk.out/
+cdk.context.json
+
+node_modules/
+
+*.zip
+!tests/fixtures/**/*.zip
+
+.env
+.DS_Store
+*.log
