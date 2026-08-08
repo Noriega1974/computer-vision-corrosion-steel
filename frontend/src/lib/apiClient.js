@@ -54,7 +54,11 @@ async function request(method, path, body) {
     let message = `Error ${res.status}: ${res.statusText}`;
     try {
       const errBody = await res.json();
-      if (errBody.message) message = errBody.message;
+      // El backend devuelve {"error": "..."} en todos los endpoints; se
+      // deja el chequeo de "message" como respaldo por si algún handler
+      // difiere.
+      if (errBody.error) message = errBody.error;
+      else if (errBody.message) message = errBody.message;
     } catch { /* sin cuerpo JSON */ }
     throw new Error(message);
   }

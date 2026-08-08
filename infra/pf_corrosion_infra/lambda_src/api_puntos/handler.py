@@ -18,6 +18,7 @@ migración (ver README del proyecto).
 import json
 import logging
 import os
+import uuid
 from decimal import Decimal
 from datetime import datetime, timezone
 
@@ -146,9 +147,10 @@ def lambda_handler(event: dict, context) -> dict:
                 return _respuesta(403, {"error": "Solo administradores pueden crear puntos directamente. Use POST /medicion para el flujo normal."})
 
             body = json.loads(event.get("body") or "{}")
-            id_punto_nuevo = body.get("id_punto")
-            if not id_punto_nuevo:
-                return _respuesta(400, {"error": "id_punto es requerido"})
+            # El id_punto siempre lo genera el backend (mismo patrón que
+            # _resolver_punto en la Lambda de inferencia) — el cliente nunca
+            # debería tener que inventar un ID de recurso al crearlo.
+            id_punto_nuevo = f"PT-{uuid.uuid4()}"
 
             sede = body.get("sede", "")
             ciudad = body.get("ciudad", "")
