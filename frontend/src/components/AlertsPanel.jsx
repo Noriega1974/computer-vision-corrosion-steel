@@ -14,12 +14,11 @@ function AlertDetailModal({ alerta, onClose }) {
   if (!alerta) return null;
   const nivel = alerta.nivel_corrosion ?? 0;
   const color = nivelColor(nivel);
-  // Las mediciones no traen punto_info anidado; se cruza con /puntos para la empresa
+  // Las mediciones no traen punto_info anidado; se cruza con /puntos
   const puntoCompleto = puntos.find(p => p.id_punto === alerta.id_punto) ?? {};
   const punto = {
     sede: alerta.sede ?? puntoCompleto.sede,
     ciudad: alerta.ciudad ?? puntoCompleto.ciudad,
-    empresa: puntoCompleto.empresa,
   };
 
   return (
@@ -61,7 +60,6 @@ function AlertDetailModal({ alerta, onClose }) {
           {[
             { label: 'Área corroída', value: `${(alerta.area_corroida_pct ?? 0).toFixed(1)}%` },
             { label: 'Confianza', value: alerta.confianza_promedio ? `${(alerta.confianza_promedio * 100).toFixed(0)}%` : '—' },
-            { label: 'Empresa', value: punto.empresa ?? '—' },
             { label: 'Ciudad', value: punto.ciudad ?? '—' },
           ].map(({ label, value }) => (
             <div key={label} style={{ background: 'var(--bg-inset)', padding: '8px 12px', borderRadius: 6 }}>

@@ -297,7 +297,6 @@ export default function MedicionDetailPage() {
     : {
         sede:        medicion.sede      ?? puntoFallback.sede      ?? '',
         ciudad:      medicion.ciudad    ?? puntoFallback.ciudad    ?? '',
-        empresa:     medicion.empresa   ?? puntoFallback.empresa   ?? '',
         coordenadas: puntoFallback.coordenadas ?? {},
         id_punto:    medicion.id_punto,
       };
@@ -546,7 +545,6 @@ export default function MedicionDetailPage() {
               <MetaItem label="ID punto" value={medicion.id_punto ?? '—'} wrap />
               <MetaItem label="Planta" value={punto.sede ?? '—'} />
               <MetaItem label="Ciudad" value={punto.ciudad ?? '—'} />
-              <MetaItem label="Empresa" value={punto.empresa ?? '—'} />
             </div>
           </div>
 

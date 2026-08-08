@@ -76,7 +76,7 @@ export default function PlantDetail({ punto }) {
               {(punto.sede ?? punto.id_punto).toUpperCase()}
             </div>
             <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4, letterSpacing: '0.08em' }}>
-              {punto.ciudad} · {punto.departamento} · {punto.empresa}
+              {punto.ciudad} · {punto.departamento}
             </div>
           </div>
           {nivel >= 0 && (

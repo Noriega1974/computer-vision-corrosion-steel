@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, Upload, LayoutGrid, FileText,
+  LayoutDashboard, Upload, LayoutGrid,
   Factory, Users, Settings, LogOut, ChevronLeft,
   ChevronRight, X, User,
 } from 'lucide-react';
@@ -15,8 +15,6 @@ const NAV_ITEMS = [
   { path: '/dashboard',    icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/upload',       icon: Upload,          label: 'Subir medición', roles: ['admin', 'tecnico'] },
   { path: '/galeria',      icon: LayoutGrid,      label: 'Galería' },
-  { divider: true },
-  { path: '/reportes',     icon: FileText,        label: 'Reportes' },
   { divider: true },
   { path: '/plantas',      icon: Factory,         label: 'Plantas',        roles: ['admin', 'tecnico'] },
   { path: '/usuarios',     icon: Users,           label: 'Usuarios',       roles: ['admin'] },

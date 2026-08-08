@@ -100,7 +100,7 @@ export default function ColombiaMap({ selectedPunto, onSelectPunto }) {
       const tooltipHtml = `
         <div style="background:#0d1419;border:1px solid ${color}60;padding:10px 14px;min-width:180px;font-family:monospace;font-size:11px;">
           <div style="color:${color};font-weight:700;font-size:13px;margin-bottom:4px;">${punto.sede}</div>
-          <div style="color:#7a9ab5;font-size:9px;letter-spacing:0.1em;margin-bottom:8px;">${punto.ciudad} · ${punto.empresa}</div>
+          <div style="color:#7a9ab5;font-size:9px;letter-spacing:0.1em;margin-bottom:8px;">${punto.ciudad}</div>
           <div style="display:flex;justify-content:space-between;color:#e2eaf2;">
             <span>Estado:</span>
             <span style="color:${color}">${nivelStr}</span>

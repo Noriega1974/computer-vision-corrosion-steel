@@ -13,7 +13,6 @@ import UploadPage from './pages/UploadPage';
 import GaleriaPage from './pages/GaleriaPage';
 import MedicionDetailPage from './pages/MedicionDetailPage';
 import PlaceholderPage from './pages/PlaceholderPage';
-import ReportsPage from './pages/ReportsPage';
 import PlantsPage from './pages/PlantsPage';
 import UsersPage from './pages/UsersPage';
 import ProfilePage from './pages/ProfilePage';
@@ -39,7 +38,6 @@ export default function App() {
               <Route path="/dashboard"          element={<DashboardPage />} />
               <Route path="/galeria"            element={<GaleriaPage />} />
               <Route path="/galeria/:idMedicion" element={<MedicionDetailPage />} />
-              <Route path="/reportes"           element={<ReportsPage />} />
               <Route path="/perfil"             element={<ProfilePage />} />
 
               <Route path="/upload" element={
