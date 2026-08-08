@@ -143,12 +143,17 @@ def _resolver_punto(ubicacion: dict, ts: str, tomado_por_id: str) -> tuple[str, 
             "tipo_estructura": ubicacion.get("tipo_estructura", "otro"),
             "sede": sede,
             "fecha_creacion": ts,
-            # Atributos usados por el GSI de búsqueda inversa por usuario
-            # (usuario_id/timestamp) — ver CorriaStorageStack.
-            "creado_por_id": tomado_por_id,
-            "usuario_id": tomado_por_id,
             "timestamp": ts,
         }
+        # GSI de búsqueda inversa por usuario (usuario_id/timestamp) — ver
+        # CorriaStorageStack. DynamoDB rechaza strings vacíos como clave de
+        # GSI, así que "usuario_id" solo se agrega cuando hay un usuario
+        # real (sparse index); si tomado_por_id viene vacío, el punto
+        # simplemente no aparece en ese índice, pero el resto del ítem se
+        # guarda igual.
+        if tomado_por_id:
+            nuevo["creado_por_id"] = tomado_por_id
+            nuevo["usuario_id"] = tomado_por_id
         _crear_punto(nuevo)
         return nuevo["id_punto"], nuevo
 
@@ -175,10 +180,11 @@ def _resolver_punto(ubicacion: dict, ts: str, tomado_por_id: str) -> tuple[str, 
             "tipo_estructura": "otro",
             "sede": descripcion,
             "fecha_creacion": ts,
-            "creado_por_id": tomado_por_id,
-            "usuario_id": tomado_por_id,
             "timestamp": ts,
         }
+        if tomado_por_id:
+            nuevo["creado_por_id"] = tomado_por_id
+            nuevo["usuario_id"] = tomado_por_id
         _crear_punto(nuevo)
         return nuevo["id_punto"], nuevo
 
@@ -447,11 +453,13 @@ def lambda_handler(event: dict, context) -> dict:
             "inferencia_local": floats_to_decimal(inferencia_local or {}),
             "detecciones":      floats_to_decimal(resultado_ml["detecciones"]),
             "mascaras":         floats_to_decimal(resultado_ml["mascaras"]),
-            # Identidad del autor de la medición + atributos usados por el
-            # GSI de búsqueda inversa por usuario (usuario_id/timestamp).
-            "tomado_por_id":    tomado_por_id,
-            "usuario_id":       tomado_por_id,
         }
+        if tomado_por_id:
+            # Identidad del autor + atributo de GSI (usuario_id/timestamp).
+            # DynamoDB rechaza strings vacíos como clave de GSI, así que
+            # "usuario_id" solo se agrega cuando hay un usuario real.
+            item_db["tomado_por_id"] = tomado_por_id
+            item_db["usuario_id"] = tomado_por_id
         if latitud_real is not None:
             item_db["latitud_real"] = Decimal(str(latitud_real))
         if longitud_real is not None:

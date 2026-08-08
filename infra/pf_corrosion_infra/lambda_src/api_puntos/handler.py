@@ -170,14 +170,17 @@ def lambda_handler(event: dict, context) -> dict:
                 "grosor_mm": grosor,
                 "sede": sede,
                 "fecha_creacion": ahora,
-                # Atributos usados por el GSI de búsqueda inversa por usuario
-                # (usuario_id/timestamp) — ver CorriaStorageStack.
-                "creado_por_id": creado_por_id,
-                "usuario_id": creado_por_id,
                 "timestamp": ahora,
             }
             if grosor is None:
                 del item["grosor_mm"]
+            # GSI de búsqueda inversa por usuario (usuario_id/timestamp) — ver
+            # CorriaStorageStack. DynamoDB rechaza strings vacíos como clave
+            # de GSI, así que "usuario_id" solo se agrega cuando hay un
+            # usuario real (sparse index).
+            if creado_por_id:
+                item["creado_por_id"] = creado_por_id
+                item["usuario_id"] = creado_por_id
             # lat/lng vienen como float desde el frontend — DynamoDB requiere Decimal
             item = floats_to_decimal(item)
             tabla.put_item(Item=item)
