@@ -92,6 +92,39 @@ def _sanitizar_nickname(nickname: str) -> str:
     """Convierte nickname a string seguro para usar como email local."""
     return re.sub(r"[^a-z0-9]", "", nickname.lower())
 
+def _validar_password(password: str) -> str | None:
+    """Valida contra la password policy real del User Pool (auth_stack.py:
+    min 8, mayúscula, minúscula y dígito). Devuelve el mensaje de error si
+    no cumple, o None si es válida. Se valida ANTES de tocar Cognito para
+    que un intento inválido nunca llegue a crear el usuario."""
+    faltantes = []
+    if len(password) < 8:
+        faltantes.append("mínimo 8 caracteres")
+    if not re.search(r"[A-Z]", password):
+        faltantes.append("al menos una mayúscula")
+    if not re.search(r"[a-z]", password):
+        faltantes.append("al menos una minúscula")
+    if not re.search(r"[0-9]", password):
+        faltantes.append("al menos un número")
+    if not faltantes:
+        return None
+    return "La contraseña debe tener: " + ", ".join(faltantes)
+
+
+def _rollback_usuario_cognito(username: str, motivo: Exception) -> None:
+    """Deshace la creación en Cognito cuando un paso posterior falla, para
+    que el usuario nunca quede huérfano (existe en Cognito, invisible en
+    DynamoDB). Best-effort: si el rollback mismo falla, se loguea para
+    revisión manual en vez de ocultar el problema."""
+    try:
+        cognito.admin_delete_user(UserPoolId=USER_POOL_ID, Username=username)
+        logger.warning("Rollback OK: usuario Cognito '%s' eliminado tras fallo (%s)", username, motivo)
+    except Exception as rollback_err:
+        logger.error(
+            "Rollback FALLÓ para '%s' (motivo original: %s) — requiere limpieza manual: %s",
+            username, motivo, rollback_err,
+        )
+
 
 # ── Cleanup de colaboradores vencidos (EventBridge) ──────────────────────────
 
@@ -189,8 +222,9 @@ def lambda_handler(event: dict, context) -> dict:
 
             if not nickname:
                 return _respuesta(400, {"error": "nickname es requerido"})
-            if not password or len(password) < 8:
-                return _respuesta(400, {"error": "password debe tener al menos 8 caracteres"})
+            error_password = _validar_password(password)
+            if error_password:
+                return _respuesta(400, {"error": error_password})
             if not 1 <= dias <= 30:
                 return _respuesta(400, {"error": "dias debe estar entre 1 y 30"})
             if rol not in ROLES_VALIDOS:
@@ -219,17 +253,6 @@ def lambda_handler(event: dict, context) -> dict:
                 (a["Value"] for a in resp_cognito["User"]["Attributes"] if a["Name"] == "sub"),
                 None,
             )
-            cognito.admin_set_user_password(
-                UserPoolId=USER_POOL_ID,
-                Username=cognito_username,
-                Password=password,
-                Permanent=True,
-            )
-            cognito.admin_add_user_to_group(
-                UserPoolId=USER_POOL_ID,
-                Username=cognito_username,
-                GroupName=rol,
-            )
 
             id_nuevo = f"USR-{uuid.uuid4()}"
             item = {
@@ -247,7 +270,25 @@ def lambda_handler(event: dict, context) -> dict:
                 "activo":          True,
                 "fecha_creacion":  datetime.now(timezone.utc).isoformat(),
             }
-            tabla.put_item(Item=item)
+            # Desde acá, cualquier fallo debe deshacer el admin_create_user de
+            # arriba — si no, el usuario queda huérfano en Cognito (existe ahí,
+            # invisible en esta tabla) y bloquea el nickname para siempre.
+            try:
+                cognito.admin_set_user_password(
+                    UserPoolId=USER_POOL_ID,
+                    Username=cognito_username,
+                    Password=password,
+                    Permanent=True,
+                )
+                cognito.admin_add_user_to_group(
+                    UserPoolId=USER_POOL_ID,
+                    Username=cognito_username,
+                    GroupName=rol,
+                )
+                tabla.put_item(Item=item)
+            except Exception as e:
+                _rollback_usuario_cognito(cognito_username, e)
+                raise
 
             logger.info("Colaborador creado: %s → %s (vence %s)", nickname, id_nuevo, vence_en)
             return _respuesta(201, {
@@ -286,20 +327,26 @@ def lambda_handler(event: dict, context) -> dict:
                 (a["Value"] for a in resp_cognito["User"]["Attributes"] if a["Name"] == "sub"),
                 None,
             )
-            cognito.admin_add_user_to_group(
-                UserPoolId=USER_POOL_ID, Username=email, GroupName=rol,
-            )
-            id_nuevo = f"USR-{uuid.uuid4()}"
-            tabla.put_item(Item={
-                "id_usuario":    id_nuevo,
-                "email":         email,
-                "cognito_sub":   cognito_sub,
-                "rol":           rol,
-                "nombre":        nombre,
-                "cargo":         cargo,
-                "fecha_creacion": datetime.now(timezone.utc).isoformat(),
-                "activo":        True,
-            })
+            # Mismo riesgo que en /colaborador: si algo falla desde acá, hay
+            # que deshacer el admin_create_user para no dejar un huérfano.
+            try:
+                cognito.admin_add_user_to_group(
+                    UserPoolId=USER_POOL_ID, Username=email, GroupName=rol,
+                )
+                id_nuevo = f"USR-{uuid.uuid4()}"
+                tabla.put_item(Item={
+                    "id_usuario":    id_nuevo,
+                    "email":         email,
+                    "cognito_sub":   cognito_sub,
+                    "rol":           rol,
+                    "nombre":        nombre,
+                    "cargo":         cargo,
+                    "fecha_creacion": datetime.now(timezone.utc).isoformat(),
+                    "activo":        True,
+                })
+            except Exception as e:
+                _rollback_usuario_cognito(email, e)
+                raise
             return _respuesta(201, {"mensaje": f"Usuario creado. Se envió contraseña temporal a {email}"})
 
         # ── PUT /usuarios/{id_usuario} ────────────────────────────────────────
@@ -316,16 +363,26 @@ def lambda_handler(event: dict, context) -> dict:
                 email_objetivo = usuario.get("email")
                 cognito.admin_enable_user(UserPoolId=USER_POOL_ID, Username=email_objetivo)
                 ahora = datetime.now(timezone.utc).isoformat()
-                tabla.update_item(
-                    Key={"id_usuario": id_usuario},
-                    UpdateExpression="SET #activo = :verdad, #fecha_reac = :ahora REMOVE #fecha_des",
-                    ExpressionAttributeNames={
-                        "#activo": "activo",
-                        "#fecha_reac": "fecha_reactivacion",
-                        "#fecha_des": "fecha_deshabilitacion",
-                    },
-                    ExpressionAttributeValues={":verdad": True, ":ahora": ahora},
-                )
+                try:
+                    tabla.update_item(
+                        Key={"id_usuario": id_usuario},
+                        UpdateExpression="SET #activo = :verdad, #fecha_reac = :ahora REMOVE #fecha_des",
+                        ExpressionAttributeNames={
+                            "#activo": "activo",
+                            "#fecha_reac": "fecha_reactivacion",
+                            "#fecha_des": "fecha_deshabilitacion",
+                        },
+                        ExpressionAttributeValues={":verdad": True, ":ahora": ahora},
+                    )
+                except Exception as e:
+                    # Sin esto, Cognito ya deja loguear al usuario mientras
+                    # Dynamo lo sigue mostrando como inactivo — deshacemos el
+                    # enable para que ambos sistemas queden de acuerdo.
+                    try:
+                        cognito.admin_disable_user(UserPoolId=USER_POOL_ID, Username=email_objetivo)
+                    except Exception as rollback_err:
+                        logger.error("Rollback de reactivación falló para '%s': %s", email_objetivo, rollback_err)
+                    raise
                 return _respuesta(200, tabla.get_item(Key={"id_usuario": id_usuario}).get("Item", {}))
 
             campos = {k: v for k, v in body.items() if k in CAMPOS_PERMITIDOS_ADMIN}
@@ -333,26 +390,59 @@ def lambda_handler(event: dict, context) -> dict:
                 return _respuesta(400, {"error": "No hay campos válidos para actualizar"})
             rol_nuevo  = campos.get("rol")
             rol_actual = usuario.get("rol")
+            email_usr  = usuario.get("email")
+            cambio_rol_aplicado = False
             if rol_nuevo and rol_nuevo != rol_actual:
                 if rol_nuevo not in ROLES_VALIDOS:
                     return _respuesta(400, {"error": f"rol debe ser uno de: {ROLES_VALIDOS}"})
-                email_usr = usuario.get("email")
-                if rol_actual in ROLES_VALIDOS:
-                    cognito.admin_remove_user_from_group(
-                        UserPoolId=USER_POOL_ID, Username=email_usr, GroupName=rol_actual,
+                try:
+                    if rol_actual in ROLES_VALIDOS:
+                        cognito.admin_remove_user_from_group(
+                            UserPoolId=USER_POOL_ID, Username=email_usr, GroupName=rol_actual,
+                        )
+                    cognito.admin_add_user_to_group(
+                        UserPoolId=USER_POOL_ID, Username=email_usr, GroupName=rol_nuevo,
                     )
-                cognito.admin_add_user_to_group(
-                    UserPoolId=USER_POOL_ID, Username=email_usr, GroupName=rol_nuevo,
-                )
+                    cambio_rol_aplicado = True
+                except Exception as e:
+                    # El remove pudo haber pegado antes de que el add fallara:
+                    # sin este rollback el usuario queda sin ningún grupo en
+                    # Cognito (sin permisos de ningún rol).
+                    if rol_actual in ROLES_VALIDOS:
+                        try:
+                            cognito.admin_add_user_to_group(
+                                UserPoolId=USER_POOL_ID, Username=email_usr, GroupName=rol_actual,
+                            )
+                        except Exception as rollback_err:
+                            logger.error("Rollback de cambio de rol falló para '%s': %s", email_usr, rollback_err)
+                    raise
+
             expr    = "SET " + ", ".join(f"#{k} = :{k}" for k in campos)
             nombres = {f"#{k}": k for k in campos}
             valores = {f":{k}": v for k, v in campos.items()}
-            tabla.update_item(
-                Key={"id_usuario": id_usuario},
-                UpdateExpression=expr,
-                ExpressionAttributeNames=nombres,
-                ExpressionAttributeValues=valores,
-            )
+            try:
+                tabla.update_item(
+                    Key={"id_usuario": id_usuario},
+                    UpdateExpression=expr,
+                    ExpressionAttributeNames=nombres,
+                    ExpressionAttributeValues=valores,
+                )
+            except Exception as e:
+                if cambio_rol_aplicado:
+                    # Cognito ya tiene el rol nuevo pero Dynamo no se pudo
+                    # actualizar — deshacer el cambio de grupo para que no
+                    # queden en desacuerdo sobre qué rol tiene el usuario.
+                    try:
+                        cognito.admin_remove_user_from_group(
+                            UserPoolId=USER_POOL_ID, Username=email_usr, GroupName=rol_nuevo,
+                        )
+                        if rol_actual in ROLES_VALIDOS:
+                            cognito.admin_add_user_to_group(
+                                UserPoolId=USER_POOL_ID, Username=email_usr, GroupName=rol_actual,
+                            )
+                    except Exception as rollback_err:
+                        logger.error("Rollback de cambio de rol (post-Dynamo) falló para '%s': %s", email_usr, rollback_err)
+                raise
             return _respuesta(200, {"mensaje": "Usuario actualizado", "id_usuario": id_usuario})
 
         # ── DELETE /usuarios/{id_usuario}/eliminar ────────────────────────────
@@ -368,7 +458,20 @@ def lambda_handler(event: dict, context) -> dict:
                 return _respuesta(400, {"error": "No puedes eliminar tu propia cuenta"})
             email_objetivo = usuario.get("email")
             cognito.admin_delete_user(UserPoolId=USER_POOL_ID, Username=email_objetivo)
-            tabla.delete_item(Key={"id_usuario": id_usuario})
+            try:
+                tabla.delete_item(Key={"id_usuario": id_usuario})
+            except Exception as e:
+                # No hay forma segura de "deshacer" un admin_delete_user (no se
+                # puede recrear el mismo usuario con su sub original) — a
+                # diferencia de los otros casos, acá lo único que se puede
+                # hacer es dejar un rastro fuerte para limpieza manual en vez
+                # de fallar en silencio con una fila fantasma en la tabla.
+                logger.error(
+                    "INCONSISTENCIA: '%s' (%s) se borró de Cognito pero el delete en DynamoDB falló — "
+                    "requiere borrar la fila a mano en pf-corrosion-usuarios: %s",
+                    email_objetivo, id_usuario, e,
+                )
+                raise
             return _respuesta(200, {"mensaje": "Usuario eliminado permanentemente"})
 
         # ── DELETE /usuarios/{id_usuario} — deshabilitar ──────────────────────
@@ -382,12 +485,21 @@ def lambda_handler(event: dict, context) -> dict:
             email_objetivo = usuario.get("email")
             cognito.admin_disable_user(UserPoolId=USER_POOL_ID, Username=email_objetivo)
             ahora = datetime.now(timezone.utc).isoformat()
-            tabla.update_item(
-                Key={"id_usuario": id_usuario},
-                UpdateExpression="SET #activo = :falso, #fecha_des = :ahora",
-                ExpressionAttributeNames={"#activo": "activo", "#fecha_des": "fecha_deshabilitacion"},
-                ExpressionAttributeValues={":falso": False, ":ahora": ahora},
-            )
+            try:
+                tabla.update_item(
+                    Key={"id_usuario": id_usuario},
+                    UpdateExpression="SET #activo = :falso, #fecha_des = :ahora",
+                    ExpressionAttributeNames={"#activo": "activo", "#fecha_des": "fecha_deshabilitacion"},
+                    ExpressionAttributeValues={":falso": False, ":ahora": ahora},
+                )
+            except Exception as e:
+                # Sin esto, Cognito ya bloquea el login mientras Dynamo sigue
+                # mostrando al usuario como activo — deshacer el disable.
+                try:
+                    cognito.admin_enable_user(UserPoolId=USER_POOL_ID, Username=email_objetivo)
+                except Exception as rollback_err:
+                    logger.error("Rollback de deshabilitación falló para '%s': %s", email_objetivo, rollback_err)
+                raise
             return _respuesta(200, {"mensaje": "Usuario deshabilitado correctamente"})
 
         return _respuesta(405, {"error": f"Método {metodo} no permitido"})

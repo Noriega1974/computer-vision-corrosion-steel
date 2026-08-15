@@ -71,7 +71,8 @@ def _agregar_url_imagen(items: list) -> list:
                     Params={"Bucket": BUCKET_NAME, "Key": item["s3_key_imagen"]},
                     ExpiresIn=3600,
                 )
-            except Exception:
+            except Exception as e:
+                logger.warning("No se pudo generar URL prefirmada para %s: %s", item["s3_key_imagen"], e)
                 item["url_imagen"] = None
     return items
 

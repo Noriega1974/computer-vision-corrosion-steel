@@ -392,10 +392,13 @@ def lambda_handler(event: dict, context) -> dict:
             return _respuesta(400, {"error": str(e)})
 
         coords = info_punto.get("coordenadas", {})
-        if not coords.get("lat") and info_punto.get("latitud") is not None:
+        # OJO: chequeo por None, no por "truthy" — lat=0.0 (línea del
+        # ecuador) es una coordenada válida y con `if coords.get("lat")`
+        # Python la trata como falsy y se salta el clima en silencio.
+        if coords.get("lat") is None and info_punto.get("latitud") is not None:
             coords = {"lat": float(info_punto["latitud"]), "lng": float(info_punto.get("longitud", 0))}
         fecha_clima = timestamp_custom if timestamp_custom else None
-        clima = _obtener_clima(coords.get("lat"), coords.get("lng"), fecha_clima) if coords.get("lat") else None
+        clima = _obtener_clima(coords.get("lat"), coords.get("lng"), fecha_clima) if coords.get("lat") is not None else None
 
         datos_imagen = base64.b64decode(imagen_b64)
         imagen = Image.open(io.BytesIO(datos_imagen)).convert("RGB")
@@ -408,69 +411,92 @@ def lambda_handler(event: dict, context) -> dict:
 
         buffer = io.BytesIO()
         imagen.save(buffer, format="JPEG", quality=85)
-        s3.put_object(
-            Bucket=BUCKET_NAME,
-            Key=s3_key_imagen,
-            Body=buffer.getvalue(),
-            ContentType="image/jpeg",
-        )
 
-        resultado_completo = {
-            "id_medicion":    id_medicion,
-            "id_punto":       id_punto,
-            "timestamp":      ts,
-            "fuente":         fuente,
-            **resultado_ml,
-            "latitud_real":   latitud_real,
-            "longitud_real":  longitud_real,
-            "notas":          notas,
-            "inferencia_local": inferencia_local,
-            "s3_key_imagen":    s3_key_imagen,
-            "s3_key_resultado": s3_key_resultado,
-            "clima":            clima,
-        }
+        # Si el put_item final a DynamoDB falla después de escribir en S3,
+        # no queremos que las imágenes/resultados queden sueltos en el bucket
+        # sin ningún registro que los referencie (no hay lifecycle rule que
+        # los limpie sola). Track de qué se llegó a escribir para poder
+        # deshacerlo si algo falla más adelante en el mismo intento.
+        s3_imagen_escrita    = False
+        s3_resultado_escrito = False
+        try:
+            s3.put_object(
+                Bucket=BUCKET_NAME,
+                Key=s3_key_imagen,
+                Body=buffer.getvalue(),
+                ContentType="image/jpeg",
+            )
+            s3_imagen_escrita = True
 
-        s3.put_object(
-            Bucket=BUCKET_NAME,
-            Key=s3_key_resultado,
-            Body=json.dumps(resultado_completo, ensure_ascii=False, cls=DecimalEncoder),
-            ContentType="application/json",
-        )
+            resultado_completo = {
+                "id_medicion":    id_medicion,
+                "id_punto":       id_punto,
+                "timestamp":      ts,
+                "fuente":         fuente,
+                **resultado_ml,
+                "latitud_real":   latitud_real,
+                "longitud_real":  longitud_real,
+                "notas":          notas,
+                "inferencia_local": inferencia_local,
+                "s3_key_imagen":    s3_key_imagen,
+                "s3_key_resultado": s3_key_resultado,
+                "clima":            clima,
+            }
 
-        item_db = {
-            "id_punto":         id_punto,
-            "sk":               f"MED#{ts}",
-            "timestamp":        ts,
-            "tipo_registro":    "medicion",
-            "id_medicion":      id_medicion,
-            "nivel_corrosion":  resultado_ml["nivel_corrosion"],
-            "area_corroida_pct": str(resultado_ml["area_corroida_pct"]),
-            "confianza_promedio": str(resultado_ml["confianza_promedio"]),
-            "s3_key_imagen":    s3_key_imagen,
-            "s3_key_resultado": s3_key_resultado,
-            "fuente":           fuente,
-            "notas":            notas,
-            "inferencia_local": floats_to_decimal(inferencia_local or {}),
-            "detecciones":      floats_to_decimal(resultado_ml["detecciones"]),
-            "mascaras":         floats_to_decimal(resultado_ml["mascaras"]),
-        }
-        if tomado_por_id:
-            # Identidad del autor + atributo de GSI (usuario_id/timestamp).
-            # DynamoDB rechaza strings vacíos como clave de GSI, así que
-            # "usuario_id" solo se agrega cuando hay un usuario real.
-            item_db["tomado_por_id"] = tomado_por_id
-            item_db["usuario_id"] = tomado_por_id
-        if latitud_real is not None:
-            item_db["latitud_real"] = Decimal(str(latitud_real))
-        if longitud_real is not None:
-            item_db["longitud_real"] = Decimal(str(longitud_real))
-        if clima:
-            item_db["clima"] = floats_to_decimal(clima)
-        # Denormalize punto info for display without extra lookup
-        item_db["sede"]    = info_punto.get("sede", "")
-        item_db["ciudad"]  = info_punto.get("ciudad", "")
+            s3.put_object(
+                Bucket=BUCKET_NAME,
+                Key=s3_key_resultado,
+                Body=json.dumps(resultado_completo, ensure_ascii=False, cls=DecimalEncoder),
+                ContentType="application/json",
+            )
+            s3_resultado_escrito = True
 
-        tabla_mediciones.put_item(Item=item_db)
+            item_db = {
+                "id_punto":         id_punto,
+                "sk":               f"MED#{ts}",
+                "timestamp":        ts,
+                "tipo_registro":    "medicion",
+                "id_medicion":      id_medicion,
+                "nivel_corrosion":  resultado_ml["nivel_corrosion"],
+                "area_corroida_pct": str(resultado_ml["area_corroida_pct"]),
+                "confianza_promedio": str(resultado_ml["confianza_promedio"]),
+                "s3_key_imagen":    s3_key_imagen,
+                "s3_key_resultado": s3_key_resultado,
+                "fuente":           fuente,
+                "notas":            notas,
+                "inferencia_local": floats_to_decimal(inferencia_local or {}),
+                "detecciones":      floats_to_decimal(resultado_ml["detecciones"]),
+                "mascaras":         floats_to_decimal(resultado_ml["mascaras"]),
+            }
+            if tomado_por_id:
+                # Identidad del autor + atributo de GSI (usuario_id/timestamp).
+                # DynamoDB rechaza strings vacíos como clave de GSI, así que
+                # "usuario_id" solo se agrega cuando hay un usuario real.
+                item_db["tomado_por_id"] = tomado_por_id
+                item_db["usuario_id"] = tomado_por_id
+            if latitud_real is not None:
+                item_db["latitud_real"] = Decimal(str(latitud_real))
+            if longitud_real is not None:
+                item_db["longitud_real"] = Decimal(str(longitud_real))
+            if clima:
+                item_db["clima"] = floats_to_decimal(clima)
+            # Denormalize punto info for display without extra lookup
+            item_db["sede"]    = info_punto.get("sede", "")
+            item_db["ciudad"]  = info_punto.get("ciudad", "")
+
+            tabla_mediciones.put_item(Item=item_db)
+        except Exception as e:
+            if s3_imagen_escrita:
+                try:
+                    s3.delete_object(Bucket=BUCKET_NAME, Key=s3_key_imagen)
+                except Exception as rb:
+                    logger.error("Rollback S3 (imagen) falló para %s: %s", s3_key_imagen, rb)
+            if s3_resultado_escrito:
+                try:
+                    s3.delete_object(Bucket=BUCKET_NAME, Key=s3_key_resultado)
+                except Exception as rb:
+                    logger.error("Rollback S3 (resultado) falló para %s: %s", s3_key_resultado, rb)
+            raise
 
         logger.info(
             "Medición %s registrada: punto=%s, nivel=%d, área=%.1f%%, detecciones=%d",

@@ -249,6 +249,18 @@ def lambda_handler(event: dict, context) -> dict:
             if not _es_admin(event):
                 return _respuesta(403, {"error": "Solo administradores pueden eliminar puntos"})
 
+            # Si el punto tiene mediciones asociadas, borrarlo las deja
+            # huérfanas (referencian un id_punto que ya no existe). Bloqueamos
+            # en vez de borrar en cascada silenciosamente — es la opción
+            # segura por defecto con datos de tesis: nunca perder mediciones
+            # sin que un admin lo decida explícitamente.
+            tiene_mediciones = tabla.query(
+                KeyConditionExpression=Key("id_punto").eq(id_punto) & Key("sk").begins_with("MED#"),
+                Limit=1,
+            ).get("Items", [])
+            if tiene_mediciones:
+                return _respuesta(409, {"error": "No se puede eliminar: el punto tiene mediciones asociadas"})
+
             tabla.delete_item(Key={"id_punto": id_punto, "sk": SK_METADATA})
             return _respuesta(200, {"mensaje": "Punto eliminado", "id_punto": id_punto})
 

@@ -129,7 +129,11 @@ class CorriaComputeStack(Stack):
             },
         )
         puntos_mediciones_table.grant_read_write_data(self.api_mediciones_fn)
-        images_bucket.grant_read_write(self.api_mediciones_fn)
+        # Mínimo privilegio: el handler solo lee (generate_presigned_url para
+        # GET) y borra objetos (DELETE /mediciones) — nunca escribe (PutObject)
+        # a este bucket, así que no le damos grant_read_write.
+        images_bucket.grant_read(self.api_mediciones_fn)
+        images_bucket.grant_delete(self.api_mediciones_fn)
 
         # ── api-alertas (read-only — handler only queries) ─────────────────
         self.api_alertas_fn = _lambda.Function(
