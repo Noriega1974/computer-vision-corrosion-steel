@@ -49,7 +49,7 @@ function MapPicker({ lat, lng, onChange }) {
     if (markerRef.current) markerRef.current.remove();
     markerRef.current = L.marker([lat, lng], {
       icon: L.divIcon({
-        html: `<div style="width:14px;height:14px;border-radius:50%;background:#9C3610;border:2px solid white;box-shadow:0 0 8px #9C361080;"></div>`,
+        html: `<div style="width:14px;height:14px;border-radius:50%;background:#B83700;border:2px solid white;box-shadow:0 0 8px #B8370080;"></div>`,
         className: '', iconSize: [14, 14], iconAnchor: [7, 7],
       }),
     }).addTo(instanceRef.current);

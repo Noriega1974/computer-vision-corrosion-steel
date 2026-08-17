@@ -182,10 +182,10 @@ function NavItem({ item, collapsed }) {
               borderRadius: '0 4px 4px 0',
 
               background:
-                'linear-gradient(180deg, #00b8ff, #1455d9)',
+                'linear-gradient(180deg, #FF8A3D, #B83700)',
 
               boxShadow:
-                '0 0 10px rgba(0,170,255,0.45)',
+                '0 0 10px rgba(184,55,0,0.45)',
             }}
           />
         )}
@@ -539,10 +539,10 @@ export default function Sidebar({
                 borderRadius: '50%',
 
                 background:
-                  'linear-gradient(135deg, #00c8ff, #1455d9)',
+                  'linear-gradient(135deg, #FF8A3D, #B83700)',
 
                 boxShadow:
-                  '0 0 10px rgba(0,190,255,0.5)',
+                  '0 0 10px rgba(184,55,0,0.5)',
 
                 flexShrink: 0,
               }}
@@ -752,7 +752,7 @@ export default function Sidebar({
                   borderRadius: 10,
 
                   background:
-                    `linear-gradient(135deg, ${avatarColor}, #0b74c9)`,
+                    `linear-gradient(135deg, ${avatarColor}, #B83700)`,
 
                   display: 'flex',
 
@@ -863,7 +863,7 @@ export default function Sidebar({
                 borderRadius: 10,
 
                 background:
-                  `linear-gradient(135deg, ${avatarColor}, #0b74c9)`,
+                  `linear-gradient(135deg, ${avatarColor}, #B83700)`,
 
                 display: 'flex',
 

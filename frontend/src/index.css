@@ -60,18 +60,28 @@
      las variables quedan igual — evita tocar 55+ sitios que las referencian
      por --accent-amber/--accent-blue — solo cambia el valor.
 
-     El naranja de marca (matiz ~15°, rojizo) se eligio deliberadamente mas
-     oscuro y mas corrido hacia el rojo que --accent-orange (matiz ~38°,
-     amarillento) y que "Corrosion Moderada" en statusUtils.js (matiz ~20°,
-     mucho mas claro/saturado). Ese naranja YA es semantico en la app: KPI de
-     alertas, area corroida, niveles de severidad. Si la marca usara el mismo
-     tono, un boton cualquiera se confundiria a simple vista con un aviso de
-     corrosion. accent-orange y los colores de severidad NO se tocan.
+     El naranja de marca (matiz ~18°, rojizo) se eligio deliberadamente mas
+     corrido hacia el rojo que --accent-orange (matiz ~38°, amarillento) y
+     que "Corrosion Moderada" en statusUtils.js (matiz ~20°, mas claro). Ese
+     naranja YA es semantico en la app: KPI de alertas, area corroida,
+     niveles de severidad. Si la marca usara el mismo tono, un boton
+     cualquiera se confundiria a simple vista con un aviso de corrosion.
+     accent-orange y los colores de severidad NO se tocan.
 
-     Contraste verificado (WCAG): #9C3610 da 6.4:1 contra --bg-page y 7.1:1
-     contra blanco — pasa AAA. #A84A38 da 5.1:1 y 5.7:1 — pasa AA. */
-  --accent-amber: #9C3610;
-  --accent-amber-dim: #6E2509;
+     Primer intento (#9C3610) leia como marron, no naranja: 81% de saturacion
+     a 34% de luminosidad cae en territorio "ladrillo apagado". Saturacion al
+     100% (como Reddit #FF4500 o Brave #FB542B, las referencias pedidas) es
+     lo que separa "naranja vivido" de "marron" — el problema nunca fue la
+     luminosidad sola. Esas referencias literales fallan AA como texto chico
+     (~3.1-3.4:1 contra este fondo: ninguna marca citada usa su naranja de
+     marca para texto de 12px sobre blanco, lo usan en logos/botones con
+     texto blanco encima). #B83700 es el mas vivido que sigue pasando AA
+     aca: 100% saturacion, mismo matiz que Reddit (~18° vs ~16°).
+
+     Contraste verificado (WCAG): #B83700 da 5.3:1 contra --bg-page y 5.9:1
+     contra blanco — pasa AA. #A84A38 da 5.1:1 y 5.7:1 — pasa AA. */
+  --accent-amber: #B83700;
+  --accent-amber-dim: #7A2400;
 
   --accent-blue: #A84A38;
   --accent-cyan: #FFB58A;
@@ -175,7 +185,7 @@
      ───────────────────────────────────────────────────────────── */
 
   --nav-active-bg: rgba(156, 54, 16, 0.10);
-  --nav-active-text: #9C3610;
+  --nav-active-text: #B83700;
 
   /* Estado de la casilla de navegacion. El Sidebar referenciaba estas
      variables sin que estuvieran definidas, asi que el item activo se
@@ -848,8 +858,8 @@ body {
   background:
     linear-gradient(
       135deg,
-      #9C3610,
-      #C24812
+      #B83700,
+      #E04D0F
     );
 
   border: 1px solid rgba(255,255,255,0.18);

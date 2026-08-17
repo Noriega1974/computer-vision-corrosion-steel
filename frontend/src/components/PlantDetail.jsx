@@ -13,7 +13,7 @@ const CustomTooltip = ({ active, payload, label }) => {
       padding: '8px 12px', fontFamily: 'var(--font-data)', fontSize: 11,
     }}>
       <div style={{ color: 'var(--text-muted)', marginBottom: 4 }}>{label}</div>
-      <div style={{ color: '#9C3610' }}>
+      <div style={{ color: '#B83700' }}>
         Área: <strong>{payload[0]?.value?.toFixed(1)}%</strong>
       </div>
     </div>
@@ -137,14 +137,14 @@ export default function PlantDetail({ punto }) {
             <AreaChart data={trendData} margin={{ top: 2, right: 0, left: -28, bottom: 0 }}>
               <defs>
                 <linearGradient id={`grad-${punto.id_punto}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#9C3610" stopOpacity={0.4}/>
-                  <stop offset="100%" stopColor="#9C3610" stopOpacity={0}/>
+                  <stop offset="0%" stopColor="#B83700" stopOpacity={0.4}/>
+                  <stop offset="100%" stopColor="#B83700" stopOpacity={0}/>
                 </linearGradient>
               </defs>
               <XAxis dataKey="fecha" tick={{ fill: '#3d5a72', fontSize: 8 }} tickLine={false} axisLine={false} interval={4} />
               <YAxis tick={{ fill: '#3d5a72', fontSize: 8 }} tickLine={false} axisLine={false} />
               <Tooltip content={<CustomTooltip />} />
-              <Area type="monotone" dataKey="corrosion" stroke="#9C3610" strokeWidth={1.5} fill={`url(#grad-${punto.id_punto})`} dot={false} />
+              <Area type="monotone" dataKey="corrosion" stroke="#B83700" strokeWidth={1.5} fill={`url(#grad-${punto.id_punto})`} dot={false} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
