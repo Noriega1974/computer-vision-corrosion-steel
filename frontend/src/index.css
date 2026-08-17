@@ -367,6 +367,48 @@ html {
    hacer click con el mouse, anillo visible al llegar con Tab.
    ================================================================ */
 
+/* Cifras de ancho fijo donde se comparan en columna.
+
+   `--font-data` es IBM Plex Mono, asi que ahi los digitos ya son de ancho fijo
+   por construccion. El problema esta en las tablas, que usan la sans
+   proporcional: un 1 ocupa menos que un 8 y las columnas de numeros quedan
+   desalineadas de fila a fila. */
+table {
+  font-variant-numeric: tabular-nums;
+}
+
+
+/* Tarjeta de medicion en la galeria.
+
+   El hover se hacia escribiendo en e.currentTarget.style, con
+   `translateY(-2px) scale(1.01)`. Dos problemas: la mutacion directa del DOM
+   se pelea con React igual que pasaba en el sidebar, y escalar una tarjeta que
+   contiene una foto la vuelve borrosa mientras dura la transicion. Queda solo
+   el desplazamiento, que ya comunica que el elemento responde. */
+.medicion-card {
+  transition:
+    transform 0.15s ease-out,
+    box-shadow 0.15s ease-out;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .medicion-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .medicion-card {
+    transition: box-shadow 0.15s ease-out;
+  }
+
+  .medicion-card:hover {
+    transform: none;
+  }
+}
+
+
 :focus:not(:focus-visible) {
   outline: none;
 }

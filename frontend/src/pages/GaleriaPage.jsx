@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Upload, AlertCircle } from 'lucide-react';
 import { useMediciones } from '../hooks/useMediciones';
 import { usePuntos } from '../hooks/usePuntos';
@@ -20,31 +20,30 @@ function tiempoRelativo(timestamp) {
 }
 
 // ─── Card de galería ─────────────────────────────────────────────────────────
-function MedicionCard({ medicion, puntoInfo, onClick }) {
+function MedicionCard({ medicion, puntoInfo, to, state }) {
   const nivel = medicion.nivel_corrosion ?? 0;
   const color = nivelColor(nivel);
   const sede = medicion.punto_info?.sede ?? medicion.sede ?? puntoInfo?.sede ?? medicion.id_punto ?? '—';
   const ciudad = medicion.punto_info?.ciudad ?? medicion.ciudad ?? puntoInfo?.ciudad ?? '';
 
   return (
-    <div
-      onClick={onClick}
+    // Link y no <div onClick>: esto navega a la ficha de la medicion, asi que
+    // corresponde un ancla real. Ademas de ser accesible por teclado, habilita
+    // Cmd/Ctrl+click y click del medio para abrir en otra pestaña, que en un
+    // listado de mediciones se usa todo el tiempo.
+    <Link
+      to={to}
+      state={state}
+      className="medicion-card"
       style={{
+        display: 'block',
+        textDecoration: 'none',
+        color: 'inherit',
         background: 'var(--bg-card)',
         border: '1px solid var(--border)',
         borderRadius: 10,
         overflow: 'hidden',
-        cursor: 'pointer',
-        transition: 'transform 0.15s, box-shadow 0.15s',
         boxShadow: 'var(--shadow-sm)',
-      }}
-      onMouseEnter={e => {
-        e.currentTarget.style.transform = 'translateY(-2px) scale(1.01)';
-        e.currentTarget.style.boxShadow = 'var(--shadow-md)';
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.transform = 'none';
-        e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
       }}
     >
       {/* Imagen o placeholder */}
@@ -134,7 +133,7 @@ function MedicionCard({ medicion, puntoInfo, onClick }) {
           </span>
         </div>
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -375,7 +374,8 @@ export default function GaleriaPage() {
                 key={m.id_medicion}
                 medicion={m}
                 puntoInfo={puntos.find(p => p.id_punto === m.id_punto)}
-                onClick={() => navigate(`/galeria/${m.id_medicion}`, { state: { filters: { nivelFilter, puntoFilter, fechaInicio, fechaFin, notasQuery } } })}
+                to={`/galeria/${m.id_medicion}`}
+                state={{ filters: { nivelFilter, puntoFilter, fechaInicio, fechaFin, notasQuery } }}
               />
             ))}
           </div>

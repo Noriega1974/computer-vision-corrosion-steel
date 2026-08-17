@@ -7,6 +7,25 @@ import { nivelLabel, nivelColor, nivelBg } from '../lib/statusUtils';
 import SearchableSelect from '../components/SearchableSelect';
 import colombiaData from '../data/colombia-divipola.json';
 
+/**
+ * Fecha legible en español.
+ *
+ * Estos dos campos se mostraban con `.slice(0, 10)` sobre el string ISO del
+ * backend, o sea `2026-08-17` en pantalla. El resto de la app ya usa
+ * `toLocaleDateString('es-CO')`, asi que aca quedaba una fecha con otro
+ * formato que el usuario tenia que traducir mentalmente.
+ */
+function fechaLegible(valor) {
+  if (!valor) return '—';
+  const d = new Date(valor);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('es-CO', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 const DEPARTAMENTOS = colombiaData.departamentos.map(d => d.nombre);
 const MUNICIPIOS_POR_DEPARTAMENTO = Object.fromEntries(
   colombiaData.departamentos.map(d => [d.nombre, d.municipios])
@@ -729,7 +748,7 @@ function PuntoDetail({ punto, onEdit, isAdmin }) {
                         marginBottom: 3
                       }}
                     >
-                      {entry.fecha?.slice(0, 10) ?? '—'} ·{' '}
+                      {fechaLegible(entry.fecha)} ·{' '}
                       {entry.usuario ?? '—'}
                     </div>
 
@@ -800,8 +819,7 @@ function PuntoDetail({ punto, onEdit, isAdmin }) {
                         fontFamily: 'var(--font-ui)'
                       }}
                     >
-                      {m.fecha_creacion?.slice(0, 10) ??
-                        '—'}
+                      {fechaLegible(m.fecha_creacion)}
                     </div>
 
                     <span
