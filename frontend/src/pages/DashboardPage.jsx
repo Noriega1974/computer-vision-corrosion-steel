@@ -1,185 +1,523 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Upload } from 'lucide-react';
+
 import KPIBar from '../components/KPIBar';
 import ColombiaMap from '../components/ColombiaMap';
 import PlantDetail from '../components/PlantDetail';
 import PlantsTable from '../components/PlantsTable';
 import ChartsRow from '../components/ChartsRow';
+
 import { usePuntos } from '../hooks/usePuntos';
 
-// Leaflet vía CDN — compartido con ColombiaMap
+
+// ================================================================
+// LEAFLET
+// ================================================================
+
 function useLeaflet() {
-  const [ready, setReady] = useState(!!window.L);
+
+  const [ready, setReady] = useState(
+    !!window.L
+  );
+
   useEffect(() => {
-    if (window.L) { setReady(true); return; }
-    const script = document.createElement('script');
-    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-    script.onload = () => setReady(true);
+
+    if (window.L) {
+      setReady(true);
+      return;
+    }
+
+    const script =
+      document.createElement('script');
+
+    script.src =
+      'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+
+    script.onload = () =>
+      setReady(true);
+
     document.head.appendChild(script);
+
   }, []);
+
   return ready;
 }
 
+
+// ================================================================
+// DASHBOARD
+// ================================================================
+
 export default function DashboardPage() {
-  const [selectedPunto, setSelectedPunto] = useState(null);
-  const leafletReady = useLeaflet();
-  const { puntos, loading: loadingPuntos, error: errorPuntos } = usePuntos();
+
+  const [
+    selectedPunto,
+    setSelectedPunto
+  ] = useState(null);
+
+  const leafletReady =
+    useLeaflet();
+
+  const {
+    puntos,
+    loading: loadingPuntos,
+    error: errorPuntos
+  } = usePuntos();
+
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
 
-      {/* ── KPI BAR ─── */}
-      <div className="section-kpi" style={{ borderBottom: '1px solid var(--border)', padding: '16px 20px' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 12 }}>
-          <div style={{
-            fontFamily: 'var(--font-data)', fontSize: 10, fontWeight: 600,
-            color: 'var(--text-faint)', letterSpacing: '0.14em', textTransform: 'uppercase',
-            paddingTop: 2,
-          }}>
-            Indicadores globales
-          </div>
-          {/* Acceso rápido a nueva medición */}
-          <Link
-            to="/upload"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 7,
-              padding: '8px 16px', background: 'var(--accent-amber)',
-              border: 'none', borderRadius: 8, textDecoration: 'none',
-              fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 12, color: 'white',
-              flexShrink: 0, boxShadow: '0 2px 8px rgba(20,50,163,0.3)',
-            }}
-          >
-            <Upload size={14} />
-            Nueva medición
-          </Link>
-        </div>
-        <KPIBar />
-      </div>
+    <div
+      className="dashboard-shell"
+      style={{
+        minHeight: '100%',
+        padding: '22px',
+      }}
+    >
 
-      {/* ── MAIN PANEL ─── */}
+      {/* ==========================================================
+          DASHBOARD CONTENT
+          ========================================================== */}
+
       <div
-        className="main-grid"
         style={{
-          display: 'grid', gridTemplateColumns: '1fr 340px',
-          gap: 0, height: 540, minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 18,
+          maxWidth: 1800,
+          margin: '0 auto',
         }}
       >
-        {/* Columna izquierda: mapa + detalle de planta */}
-        <div style={{
-          display: 'grid', gridTemplateColumns: '1fr 320px',
-          borderRight: '1px solid var(--border)', height: '100%', minHeight: 0,
-        }}>
-          {/* Mapa */}
-          <div className="section-map" style={{
-            borderRight: '1px solid var(--border)', padding: '16px',
-            display: 'flex', flexDirection: 'column', gap: 8,
-            height: '100%', minHeight: 0,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-              <span style={{ background: 'var(--accent-blue)', width: 3, height: 16, borderRadius: 2, display: 'inline-block' }} />
-              <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-                Mapa de instalaciones
-              </span>
-            </div>
 
-            {/* Lista rápida de sedes — evita buscar el punto a mano en el mapa */}
-            {puntos.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, flexShrink: 0 }}>
-                {puntos.map(p => {
-                  const isSelected = selectedPunto?.id_punto === p.id_punto;
-                  return (
-                    <button
-                      key={p.id_punto}
-                      onClick={() => setSelectedPunto(p)}
-                      style={{
-                        padding: '4px 10px', borderRadius: 999, cursor: 'pointer',
-                        fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600,
-                        border: isSelected ? '1px solid var(--accent-blue)' : '1px solid var(--border)',
-                        background: isSelected ? 'var(--accent-blue)' : 'var(--bg-card)',
-                        color: isSelected ? 'white' : 'var(--text-muted)',
-                      }}
-                    >
-                      {p.sede || p.clave_logica || p.id_punto}
-                    </button>
-                  );
-                })}
+
+        {/* ========================================================
+            KPI SECTION
+            ======================================================== */}
+
+        <section
+          className="dashboard-section section-kpi"
+          style={{
+            padding: '18px 20px 20px',
+          }}
+        >
+
+          {/* Header */}
+
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 16,
+              marginBottom: 16,
+            }}
+          >
+
+            <div>
+
+              <div
+                className="dashboard-section-title"
+              >
+                Indicadores globales
               </div>
-            )}
 
-            <div style={{ flex: 1, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)', minHeight: 0 }}>
+              <div
+                style={{
+                  marginTop: 5,
+                  fontSize: 11,
+                  color: 'var(--text-faint)',
+                }}
+              >
+                Estado general del sistema de monitoreo
+              </div>
+
+            </div>
+
+
+            {/* Nueva medición */}
+
+            <Link
+              to="/upload"
+              className="dashboard-action"
+            >
+
+              <Upload size={14} />
+
+              Nueva medida
+
+            </Link>
+
+          </div>
+
+
+          {/* KPI cards */}
+
+          <KPIBar />
+
+        </section>
+
+
+
+        {/* ========================================================
+            MAP + DETAIL
+            ======================================================== */}
+
+        <div
+          className="main-grid"
+          style={{
+            display: 'grid',
+
+            gridTemplateColumns:
+              'minmax(0, 2fr) minmax(330px, 1fr)',
+
+            gap: 18,
+
+            minHeight: 0,
+          }}
+        >
+
+
+          {/* ======================================================
+              MAP
+              ====================================================== */}
+
+          <section
+            className="dashboard-section section-map"
+            style={{
+              padding: '18px',
+
+              display: 'flex',
+              flexDirection: 'column',
+
+              gap: 12,
+
+              minHeight: 540,
+            }}
+          >
+
+            {/* Title */}
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+
+                gap: 10,
+
+                flexShrink: 0,
+              }}
+            >
+
+              <div
+                className="dashboard-section-title"
+              >
+                Mapa de ubicaciones
+              </div>
+
+
+              <div
+                style={{
+                  fontFamily: 'var(--font-data)',
+                  fontSize: 9,
+                  letterSpacing: '0.08em',
+                  color: 'var(--text-faint)',
+                  textTransform: 'uppercase',
+                }}
+              >
+                {puntos?.length ?? 0} ubicaciones
+              </div>
+
+            </div>
+
+
+            {/* Map */}
+
+            <div
+              style={{
+                flex: 1,
+
+                minHeight: 0,
+
+                borderRadius: 14,
+
+                overflow: 'hidden',
+
+                border:
+                  '1px solid var(--border)',
+
+                boxShadow:
+                  'inset 0 1px 0 rgba(255,255,255,0.45)',
+
+                background:
+                  'var(--bg-inset)',
+              }}
+            >
+
               {leafletReady ? (
-                <ColombiaMap selectedPunto={selectedPunto} onSelectPunto={setSelectedPunto} />
+
+                <ColombiaMap
+                  selectedPunto={selectedPunto}
+                  onSelectPunto={setSelectedPunto}
+                />
+
               ) : (
-                <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+
+                <div
+                  style={{
+                    height: '100%',
+
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+
+                    color:
+                      'var(--text-muted)',
+
+                    fontSize: 13,
+                  }}
+                >
+
                   Cargando mapa…
+
                 </div>
+
               )}
-            </div>
-          </div>
 
-          {/* Detalle de planta */}
-          <div className="section-detail" style={{
-            padding: '16px', display: 'flex', flexDirection: 'column',
-            gap: 8, height: '100%', minHeight: 0, overflow: 'hidden',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-              <span style={{ background: 'var(--accent-amber)', width: 3, height: 16, borderRadius: 2, display: 'inline-block' }} />
-              <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-                Detalle de planta
-              </span>
             </div>
-            <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-              <PlantDetail punto={selectedPunto} />
+
+          </section>
+
+
+
+          {/* ======================================================
+              LOCATION DETAIL
+              ====================================================== */}
+
+          <section
+            className="dashboard-section section-detail"
+            style={{
+              padding: '18px',
+
+              display: 'flex',
+              flexDirection: 'column',
+
+              gap: 12,
+
+              minHeight: 540,
+
+              overflow: 'hidden',
+            }}
+          >
+
+            {/* Title */}
+
+            <div
+              className="dashboard-section-title"
+              style={{
+                flexShrink: 0,
+              }}
+            >
+              Detalle de ubicación
             </div>
-          </div>
+
+
+            {/* Detail */}
+
+            <div
+              style={{
+                flex: 1,
+
+                minHeight: 0,
+
+                overflow: 'auto',
+
+                paddingRight: 2,
+              }}
+            >
+
+              <PlantDetail
+                punto={selectedPunto}
+              />
+
+            </div>
+
+          </section>
+
         </div>
 
-        {/* Plantas */}
-        <div className="section-plants" style={{
-          padding: '16px', display: 'flex', flexDirection: 'column',
-          gap: 8, height: '100%', minHeight: 0, overflow: 'hidden',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <span style={{ background: 'var(--accent-blue)', width: 3, height: 16, borderRadius: 2, display: 'inline-block' }} />
-            <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-              Plantas
-            </span>
-          </div>
-          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            <PlantsTable
-              puntos={puntos}
-              loading={loadingPuntos}
-              error={errorPuntos}
-              selectedPunto={selectedPunto}
-              onSelectPunto={setSelectedPunto}
-            />
-          </div>
-        </div>
-      </div>
 
-      {/* ── CHARTS ROW ─── */}
-      <div className="section-charts" style={{ borderTop: '2px solid var(--border)', padding: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-          <span style={{ background: 'var(--accent-green)', width: 3, height: 16, borderRadius: 2, display: 'inline-block' }} />
-          <span style={{ fontFamily: 'var(--font-data)', fontSize: 11, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-            Análisis y métricas
+
+        {/* ========================================================
+            PLANTAS
+            ======================================================== */}
+
+        <section
+          className="dashboard-section"
+          style={{
+            padding: '18px 20px 20px',
+          }}
+        >
+
+          {/* Header */}
+
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+
+              gap: 10,
+
+              marginBottom: 16,
+            }}
+          >
+
+            <div>
+
+              <div
+                className="dashboard-section-title"
+              >
+                Plantas
+              </div>
+
+              <div
+                style={{
+                  marginTop: 5,
+
+                  fontSize: 11,
+
+                  color:
+                    'var(--text-faint)',
+                }}
+              >
+                Instalaciones registradas · seleccioná una para ver su detalle
+              </div>
+
+            </div>
+
+          </div>
+
+
+          {/* Table */}
+
+          <PlantsTable
+            puntos={puntos}
+            loading={loadingPuntos}
+            error={errorPuntos}
+            selectedPunto={selectedPunto}
+            onSelectPunto={setSelectedPunto}
+          />
+
+        </section>
+
+
+
+        {/* ========================================================
+            ANALYSIS
+            ======================================================== */}
+
+        <section
+          className="dashboard-section section-charts"
+          style={{
+            padding: '18px 20px 20px',
+          }}
+        >
+
+          {/* Header */}
+
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+
+              gap: 10,
+
+              marginBottom: 16,
+            }}
+          >
+
+            <div>
+
+              <div
+                className="dashboard-section-title"
+              >
+                Análisis y métricas
+              </div>
+
+              <div
+                style={{
+                  marginTop: 5,
+
+                  fontSize: 11,
+
+                  color:
+                    'var(--text-faint)',
+                }}
+              >
+                Comportamiento y distribución de la corrosión
+              </div>
+
+            </div>
+
+          </div>
+
+
+          {/* Charts */}
+
+          <ChartsRow />
+
+        </section>
+
+
+
+        {/* ========================================================
+            FOOTER
+            ======================================================== */}
+
+        <footer
+          style={{
+            display: 'flex',
+
+            alignItems: 'center',
+            justifyContent: 'space-between',
+
+            flexWrap: 'wrap',
+
+            gap: 8,
+
+            padding:
+              '12px 6px 4px',
+
+            fontSize: 10,
+
+            color:
+              'var(--text-faint)',
+
+            fontFamily:
+              'var(--font-data)',
+
+            letterSpacing:
+              '0.02em',
+          }}
+        >
+
+          <span>
+            Corrosion Detection System © 2026
           </span>
-        </div>
-        <ChartsRow />
+
+          <span>
+            Uninorte · Ing. Mecánica &amp; Electrónica
+          </span>
+
+          <span>
+            YOLOv8 Transfer Learning · ASTM B117
+          </span>
+
+        </footer>
+
       </div>
 
-      {/* ── FOOTER ─── */}
-      <div style={{
-        background: 'var(--bg-card)', borderTop: '1px solid var(--border)',
-        padding: '12px 20px', display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
-        fontSize: 11, color: 'var(--text-faint)', fontFamily: 'var(--font-data)',
-      }}>
-        <span>Corrosion Detection System © 2026</span>
-        <span>Uninorte · Ing. Mecánica &amp; Electrónica</span>
-        <span>YOLOv8 Transfer Learning · ASTM B117</span>
-      </div>
     </div>
   );
 }

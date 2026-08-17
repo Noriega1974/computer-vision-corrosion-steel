@@ -16,6 +16,7 @@ import PlaceholderPage from './pages/PlaceholderPage';
 import PlantsPage from './pages/PlantsPage';
 import UsersPage from './pages/UsersPage';
 import ProfilePage from './pages/ProfilePage';
+import ConfiguracionPage from './pages/ConfiguracionPage';
 
 
 export default function App() {
@@ -50,7 +51,7 @@ export default function App() {
                 <RoleRoute roles={['admin']}><UsersPage /></RoleRoute>
               } />
               <Route path="/configuracion" element={
-                <RoleRoute roles={['admin']}><PlaceholderPage titulo="Configuración" /></RoleRoute>
+                <RoleRoute roles={['admin']}><ConfiguracionPage /></RoleRoute>
               } />
             </Route>
 

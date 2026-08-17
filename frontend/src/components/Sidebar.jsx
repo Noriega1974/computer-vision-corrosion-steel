@@ -1,52 +1,115 @@
 import React from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, Upload, LayoutGrid,
-  Factory, Users, Settings, LogOut, ChevronLeft,
-  ChevronRight, X, User,
+  LayoutDashboard,
+  LayoutGrid,
+  MapPin,
+  Users,
+  Settings,
+  LogOut,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  User,
 } from 'lucide-react';
+
 import { useAuth } from '../auth/AuthContext';
 
 const AVATAR_STORAGE_KEY = 'corria-avatar-color';
-const NAME_STORAGE_KEY   = 'corria-display-name';
+const NAME_STORAGE_KEY = 'corria-display-name';
 
-// ─── Definición de items de navegación ───────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// ITEMS DE NAVEGACIÓN
+// ─────────────────────────────────────────────────────────────
+
 const NAV_ITEMS = [
-  { path: '/dashboard',    icon: LayoutDashboard, label: 'Dashboard' },
-  { path: '/upload',       icon: Upload,          label: 'Subir medición', roles: ['admin', 'tecnico'] },
-  { path: '/galeria',      icon: LayoutGrid,      label: 'Galería' },
+  {
+    path: '/dashboard',
+    icon: LayoutDashboard,
+    label: 'Dashboard',
+  },
+
+  {
+    path: '/galeria',
+    icon: LayoutGrid,
+    label: 'Galería',
+  },
+
   { divider: true },
-  { path: '/plantas',      icon: Factory,         label: 'Plantas',        roles: ['admin', 'tecnico'] },
-  { path: '/usuarios',     icon: Users,           label: 'Usuarios',       roles: ['admin'] },
+
+  {
+    path: '/plantas',
+    icon: MapPin,
+    label: 'Ubicaciones',
+    roles: ['admin', 'tecnico'],
+  },
+
+  {
+    path: '/usuarios',
+    icon: Users,
+    label: 'Usuarios',
+    roles: ['admin'],
+  },
+
   { divider: true },
-  { path: '/perfil',       icon: User,            label: 'Mi perfil' },
-  { path: '/configuracion', icon: Settings,       label: 'Configuración',  roles: ['admin'] },
+
+  {
+    path: '/perfil',
+    icon: User,
+    label: 'Mi perfil',
+  },
+
+  {
+    path: '/configuracion',
+    icon: Settings,
+    label: 'Configuración',
+    roles: ['admin'],
+  },
 ];
 
-// Iniciales del usuario para el avatar
+// ─────────────────────────────────────────────────────────────
+// UTILIDADES
+// ─────────────────────────────────────────────────────────────
+
 function getInitials(name = '') {
   const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+
+  if (parts.length >= 2) {
+    return (
+      parts[0][0] +
+      parts[1][0]
+    ).toUpperCase();
+  }
+
   return name.slice(0, 2).toUpperCase();
 }
 
-const ROL_LABELS = { admin: 'Administrador', tecnico: 'Técnico', cliente: 'Cliente' };
+const ROL_LABELS = {
+  admin: 'Administrador',
+  tecnico: 'Técnico',
+  cliente: 'Cliente',
+};
 
 function getPrimaryRole(groups = []) {
   if (groups.includes('admin')) return 'admin';
   if (groups.includes('tecnico')) return 'tecnico';
   if (groups.includes('cliente')) return 'cliente';
+
   return null;
 }
 
-// ─── Componente NavItem ───────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// ITEM DE NAVEGACIÓN
+// ─────────────────────────────────────────────────────────────
+
 function NavItem({ item, collapsed }) {
   const location = useLocation();
-  // El ítem está activo si la ruta actual empieza con el path del ítem
-  // (salvo /galeria que no debe activarse en /galeria/detalle para el check general)
-  const isActive = item.path === '/galeria'
-    ? location.pathname === '/galeria' || location.pathname.startsWith('/galeria/')
-    : location.pathname === item.path;
+
+  const isActive =
+    item.path === '/galeria'
+      ? location.pathname === '/galeria' ||
+        location.pathname.startsWith('/galeria/')
+      : location.pathname === item.path;
 
   const Icon = item.icon;
 
@@ -54,35 +117,135 @@ function NavItem({ item, collapsed }) {
     <NavLink
       to={item.path}
       title={collapsed ? item.label : undefined}
-      style={{ textDecoration: 'none' }}
-    >
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: collapsed ? 0 : 10,
-        padding: collapsed ? '10px 0' : '9px 14px',
-        marginBottom: 2,
-        borderRadius: 8,
-        cursor: 'pointer',
-        justifyContent: collapsed ? 'center' : 'flex-start',
-        background: isActive ? 'var(--nav-active-bg)' : 'transparent',
-        borderLeft: isActive ? '2px solid var(--accent-amber)' : '2px solid transparent',
-        transition: 'background 0.13s',
-        color: isActive ? 'var(--nav-active-text)' : 'var(--text-muted)',
+      style={{
+        textDecoration: 'none',
+        display: 'block',
       }}
-        onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--bg-card-hover)'; }}
-        onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+    >
+      <div
+        style={{
+          position: 'relative',
+
+          display: 'flex',
+          alignItems: 'center',
+
+          gap: collapsed ? 0 : 11,
+
+          padding: collapsed
+            ? '11px 0'
+            : '10px 13px',
+
+          marginBottom: 4,
+
+          minHeight: 40,
+
+          borderRadius: 11,
+
+          cursor: 'pointer',
+
+          justifyContent: collapsed
+            ? 'center'
+            : 'flex-start',
+
+          background: isActive
+            ? 'var(--sidebar-active-bg)'
+            : 'transparent',
+
+          border: isActive
+            ? '1px solid var(--sidebar-active-border)'
+            : '1px solid transparent',
+
+          boxShadow: isActive
+            ? 'var(--sidebar-active-shadow)'
+            : 'none',
+
+          color: isActive
+            ? 'var(--nav-active-text)'
+            : 'var(--text-muted)',
+
+          transition:
+            'background 0.18s ease, ' +
+            'border 0.18s ease, ' +
+            'box-shadow 0.18s ease, ' +
+            'transform 0.18s ease',
+        }}
+
+        onMouseEnter={e => {
+          if (!isActive) {
+            e.currentTarget.style.background =
+              'var(--sidebar-hover-bg)';
+
+            e.currentTarget.style.border =
+              '1px solid var(--sidebar-hover-border)';
+
+            e.currentTarget.style.transform =
+              'translateX(2px)';
+          }
+        }}
+
+        onMouseLeave={e => {
+          if (!isActive) {
+            e.currentTarget.style.background =
+              'transparent';
+
+            e.currentTarget.style.border =
+              '1px solid transparent';
+
+            e.currentTarget.style.transform =
+              'translateX(0)';
+          }
+        }}
       >
-        <Icon size={18} strokeWidth={isActive ? 2.2 : 1.8} style={{ flexShrink: 0 }} />
+        {/* Indicador lateral del elemento activo */}
+        {isActive && (
+          <span
+            style={{
+              position: 'absolute',
+
+              left: -1,
+              top: '50%',
+              transform: 'translateY(-50%)',
+
+              width: 3,
+              height: 20,
+
+              borderRadius: '0 4px 4px 0',
+
+              background:
+                'linear-gradient(180deg, #00b8ff, #1455d9)',
+
+              boxShadow:
+                '0 0 10px rgba(0,170,255,0.45)',
+            }}
+          />
+        )}
+
+        <Icon
+          size={18}
+          strokeWidth={isActive ? 2.2 : 1.8}
+          style={{
+            flexShrink: 0,
+
+            filter: isActive
+              ? 'drop-shadow(0 0 5px rgba(0,160,255,0.22))'
+              : 'none',
+          }}
+        />
+
         {!collapsed && (
-          <span style={{
-            fontFamily: 'var(--font-ui)',
-            fontWeight: isActive ? 600 : 400,
-            fontSize: 13,
-            letterSpacing: '0.01em',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-          }}>
+          <span
+            style={{
+              fontFamily: 'var(--font-ui)',
+              fontWeight: isActive ? 600 : 450,
+              fontSize: 13,
+
+              letterSpacing: '0.01em',
+
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
             {item.label}
           </span>
         )}
@@ -91,201 +254,768 @@ function NavItem({ item, collapsed }) {
   );
 }
 
-// ─── Componente principal Sidebar ─────────────────────────────────────────────
-export default function Sidebar({ collapsed, isMobile, onToggle, onLogout }) {
+// ─────────────────────────────────────────────────────────────
+// SIDEBAR
+// ─────────────────────────────────────────────────────────────
+
+export default function Sidebar({
+  collapsed,
+  isMobile,
+  onToggle,
+  onLogout,
+}) {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [avatarColor, setAvatarColor] = React.useState(() => localStorage.getItem(AVATAR_STORAGE_KEY) ?? '#1432A3');
-  const [displayName, setDisplayName] = React.useState(() => localStorage.getItem(NAME_STORAGE_KEY) || '');
+
+  // ───────────────────────────────────────────────────────────
+  // AVATAR
+  // ───────────────────────────────────────────────────────────
+
+  const [avatarColor, setAvatarColor] =
+    React.useState(
+      () =>
+        localStorage.getItem(
+          AVATAR_STORAGE_KEY
+        ) ?? '#1432A3'
+    );
+
+  // ───────────────────────────────────────────────────────────
+  // NOMBRE
+  // ───────────────────────────────────────────────────────────
+
+  const [displayName, setDisplayName] =
+    React.useState(
+      () =>
+        localStorage.getItem(
+          NAME_STORAGE_KEY
+        ) || ''
+    );
+
+  // ───────────────────────────────────────────────────────────
+  // ESCUCHAR CAMBIOS DEL AVATAR
+  // ───────────────────────────────────────────────────────────
+
   React.useEffect(() => {
-    const handler = (e) => setAvatarColor(e.detail);
-    window.addEventListener('corria-avatar-color', handler);
-    return () => window.removeEventListener('corria-avatar-color', handler);
+    const handler = e => {
+      setAvatarColor(e.detail);
+    };
+
+    window.addEventListener(
+      'corria-avatar-color',
+      handler
+    );
+
+    return () => {
+      window.removeEventListener(
+        'corria-avatar-color',
+        handler
+      );
+    };
   }, []);
+
+  // ───────────────────────────────────────────────────────────
+  // ESCUCHAR CAMBIOS DEL NOMBRE
+  // ───────────────────────────────────────────────────────────
+
   React.useEffect(() => {
-    const handler = (e) => setDisplayName(e.detail);
-    window.addEventListener('corria-user-name', handler);
-    return () => window.removeEventListener('corria-user-name', handler);
+    const handler = e => {
+      setDisplayName(e.detail);
+    };
+
+    window.addEventListener(
+      'corria-user-name',
+      handler
+    );
+
+    return () => {
+      window.removeEventListener(
+        'corria-user-name',
+        handler
+      );
+    };
   }, []);
+
+  // Si no hay nombre guardado, utilizar el nombre del usuario
   React.useEffect(() => {
-    if (!localStorage.getItem(NAME_STORAGE_KEY) && user?.name) setDisplayName(user.name);
+    if (
+      !localStorage.getItem(NAME_STORAGE_KEY) &&
+      user?.name
+    ) {
+      setDisplayName(user.name);
+    }
   }, [user?.name]);
+
+  // ───────────────────────────────────────────────────────────
+  // ROL
+  // ───────────────────────────────────────────────────────────
+
   const groups = user?.groups ?? [];
+
   const rol = getPrimaryRole(groups);
 
-  // Filtrar items según el rol del usuario
+  // ───────────────────────────────────────────────────────────
+  // FILTRAR OPCIONES SEGÚN ROL
+  // ───────────────────────────────────────────────────────────
+
   const visibleItems = NAV_ITEMS.filter(item => {
     if (item.divider) return true;
+
     if (!item.roles) return true;
-    return item.roles.some(r => groups.includes(r));
+
+    return item.roles.some(r =>
+      groups.includes(r)
+    );
   });
 
-  // Eliminar dividers consecutivos o al principio/final
-  const filteredItems = visibleItems.filter((item, i, arr) => {
-    if (!item.divider) return true;
-    const prev = arr[i - 1];
-    const next = arr[i + 1];
-    if (!prev || !next) return false;
-    if (prev.divider) return false;
-    if (!next || next.divider) return false;
-    return true;
-  });
+  // ───────────────────────────────────────────────────────────
+  // LIMPIAR DIVISORES
+  // ───────────────────────────────────────────────────────────
+
+  const filteredItems =
+    visibleItems.filter(
+      (item, i, arr) => {
+        if (!item.divider) return true;
+
+        const prev = arr[i - 1];
+        const next = arr[i + 1];
+
+        if (!prev || !next) return false;
+
+        if (prev.divider) return false;
+
+        if (!next || next.divider) return false;
+
+        return true;
+      }
+    );
+
+  // ───────────────────────────────────────────────────────────
+  // ESTILOS DEL SIDEBAR
+  // ───────────────────────────────────────────────────────────
 
   const sidebarStyle = isMobile
     ? {
         position: 'fixed',
-        top: 0, left: 0, bottom: 0,
+
+        top: 0,
+        left: 0,
+        bottom: 0,
+
         width: 240,
+
         zIndex: 200,
-        transform: collapsed ? 'translateX(-100%)' : 'translateX(0)',
-        transition: 'transform 0.22s ease',
-        boxShadow: 'var(--shadow-lg)',
+
+        transform: collapsed
+          ? 'translateX(-100%)'
+          : 'translateX(0)',
+
+        transition:
+          'transform 0.22s ease',
+
+        boxShadow:
+          '12px 0 40px rgba(15,45,90,0.18)',
       }
     : {
-        width: collapsed ? 64 : 240,
+        // IMPORTANTE:
+        // evita que el nuevo fondo del dashboard
+        // tape visualmente el sidebar.
+        position: 'relative',
+
+        width: collapsed
+          ? 64
+          : 240,
+
         flexShrink: 0,
-        transition: 'width 0.2s ease',
+
+        zIndex: 20,
+
+        transition:
+          'width 0.2s ease',
+
         overflow: 'hidden',
       };
 
+  // ───────────────────────────────────────────────────────────
+  // RENDER
+  // ───────────────────────────────────────────────────────────
+
   return (
-    <aside style={{
-      ...sidebarStyle,
-      background: 'var(--bg-card)',
-      borderRight: '1px solid var(--border)',
-      display: 'flex',
-      flexDirection: 'column',
-      height: '100%',
-    }}>
-      {/* ── Logo + botón colapsar ── */}
-      <div style={{
-        height: 56,
+    <aside
+      style={{
+        ...sidebarStyle,
+
+        background:
+          'var(--sidebar-bg)',
+
+        backdropFilter:
+          'blur(22px)',
+
+        WebkitBackdropFilter:
+          'blur(22px)',
+
+        borderRight:
+          '1px solid var(--sidebar-border)',
+
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: collapsed && !isMobile ? 'center' : 'space-between',
-        padding: collapsed && !isMobile ? '0 10px' : '0 14px',
-        borderBottom: '1px solid var(--border)',
-        flexShrink: 0,
-      }}>
-        {/* Título — se oculta en modo colapsado desktop */}
+
+        flexDirection: 'column',
+
+        height: '100%',
+
+        overflow: 'hidden',
+
+        boxShadow:
+          isMobile
+            ? '12px 0 40px rgba(15,45,90,0.18)'
+            : '6px 0 28px rgba(15,45,90,0.055)',
+      }}
+    >
+      {/* ─────────────────────────────────────────────────────
+          BRILLO DECORATIVO DEL SIDEBAR
+      ───────────────────────────────────────────────────── */}
+
+      <div
+        style={{
+          position: 'absolute',
+
+          top: -90,
+          left: collapsed
+            ? -80
+            : -120,
+
+          width: 240,
+          height: 240,
+
+          borderRadius: '50%',
+
+          background:
+            'radial-gradient(circle, rgba(0,185,255,0.12) 0%, rgba(0,185,255,0.035) 42%, transparent 72%)',
+
+          pointerEvents: 'none',
+
+          filter: 'blur(8px)',
+        }}
+      />
+
+      {/* Segundo brillo */}
+      <div
+        style={{
+          position: 'absolute',
+
+          bottom: 60,
+          right: -100,
+
+          width: 220,
+          height: 220,
+
+          borderRadius: '50%',
+
+          background:
+            'radial-gradient(circle, rgba(55,100,220,0.09) 0%, rgba(55,100,220,0.02) 45%, transparent 72%)',
+
+          pointerEvents: 'none',
+
+          filter: 'blur(12px)',
+        }}
+      />
+
+      {/* ─────────────────────────────────────────────────────
+          LOGO + BOTÓN
+      ───────────────────────────────────────────────────── */}
+
+      <div
+        style={{
+          height: 56,
+
+          display: 'flex',
+
+          alignItems: 'center',
+
+          justifyContent:
+            collapsed && !isMobile
+              ? 'center'
+              : 'space-between',
+
+          padding:
+            collapsed && !isMobile
+              ? '0 10px'
+              : '0 14px',
+
+          borderBottom:
+            '1px solid var(--sidebar-border)',
+
+          flexShrink: 0,
+
+          position: 'relative',
+
+          zIndex: 1,
+        }}
+      >
+        {/* Logo / nombre */}
         {(!collapsed || isMobile) && (
-          <span style={{
-            fontFamily: 'var(--font-ui)',
-            fontWeight: 700,
-            fontSize: 15,
-            color: 'var(--text-primary)',
-          }}>
-            pf-corrosion
-          </span>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 9,
+            }}
+          >
+            {/* Punto luminoso */}
+            <span
+              style={{
+                width: 8,
+                height: 8,
+
+                borderRadius: '50%',
+
+                background:
+                  'linear-gradient(135deg, #00c8ff, #1455d9)',
+
+                boxShadow:
+                  '0 0 10px rgba(0,190,255,0.5)',
+
+                flexShrink: 0,
+              }}
+            />
+
+            <span
+              style={{
+                fontFamily:
+                  'var(--font-ui)',
+
+                fontWeight: 700,
+
+                fontSize: 15,
+
+                letterSpacing:
+                  '-0.01em',
+
+                color:
+                  'var(--text-primary)',
+              }}
+            >
+              pf-corrosion
+            </span>
+          </div>
         )}
 
-        {/* Botón colapsar — en desktop, icono de chevron; en móvil, X */}
+        {/* Botón colapsar */}
         <button
           onClick={onToggle}
-          title={isMobile ? 'Cerrar menú' : collapsed ? 'Expandir' : 'Colapsar'}
+          title={
+            isMobile
+              ? 'Cerrar menú'
+              : collapsed
+                ? 'Expandir'
+                : 'Colapsar'
+          }
           style={{
-            background: 'transparent', border: 'none', cursor: 'pointer',
-            color: 'var(--text-muted)', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', padding: 6, borderRadius: 6,
+            background:
+              'var(--sidebar-button-bg)',
+
+            border:
+              '1px solid var(--sidebar-border)',
+
+            cursor: 'pointer',
+
+            color:
+              'var(--text-muted)',
+
+            display: 'flex',
+
+            alignItems: 'center',
+
+            justifyContent: 'center',
+
+            padding: 6,
+
+            borderRadius: 8,
+
             flexShrink: 0,
+
+            transition:
+              'all 0.18s ease',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background =
+              'var(--sidebar-hover-bg)';
+
+            e.currentTarget.style.color =
+              'var(--nav-active-text)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background =
+              'var(--sidebar-button-bg)';
+
+            e.currentTarget.style.color =
+              'var(--text-muted)';
           }}
         >
-          {isMobile
-            ? <X size={18} />
-            : collapsed
-              ? <ChevronRight size={16} />
-              : <ChevronLeft size={16} />
-          }
+          {isMobile ? (
+            <X size={18} />
+          ) : collapsed ? (
+            <ChevronRight size={16} />
+          ) : (
+            <ChevronLeft size={16} />
+          )}
         </button>
       </div>
 
-      {/* ── Navegación ── */}
-      <nav style={{ flex: 1, overflow: 'auto', padding: '10px 8px' }}>
-        {filteredItems.map((item, i) =>
-          item.divider
-            ? <div key={`div-${i}`} style={{ height: 1, background: 'var(--border)', margin: '6px 0' }} />
-            : <NavItem key={item.path} item={item} collapsed={collapsed && !isMobile} />
+      {/* ─────────────────────────────────────────────────────
+          NAVEGACIÓN
+      ───────────────────────────────────────────────────── */}
+
+      <nav
+        style={{
+          flex: 1,
+
+          overflow: 'auto',
+
+          padding: '12px 8px',
+
+          position: 'relative',
+
+          zIndex: 1,
+        }}
+      >
+        {filteredItems.map(
+          (item, i) =>
+            item.divider ? (
+              <div
+                key={`div-${i}`}
+                style={{
+                  height: 1,
+
+                  background:
+                    'var(--sidebar-divider)',
+
+                  margin:
+                    '10px 4px',
+                }}
+              />
+            ) : (
+              <NavItem
+                key={item.path}
+                item={item}
+                collapsed={
+                  collapsed &&
+                  !isMobile
+                }
+              />
+            )
         )}
       </nav>
 
-      {/* ── Usuario + Logout ── */}
-      <div style={{ borderTop: '1px solid var(--border)', padding: '10px 8px', flexShrink: 0 }}>
-        {/* Avatar + info (solo expandido) */}
-        {(!collapsed || isMobile) && user && (
-          <div
-            onClick={() => navigate('/perfil')}
-            title="Mi perfil"
-            style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '8px 6px', marginBottom: 4, overflow: 'hidden',
-              cursor: 'pointer', borderRadius: 8,
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card-hover)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-          >
-            <div style={{
-              width: 34, height: 34, borderRadius: 8, background: avatarColor,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 12,
-              color: 'white', flexShrink: 0,
-            }}>
-              {getInitials(displayName || user.name || user.email)}
-            </div>
-            <div style={{ overflow: 'hidden', minWidth: 0 }}>
-              <div style={{
-                fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 12,
-                color: 'var(--text-primary)', whiteSpace: 'nowrap',
-                overflow: 'hidden', textOverflow: 'ellipsis',
-              }}>
-                {displayName || user.name || user.email}
+      {/* ─────────────────────────────────────────────────────
+          USUARIO + LOGOUT
+      ───────────────────────────────────────────────────── */}
+
+      <div
+        style={{
+          borderTop:
+            '1px solid var(--sidebar-border)',
+
+          padding: '10px 8px',
+
+          flexShrink: 0,
+
+          position: 'relative',
+
+          zIndex: 1,
+        }}
+      >
+        {/* ───────────────────────────────────────────────
+            USUARIO EXPANDIDO
+        ─────────────────────────────────────────────── */}
+
+        {(!collapsed || isMobile) &&
+          user && (
+            <div
+              onClick={() =>
+                navigate('/perfil')
+              }
+              title="Mi perfil"
+              style={{
+                display: 'flex',
+
+                alignItems: 'center',
+
+                gap: 10,
+
+                padding: '8px 7px',
+
+                marginBottom: 5,
+
+                overflow: 'hidden',
+
+                cursor: 'pointer',
+
+                borderRadius: 11,
+
+                border:
+                  '1px solid transparent',
+
+                transition:
+                  'all 0.18s ease',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background =
+                  'var(--sidebar-hover-bg)';
+
+                e.currentTarget.style.border =
+                  '1px solid var(--sidebar-hover-border)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background =
+                  'transparent';
+
+                e.currentTarget.style.border =
+                  '1px solid transparent';
+              }}
+            >
+              {/* Avatar */}
+              <div
+                style={{
+                  width: 35,
+                  height: 35,
+
+                  borderRadius: 10,
+
+                  background:
+                    `linear-gradient(135deg, ${avatarColor}, #0b74c9)`,
+
+                  display: 'flex',
+
+                  alignItems: 'center',
+
+                  justifyContent: 'center',
+
+                  fontFamily:
+                    'var(--font-data)',
+
+                  fontWeight: 700,
+
+                  fontSize: 12,
+
+                  color: 'white',
+
+                  flexShrink: 0,
+
+                  boxShadow:
+                    '0 4px 12px rgba(20,50,163,0.18)',
+                }}
+              >
+                {getInitials(
+                  displayName ||
+                    user.name ||
+                    user.email
+                )}
               </div>
-              {rol && (
-                <div style={{
-                  fontFamily: 'var(--font-data)', fontSize: 10,
-                  color: 'var(--accent-amber)', letterSpacing: '0.06em',
-                }}>
-                  {ROL_LABELS[rol]}
+
+              {/* Información */}
+              <div
+                style={{
+                  overflow: 'hidden',
+
+                  minWidth: 0,
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily:
+                      'var(--font-ui)',
+
+                    fontWeight: 600,
+
+                    fontSize: 12,
+
+                    color:
+                      'var(--text-primary)',
+
+                    whiteSpace:
+                      'nowrap',
+
+                    overflow:
+                      'hidden',
+
+                    textOverflow:
+                      'ellipsis',
+                  }}
+                >
+                  {displayName ||
+                    user.name ||
+                    user.email}
                 </div>
+
+                {rol && (
+                  <div
+                    style={{
+                      fontFamily:
+                        'var(--font-data)',
+
+                      fontSize: 9,
+
+                      color:
+                        'var(--nav-active-text)',
+
+                      letterSpacing:
+                        '0.07em',
+
+                      marginTop: 1,
+
+                      textTransform:
+                        'uppercase',
+                    }}
+                  >
+                    {ROL_LABELS[rol]}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+        {/* ───────────────────────────────────────────────
+            AVATAR COLAPSADO
+        ─────────────────────────────────────────────── */}
+
+        {collapsed &&
+          !isMobile &&
+          user && (
+            <div
+              onClick={() =>
+                navigate('/perfil')
+              }
+              title="Mi perfil"
+              style={{
+                width: 35,
+                height: 35,
+
+                borderRadius: 10,
+
+                background:
+                  `linear-gradient(135deg, ${avatarColor}, #0b74c9)`,
+
+                display: 'flex',
+
+                alignItems: 'center',
+
+                justifyContent: 'center',
+
+                fontFamily:
+                  'var(--font-data)',
+
+                fontWeight: 700,
+
+                fontSize: 12,
+
+                color: 'white',
+
+                margin:
+                  '0 auto 6px',
+
+                cursor: 'pointer',
+
+                boxShadow:
+                  '0 4px 12px rgba(20,50,163,0.18)',
+              }}
+            >
+              {getInitials(
+                displayName ||
+                  user.name ||
+                  user.email
               )}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Avatar solo (colapsado) */}
-        {collapsed && !isMobile && user && (
-          <div
-            onClick={() => navigate('/perfil')}
-            title="Mi perfil"
-            style={{
-              width: 34, height: 34, borderRadius: 8, background: avatarColor,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 12,
-              color: 'white', margin: '0 auto 4px', cursor: 'pointer',
-            }}
-          >
-            {getInitials(displayName || user.name || user.email)}
-          </div>
-        )}
+        {/* ───────────────────────────────────────────────
+            LOGOUT
+        ─────────────────────────────────────────────── */}
 
-        {/* Logout */}
         <button
           onClick={onLogout}
-          title={collapsed && !isMobile ? 'Cerrar sesión' : undefined}
+          title={
+            collapsed &&
+            !isMobile
+              ? 'Cerrar sesión'
+              : undefined
+          }
           style={{
-            width: '100%', display: 'flex', alignItems: 'center',
-            gap: collapsed && !isMobile ? 0 : 8,
-            justifyContent: collapsed && !isMobile ? 'center' : 'flex-start',
-            padding: collapsed && !isMobile ? '9px 0' : '9px 10px',
-            background: 'transparent', border: 'none', cursor: 'pointer',
-            borderRadius: 8, color: 'var(--accent-red)',
-            fontFamily: 'var(--font-ui)', fontWeight: 500, fontSize: 13,
-            transition: 'background 0.12s',
+            width: '100%',
+
+            display: 'flex',
+
+            alignItems: 'center',
+
+            gap:
+              collapsed &&
+              !isMobile
+                ? 0
+                : 8,
+
+            justifyContent:
+              collapsed &&
+              !isMobile
+                ? 'center'
+                : 'flex-start',
+
+            padding:
+              collapsed &&
+              !isMobile
+                ? '9px 0'
+                : '9px 10px',
+
+            background:
+              'transparent',
+
+            border:
+              '1px solid transparent',
+
+            cursor: 'pointer',
+
+            borderRadius: 10,
+
+            color:
+              'var(--accent-red)',
+
+            fontFamily:
+              'var(--font-ui)',
+
+            fontWeight: 500,
+
+            fontSize: 12,
+
+            transition:
+              'all 0.18s ease',
           }}
-          onMouseEnter={e => e.currentTarget.style.background = 'rgba(220,38,38,0.08)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          onMouseEnter={e => {
+            e.currentTarget.style.background =
+              'rgba(220,38,38,0.07)';
+
+            e.currentTarget.style.border =
+              '1px solid rgba(220,38,38,0.10)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background =
+              'transparent';
+
+            e.currentTarget.style.border =
+              '1px solid transparent';
+          }}
         >
-          <LogOut size={17} strokeWidth={1.8} style={{ flexShrink: 0 }} />
-          {(!collapsed || isMobile) && <span>Cerrar sesión</span>}
+          <LogOut
+            size={17}
+            strokeWidth={1.8}
+            style={{
+              flexShrink: 0,
+            }}
+          />
+
+          {(!collapsed ||
+            isMobile) && (
+            <span>
+              Cerrar sesión
+            </span>
+          )}
         </button>
       </div>
     </aside>
