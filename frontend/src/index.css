@@ -124,6 +124,21 @@
   --nav-active-bg: rgba(20, 50, 163, 0.10);
   --nav-active-text: #1432A3;
 
+  /* Estado de la casilla de navegacion. El Sidebar referenciaba estas
+     variables sin que estuvieran definidas, asi que el item activo se
+     renderizaba sin fondo ni sombra y solo se distinguia por la barrita
+     lateral de 3px. */
+
+  --sidebar-active-bg: rgba(20, 50, 163, 0.09);
+  --sidebar-active-border: rgba(20, 50, 163, 0.22);
+  --sidebar-active-shadow:
+    0 0 0 1px rgba(20, 50, 163, 0.10),
+    0 2px 10px rgba(20, 50, 163, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+
+  --sidebar-hover-bg: rgba(20, 50, 163, 0.045);
+  --sidebar-hover-border: rgba(20, 50, 163, 0.12);
+
 
   /* ─────────────────────────────────────────────────────────────
      SHADOWS
@@ -247,6 +262,16 @@
 
   --nav-active-bg: rgba(77, 127, 255, 0.13);
   --nav-active-text: #82A7FF;
+
+  --sidebar-active-bg: rgba(77, 127, 255, 0.14);
+  --sidebar-active-border: rgba(130, 167, 255, 0.34);
+  --sidebar-active-shadow:
+    0 0 0 1px rgba(130, 167, 255, 0.16),
+    0 2px 12px rgba(0, 140, 255, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+
+  --sidebar-hover-bg: rgba(77, 127, 255, 0.07);
+  --sidebar-hover-border: rgba(130, 167, 255, 0.16);
 
 
   /* Shadows */
@@ -859,6 +884,57 @@ body {
 
 .fade-in-up {
   animation: fade-in-up 0.4s ease forwards;
+}
+
+
+/* ================================================================
+   NAVEGACION DEL SIDEBAR
+
+   El hover se resuelve en CSS a proposito. Antes se escribia con
+   onMouseEnter/onMouseLeave directamente sobre e.currentTarget.style,
+   por fuera de React: al pasar un item a activo, React re-renderizaba
+   y solo actualizaba las propiedades de su style prop, dejando pegado
+   el transform imperativo. Eso hacia parpadear la casilla al cambiar
+   de seccion. Con :hover no hay dos fuentes de verdad posibles.
+   ================================================================ */
+
+.sidebar-nav-item {
+  background: transparent;
+  border: 1px solid transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.sidebar-nav-item:hover:not(.is-active) {
+  background: var(--sidebar-hover-bg);
+  border-color: var(--sidebar-hover-border);
+  transform: translateX(2px);
+}
+
+/* La casilla activa queda encerrada por su propia sombra, para que se
+   lea de un golpe en que seccion esta parado el usuario. */
+.sidebar-nav-item.is-active {
+  background: var(--sidebar-active-bg);
+  border-color: var(--sidebar-active-border);
+  box-shadow: var(--sidebar-active-shadow);
+  color: var(--nav-active-text);
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-nav-item {
+    transition: none;
+  }
+
+  .sidebar-nav-item:hover:not(.is-active) {
+    transform: none;
+  }
 }
 
 

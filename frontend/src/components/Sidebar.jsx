@@ -11,6 +11,7 @@ import {
   ChevronRight,
   X,
   User,
+  Upload,
 } from 'lucide-react';
 
 import { useAuth } from '../auth/AuthContext';
@@ -27,6 +28,13 @@ const NAV_ITEMS = [
     path: '/dashboard',
     icon: LayoutDashboard,
     label: 'Dashboard',
+  },
+
+  {
+    path: '/upload',
+    icon: Upload,
+    label: 'Subir medición',
+    roles: ['admin', 'tecnico'],
   },
 
   {
@@ -123,6 +131,11 @@ function NavItem({ item, collapsed }) {
       }}
     >
       <div
+        className={
+          isActive
+            ? 'sidebar-nav-item is-active'
+            : 'sidebar-nav-item'
+        }
         style={{
           position: 'relative',
 
@@ -147,53 +160,10 @@ function NavItem({ item, collapsed }) {
             ? 'center'
             : 'flex-start',
 
-          background: isActive
-            ? 'var(--sidebar-active-bg)'
-            : 'transparent',
-
-          border: isActive
-            ? '1px solid var(--sidebar-active-border)'
-            : '1px solid transparent',
-
-          boxShadow: isActive
-            ? 'var(--sidebar-active-shadow)'
-            : 'none',
-
-          color: isActive
-            ? 'var(--nav-active-text)'
-            : 'var(--text-muted)',
-
-          transition:
-            'background 0.18s ease, ' +
-            'border 0.18s ease, ' +
-            'box-shadow 0.18s ease, ' +
-            'transform 0.18s ease',
-        }}
-
-        onMouseEnter={e => {
-          if (!isActive) {
-            e.currentTarget.style.background =
-              'var(--sidebar-hover-bg)';
-
-            e.currentTarget.style.border =
-              '1px solid var(--sidebar-hover-border)';
-
-            e.currentTarget.style.transform =
-              'translateX(2px)';
-          }
-        }}
-
-        onMouseLeave={e => {
-          if (!isActive) {
-            e.currentTarget.style.background =
-              'transparent';
-
-            e.currentTarget.style.border =
-              '1px solid transparent';
-
-            e.currentTarget.style.transform =
-              'translateX(0)';
-          }
+          // background, border, box-shadow y color viven en index.css
+          // (.sidebar-nav-item / .is-active). Si se declaran aca tambien,
+          // el estilo inline le gana por especificidad a la regla :hover
+          // y el hover deja de verse.
         }}
       >
         {/* Indicador lateral del elemento activo */}
