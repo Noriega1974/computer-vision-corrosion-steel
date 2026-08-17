@@ -98,12 +98,18 @@ function BarraPorcentaje({ valor, color, max = 100 }) {
       <div style={{
         height: 10, background: 'var(--border)', borderRadius: 5, overflow: 'hidden',
       }}>
+        {/* scaleX y no width: animar width fuerza reflow en cada frame, y esta
+            barra se llena justo cuando la pagina esta ocupada cargando la
+            medicion. El elemento ocupa el ancho completo y se escala desde la
+            izquierda. */}
         <div style={{
           height: '100%',
-          width: `${Math.min(100, (valor / max) * 100)}%`,
+          width: '100%',
+          transformOrigin: 'left center',
+          transform: `scaleX(${Math.min(100, (valor / max) * 100) / 100})`,
           background: `linear-gradient(90deg, ${color}80, ${color})`,
           borderRadius: 5,
-          transition: 'width 0.6s ease',
+          transition: 'transform 0.28s ease-out',
           boxShadow: `0 0 8px ${color}50`,
         }} />
       </div>

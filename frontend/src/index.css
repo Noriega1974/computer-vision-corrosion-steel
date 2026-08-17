@@ -61,9 +61,14 @@
   --accent-blue: #0369A1;
   --accent-cyan: #00C8F5;
 
-  --accent-green: #16A34A;
+  /* Verde y naranja se usan como color de TEXTO en las tarjetas de KPI, no
+     como fondo. Los valores originales (#16A34A y #F59E0B) daban 2.89:1 y
+     1.88:1 contra el fondo claro: por debajo del minimo AA de 4.5:1. Se
+     oscurecieron lo justo para pasar, conservando el tono. El tema oscuro
+     ya cumplia y queda intacto. */
+  --accent-green: #117C38;
   --accent-red: #DC2626;
-  --accent-orange: #F59E0B;
+  --accent-orange: #966106;
 
 
   /* ─────────────────────────────────────────────────────────────
@@ -72,8 +77,11 @@
 
   --text-primary: #102033;
   --text-secondary: #334155;
-  --text-muted: #64748B;
-  --text-faint: #94A3B8;
+  /* Medidos contra el fondo claro mas exigente (#E9F1F7): los valores previos
+     daban 4.17:1 y 2.25:1. text-faint es el peor caso, y se usa 55 veces en
+     etiquetas y descripciones. Ambos ajustados al minimo que alcanza AA. */
+  --text-muted: #5E6D83;
+  --text-faint: #5A6D88;
 
 
   /* ─────────────────────────────────────────────────────────────
@@ -82,6 +90,36 @@
 
   --font-ui: 'IBM Plex Sans', system-ui, sans-serif;
   --font-data: 'IBM Plex Mono', 'Courier New', monospace;
+
+  /* Escala tipografica.
+
+     Habia 14 tamanos distintos conviviendo, y los cuatro mas usados (13, 12,
+     11 y 10 px) cubrian el 80% de la interfaz metidos dentro de 3 pixeles. Con
+     esa diferencia no se percibe jerarquia: nada se lee como mas importante
+     que lo de al lado. Estos siete pasos separan lo suficiente como para que
+     el tamano signifique algo.
+
+     Los tamanos sueltos que quedan en JSX se van migrando a estos tokens
+     pantalla por pantalla; migrarlos todos de golpe cambia la densidad de seis
+     paginas sin poder revisarlas una por una. */
+  --text-2xs: 11px;   /* etiquetas en mayusculas, texto mono chico */
+  --text-xs:  12px;   /* secundario, pies de dato */
+  --text-sm:  13px;   /* cuerpo por defecto */
+  --text-md:  15px;   /* enfasis, titulos del header */
+  --text-lg:  18px;   /* titulo de seccion */
+  --text-xl:  22px;   /* titulo de pagina */
+  --text-2xl: 28px;   /* cifra destacada de KPI */
+
+  /* Escala de espaciado.
+
+     Habia 10 valores de gap distintos, varios fuera de toda grilla (5, 7, 9,
+     14). Multiplos de 4 salvo el primer paso. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
 
 
   /* ─────────────────────────────────────────────────────────────

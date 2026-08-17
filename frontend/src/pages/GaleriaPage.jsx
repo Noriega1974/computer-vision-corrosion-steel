@@ -93,9 +93,11 @@ function MedicionCard({ medicion, puntoInfo, onClick }) {
           }}>
             <div style={{
               height: '100%',
-              width: `${Math.min(100, medicion.area_corroida_pct)}%`,
+              width: '100%',
+              transformOrigin: 'left center',
+              transform: `scaleX(${Math.min(100, medicion.area_corroida_pct) / 100})`,
               background: color,
-              transition: 'width 0.5s',
+              transition: 'transform 0.28s ease-out',
             }} />
           </div>
         )}

@@ -77,13 +77,16 @@ function Switch({ checked, onChange }) {
         style={{
           position: 'absolute',
           top: 2,
-          left: checked ? 19 : 2,
+          left: 2,
           width: 17,
           height: 17,
           borderRadius: '50%',
           background: 'white',
           boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-          transition: 'left 0.15s ease',
+          // translateX en vez de animar `left`: el desplazamiento corre en GPU
+          // y no dispara layout en cada frame.
+          transform: `translateX(${checked ? 17 : 0}px)`,
+          transition: 'transform 0.15s ease-out',
         }}
       />
     </button>

@@ -7,13 +7,15 @@ import { useAlertas } from '../hooks/useAlertas';
 // KPI CARD
 // ================================================================
 
+// El circulo con el glifo (⬡ ◎ ▲ ✓ ~ !) se quito a proposito: no aportaba
+// informacion que el numero y su etiqueta no dieran ya, y ademas parpadeaba de
+// forma infinita en las tarjetas criticas. La severidad se lee por el color y
+// por la franja superior, sin movimiento permanente en pantalla.
 function KPICard({
   label,
   value,
   sub,
   color,
-  icon,
-  blink,
   loading,
 }) {
 
@@ -51,15 +53,15 @@ function KPICard({
           alignItems:
             'flex-start',
 
-          gap: 10,
+          gap: 'var(--space-3)',
 
-          marginBottom: 10,
+          marginBottom: 'var(--space-3)',
         }}
       >
 
         <span
           style={{
-            fontSize: 11,
+            fontSize: 'var(--text-xs)',
 
             color:
               'var(--text-muted)',
@@ -76,42 +78,6 @@ function KPICard({
         </span>
 
 
-        {/* Icon */}
-
-        <span
-          style={{
-            display: 'flex',
-
-            alignItems: 'center',
-            justifyContent: 'center',
-
-            width: 25,
-            height: 25,
-
-            borderRadius: '50%',
-
-            color,
-
-            background:
-              `color-mix(
-                in srgb,
-                ${color} 9%,
-                transparent
-              )`,
-
-            fontSize: 13,
-
-            lineHeight: 1,
-
-            animation:
-              blink
-                ? 'blink 1s ease-in-out infinite'
-                : 'none',
-          }}
-        >
-          {icon}
-        </span>
-
       </div>
 
 
@@ -124,7 +90,7 @@ function KPICard({
           fontFamily:
             'var(--font-data)',
 
-          fontSize: 27,
+          fontSize: 'var(--text-2xl)',
 
           fontWeight: 600,
 
@@ -163,9 +129,9 @@ function KPICard({
 
       <div
         style={{
-          marginTop: 7,
+          marginTop: 'var(--space-2)',
 
-          fontSize: 9,
+          fontSize: 'var(--text-2xs)',
 
           color:
             'var(--text-faint)',
@@ -308,9 +274,6 @@ export default function KPIBar() {
 
       color:
         'var(--accent-blue)',
-
-      icon:
-        '⌖',
     },
 
 
@@ -326,9 +289,6 @@ export default function KPIBar() {
 
       color:
         'var(--accent-green)',
-
-      icon:
-        '◎',
     },
 
 
@@ -344,9 +304,6 @@ export default function KPIBar() {
 
       color:
         'var(--accent-amber)',
-
-      icon:
-        '~',
     },
 
 
@@ -364,12 +321,6 @@ export default function KPIBar() {
         alertasActivas > 0
           ? 'var(--accent-orange)'
           : 'var(--accent-green)',
-
-      icon:
-        '▲',
-
-      blink:
-        alertasActivas > 0,
     },
 
 
@@ -387,12 +338,6 @@ export default function KPIBar() {
         criticas > 0
           ? 'var(--accent-red)'
           : 'var(--accent-green)',
-
-      icon:
-        '!',
-
-      blink:
-        criticas > 0,
     },
 
 
@@ -408,9 +353,6 @@ export default function KPIBar() {
 
       color:
         'var(--accent-green)',
-
-      icon:
-        '✓',
     },
 
   ];
@@ -430,7 +372,7 @@ export default function KPIBar() {
         gridTemplateColumns:
           'repeat(6, minmax(0, 1fr))',
 
-        gap: 12,
+        gap: 'var(--space-3)',
       }}
     >
 
