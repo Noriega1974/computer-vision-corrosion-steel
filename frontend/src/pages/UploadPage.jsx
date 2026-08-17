@@ -49,7 +49,7 @@ function MapPicker({ lat, lng, onChange }) {
     if (markerRef.current) markerRef.current.remove();
     markerRef.current = L.marker([lat, lng], {
       icon: L.divIcon({
-        html: `<div style="width:14px;height:14px;border-radius:50%;background:#1432A3;border:2px solid white;box-shadow:0 0 8px #1432A380;"></div>`,
+        html: `<div style="width:14px;height:14px;border-radius:50%;background:#9C3610;border:2px solid white;box-shadow:0 0 8px #9C361080;"></div>`,
         className: '', iconSize: [14, 14], iconAnchor: [7, 7],
       }),
     }).addTo(instanceRef.current);
@@ -432,7 +432,7 @@ export default function UploadPage() {
                   style={{
                     flex: 1, padding: '8px 6px', borderRadius: 7,
                     border: `1px solid ${modo === key ? 'var(--accent-amber)' : 'var(--border)'}`,
-                    background: modo === key ? 'rgba(20,50,163,0.1)' : 'var(--bg-inset)',
+                    background: modo === key ? 'rgba(156,54,16,0.1)' : 'var(--bg-inset)',
                     color: modo === key ? 'var(--accent-amber)' : 'var(--text-muted)',
                     fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 12, cursor: 'pointer',
                   }}
@@ -571,7 +571,7 @@ export default function UploadPage() {
                   style={{
                     flex: 1, padding: '10px 8px', borderRadius: 8,
                     border: `1px solid ${esMedicionPasada === val ? 'var(--accent-amber)' : 'var(--border)'}`,
-                    background: esMedicionPasada === val ? 'rgba(20,50,163,0.1)' : 'var(--bg-inset)',
+                    background: esMedicionPasada === val ? 'rgba(156,54,16,0.1)' : 'var(--bg-inset)',
                     color: esMedicionPasada === val ? 'var(--accent-amber)' : 'var(--text-muted)',
                     fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 13, cursor: 'pointer',
                     transition: 'color 0.13s, background-color 0.13s, border-color 0.13s',

@@ -74,7 +74,7 @@ function PlantRow({ punto, index, selected, onClick }) {
         width: '100%',
         textAlign: 'left',
         padding: '10px 12px',
-        background: selected ? 'rgba(20,50,163,0.08)' : 'var(--bg-page)',
+        background: selected ? 'rgba(156,54,16,0.08)' : 'var(--bg-page)',
         border: `1px solid ${selected ? 'var(--accent-blue)' : 'var(--border)'}`,
         borderLeft: `3px solid ${selected ? 'var(--accent-blue)' : 'var(--border-bright)'}`,
         borderRadius: 0,

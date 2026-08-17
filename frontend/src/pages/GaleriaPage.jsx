@@ -233,7 +233,7 @@ export default function GaleriaPage() {
             padding: '9px 16px', background: 'var(--accent-amber)',
             border: 'none', borderRadius: 8, cursor: 'pointer',
             fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 13, color: 'white',
-            boxShadow: '0 2px 8px rgba(20,50,163,0.3)',
+            boxShadow: '0 2px 8px rgba(156,54,16,0.3)',
           }}
         >
           <Upload size={15} />

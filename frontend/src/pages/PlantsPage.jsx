@@ -387,8 +387,8 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
           <div
             style={{
               padding: '8px 12px',
-              background: 'rgba(20,50,163,0.05)',
-              border: '1px solid rgba(20,50,163,0.15)',
+              background: 'rgba(156,54,16,0.05)',
+              border: '1px solid rgba(156,54,16,0.15)',
               borderRadius: 7,
               fontSize: 11,
               color: 'var(--text-muted)',
@@ -403,8 +403,8 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
           <div
             style={{
               padding: '8px 12px',
-              background: 'rgba(20,50,163,0.05)',
-              border: '1px solid rgba(20,50,163,0.15)',
+              background: 'rgba(156,54,16,0.05)',
+              border: '1px solid rgba(156,54,16,0.15)',
               borderRadius: 7,
               fontSize: 11,
               color: 'var(--text-muted)',

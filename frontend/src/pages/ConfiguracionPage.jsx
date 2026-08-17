@@ -146,8 +146,8 @@ function SectionHeader({ icon: Icon, title, description }) {
           width: 32,
           height: 32,
           borderRadius: 8,
-          background: 'rgba(20,50,163,0.08)',
-          border: '1px solid rgba(20,50,163,0.12)',
+          background: 'rgba(156,54,16,0.08)',
+          border: '1px solid rgba(156,54,16,0.12)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -233,7 +233,7 @@ export default function ConfiguracionPage() {
         .config-select:focus,
         .config-input:focus {
           border-color: var(--accent-blue) !important;
-          box-shadow: 0 0 0 2px rgba(20,50,163,0.08);
+          box-shadow: 0 0 0 2px rgba(156,54,16,0.08);
         }
       `}</style>
 
@@ -642,8 +642,8 @@ export default function ConfiguracionPage() {
               style={{
                 marginTop: 16,
                 padding: '10px 12px',
-                background: 'rgba(20,50,163,0.05)',
-                border: '1px solid rgba(20,50,163,0.12)',
+                background: 'rgba(156,54,16,0.05)',
+                border: '1px solid rgba(156,54,16,0.12)',
                 borderRadius: 7,
                 display: 'flex',
                 alignItems: 'flex-start',

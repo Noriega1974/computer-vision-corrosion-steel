@@ -52,7 +52,7 @@ function MiniMapa({ lat, lng, latReal, lngReal }) {
     // Marcador de la planta
     L.marker([lat, lng], {
       icon: L.divIcon({
-        html: `<div style="width:12px;height:12px;border-radius:50%;background:#1432A3;border:2px solid white;box-shadow:0 0 8px #1432A380;"></div>`,
+        html: `<div style="width:12px;height:12px;border-radius:50%;background:#9C3610;border:2px solid white;box-shadow:0 0 8px #9C361080;"></div>`,
         className: '', iconSize: [12, 12], iconAnchor: [6, 6],
       }),
     }).addTo(map);
@@ -425,7 +425,7 @@ export default function MedicionDetailPage() {
             />
             {lat && lng && (
               <div style={{ marginTop: 8, fontSize: 10, color: 'var(--text-faint)', fontFamily: 'var(--font-data)', display: 'flex', gap: 12 }}>
-                <span style={{ color: '#1432A3' }}>● Planta: {lat?.toFixed(5)}, {lng?.toFixed(5)}</span>
+                <span style={{ color: '#9C3610' }}>● Planta: {lat?.toFixed(5)}, {lng?.toFixed(5)}</span>
                 {medicion.latitud_real && medicion.longitud_real && (
                   <span style={{ color: '#38bdf8' }}>● Foto: {medicion.latitud_real.toFixed(5)}, {medicion.longitud_real.toFixed(5)}</span>
                 )}
