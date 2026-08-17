@@ -160,7 +160,13 @@ export default function DashboardPage() {
 
 
         {/* ========================================================
-            MAP + DETAIL
+            PLANTAS + MAP + DETAIL
+
+            Las tres columnas son la misma tarea: elegir una planta,
+            ubicarla y leer su detalle. Estaban partidas en dos filas,
+            con la lista debajo del mapa, asi que seleccionar obligaba a
+            bajar y volver a subir. El mapa manda al centro por ser el
+            unico que necesita ancho real.
             ======================================================== */}
 
         <div
@@ -169,13 +175,83 @@ export default function DashboardPage() {
             display: 'grid',
 
             gridTemplateColumns:
-              'minmax(0, 2fr) minmax(330px, 1fr)',
+              'minmax(210px, 0.8fr) minmax(0, 2fr) minmax(320px, 1fr)',
 
             gap: 18,
 
             minHeight: 0,
           }}
         >
+
+
+          {/* ======================================================
+              PLANTAS
+              ====================================================== */}
+
+          <section
+            className="dashboard-section section-plants"
+            style={{
+              padding: '18px',
+
+              display: 'flex',
+              flexDirection: 'column',
+
+              gap: 12,
+
+              minHeight: 430,
+
+              overflow: 'hidden',
+            }}
+          >
+
+            {/* Title */}
+
+            <div style={{ flexShrink: 0 }}>
+
+              <div className="dashboard-section-title">
+                Plantas
+              </div>
+
+              <div
+                style={{
+                  marginTop: 5,
+
+                  fontSize: 11,
+
+                  color: 'var(--text-faint)',
+                }}
+              >
+                Seleccioná una para ver su detalle
+              </div>
+
+            </div>
+
+
+            {/* Table */}
+
+            <div
+              style={{
+                flex: 1,
+
+                minHeight: 0,
+
+                overflow: 'auto',
+
+                paddingRight: 2,
+              }}
+            >
+
+              <PlantsTable
+                puntos={puntos}
+                loading={loadingPuntos}
+                error={errorPuntos}
+                selectedPunto={selectedPunto}
+                onSelectPunto={setSelectedPunto}
+              />
+
+            </div>
+
+          </section>
 
 
           {/* ======================================================
@@ -192,7 +268,7 @@ export default function DashboardPage() {
 
               gap: 12,
 
-              minHeight: 540,
+              minHeight: 430,
             }}
           >
 
@@ -305,7 +381,7 @@ export default function DashboardPage() {
 
               gap: 12,
 
-              minHeight: 540,
+              minHeight: 430,
 
               overflow: 'hidden',
             }}
@@ -346,70 +422,6 @@ export default function DashboardPage() {
           </section>
 
         </div>
-
-
-
-        {/* ========================================================
-            PLANTAS
-            ======================================================== */}
-
-        <section
-          className="dashboard-section"
-          style={{
-            padding: '18px 20px 20px',
-          }}
-        >
-
-          {/* Header */}
-
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-
-              gap: 10,
-
-              marginBottom: 16,
-            }}
-          >
-
-            <div>
-
-              <div
-                className="dashboard-section-title"
-              >
-                Plantas
-              </div>
-
-              <div
-                style={{
-                  marginTop: 5,
-
-                  fontSize: 11,
-
-                  color:
-                    'var(--text-faint)',
-                }}
-              >
-                Instalaciones registradas · seleccioná una para ver su detalle
-              </div>
-
-            </div>
-
-          </div>
-
-
-          {/* Table */}
-
-          <PlantsTable
-            puntos={puntos}
-            loading={loadingPuntos}
-            error={errorPuntos}
-            selectedPunto={selectedPunto}
-            onSelectPunto={setSelectedPunto}
-          />
-
-        </section>
 
 
 

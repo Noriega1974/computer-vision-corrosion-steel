@@ -1125,6 +1125,24 @@ body {
    RESPONSIVE
    ================================================================ */
 
+/* Paso intermedio: en tablet no entran tres columnas, pero apilarlas todas
+   desperdicia el ancho. La lista de plantas pasa a ocupar la fila completa
+   arriba y mapa y detalle se reparten la de abajo. */
+@media (max-width: 1280px) {
+
+  .main-grid {
+    grid-template-columns:
+      minmax(0, 2fr) minmax(300px, 1fr) !important;
+  }
+
+  .main-grid > .section-plants {
+    grid-column: 1 / -1;
+
+    min-height: 0 !important;
+  }
+}
+
+
 @media (max-width: 1024px) {
 
   .main-grid {
@@ -1133,11 +1151,14 @@ body {
     height: auto !important;
   }
 
-  .main-grid > div:first-child {
-    height: 540px !important;
+  /* Eran `> div:first-child` y `> div:last-child`, pero los hijos del grid
+     son <section>: el selector no matcheaba nada y estas alturas nunca se
+     aplicaron. Ahora apuntan a la seccion por su clase. */
+  .main-grid > .section-map {
+    height: 460px !important;
   }
 
-  .main-grid > div:last-child {
+  .main-grid > .section-detail {
     height: 400px !important;
 
     border-top:
@@ -1154,13 +1175,13 @@ body {
     height: auto !important;
   }
 
-  .main-grid > div:first-child {
+  .main-grid > .section-map {
     height: 400px !important;
 
     border-right: none !important;
   }
 
-  .main-grid > div:last-child {
+  .main-grid > .section-detail {
     height: 400px !important;
 
     border-top:

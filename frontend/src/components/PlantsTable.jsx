@@ -60,27 +60,52 @@ export default function PlantsTable({ puntos, loading, error, selectedPunto, onS
 }
 
 function PlantRow({ punto, index, selected, onClick }) {
+  const nombre = punto.sede ?? punto.id_punto;
   return (
-    <div
+    // Mismo gotcha que se corrigio ayer en el resto de la app: era un
+    // <div onClick>, invisible para el teclado. button+aria-pressed lo
+    // trae de vuelta al orden de foco sin cambiar el look de la fila.
+    <button
+      type="button"
       onClick={onClick}
+      aria-pressed={selected}
       style={{
+        display: 'block',
+        width: '100%',
+        textAlign: 'left',
         padding: '10px 12px',
         background: selected ? 'rgba(20,50,163,0.08)' : 'var(--bg-page)',
         border: `1px solid ${selected ? 'var(--accent-blue)' : 'var(--border)'}`,
         borderLeft: `3px solid ${selected ? 'var(--accent-blue)' : 'var(--border-bright)'}`,
+        borderRadius: 0,
         cursor: 'pointer',
+        font: 'inherit',
         animation: `fade-in-up 0.3s ease ${index * 0.04}s both`,
         transition: 'background 0.12s',
       }}
       onMouseEnter={e => { if (!selected) e.currentTarget.style.background = 'var(--bg-card-hover)'; }}
       onMouseLeave={e => { if (!selected) e.currentTarget.style.background = 'var(--bg-page)'; }}
     >
-      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 3 }}>
-        {punto.sede ?? punto.id_punto}
+      {/* La columna quedo mas angosta que la fila horizontal de antes:
+          nombres largos truncan con elipsis en vez de romper el ancho. */}
+      <div
+        title={nombre}
+        style={{
+          fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 3,
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}
+      >
+        {nombre}
       </div>
-      <div style={{ fontSize: 10, color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
-        <span>{punto.ciudad ?? '—'}{punto.departamento ? ` · ${punto.departamento}` : ''}</span>
+      <div
+        title={`${punto.ciudad ?? '—'}${punto.departamento ? ` · ${punto.departamento}` : ''}`}
+        style={{
+          fontSize: 10, color: 'var(--text-muted)',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}
+      >
+        {punto.ciudad ?? '—'}{punto.departamento ? ` · ${punto.departamento}` : ''}
       </div>
-    </div>
+    </button>
   );
 }
