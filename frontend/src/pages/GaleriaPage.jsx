@@ -196,7 +196,7 @@ export default function GaleriaPage() {
     padding: '7px 12px', background: 'var(--bg-inset)',
     border: '1px solid var(--border)', borderRadius: 7,
     color: 'var(--text-primary)', fontFamily: 'var(--font-ui)',
-    fontSize: 12, outline: 'none',
+    fontSize: 12,
   };
 
   return (
@@ -208,12 +208,12 @@ export default function GaleriaPage() {
         marginBottom: 20, flexWrap: 'wrap', gap: 12,
       }}>
         <div>
-          <h1 style={{
+          <h2 style={{
             fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 18,
             color: 'var(--text-primary)', margin: 0,
           }}>
             Galería de mediciones
-          </h1>
+          </h2>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '3px 0 0', fontFamily: 'var(--font-ui)' }}>
             {loading ? 'Cargando…' : `${filtered.length} mediciones${filtered.length !== mediciones.length ? ` de ${mediciones.length}` : ''}`}
           </p>

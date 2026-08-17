@@ -1,0 +1,11 @@
+# CorrIA es un panel privado de inspección de corrosión. La única ruta pública
+# es /login; todo lo demás exige sesión en Cognito y devuelve la misma SPA vacía
+# a cualquier rastreador. No hay contenido indexable que ofrecer.
+#
+# Esto no bloquea agentes ni modelos de forma arbitraria: declara con precisión
+# que detrás de estas rutas no hay nada que leer. Cualquier User-agent recibe la
+# misma regla, sin listas negras por nombre.
+
+User-agent: *
+Allow: /login
+Disallow: /

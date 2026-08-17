@@ -1,22 +1,28 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
 import { RefreshKeyProvider } from './hooks/RefreshKeyContext';
 import ProtectedRoute from './auth/ProtectedRoute';
 import RoleRoute from './auth/RoleRoute';
 import AppLayout from './layouts/AppLayout';
+import RouteFallback from './components/RouteFallback';
 
-// Páginas
+// LoginPage se importa de forma normal: es la primera pantalla que ve alguien
+// sin sesion, asi que diferirla solo agrega un salto antes del formulario.
 import LoginPage from './pages/LoginPage';
-import DashboardPage from './pages/DashboardPage';
-import UploadPage from './pages/UploadPage';
-import GaleriaPage from './pages/GaleriaPage';
-import MedicionDetailPage from './pages/MedicionDetailPage';
-import PlaceholderPage from './pages/PlaceholderPage';
-import PlantsPage from './pages/PlantsPage';
-import UsersPage from './pages/UsersPage';
-import ProfilePage from './pages/ProfilePage';
-import ConfiguracionPage from './pages/ConfiguracionPage';
+
+// El resto va por React.lazy. Cada pagina se descarga cuando se visita, en vez
+// de mandar el mapa, los graficos y el lector de EXIF a quien solo entra a ver
+// su perfil.
+const DashboardPage       = lazy(() => import('./pages/DashboardPage'));
+const UploadPage          = lazy(() => import('./pages/UploadPage'));
+const GaleriaPage         = lazy(() => import('./pages/GaleriaPage'));
+const MedicionDetailPage  = lazy(() => import('./pages/MedicionDetailPage'));
+const PlantsPage          = lazy(() => import('./pages/PlantsPage'));
+const UsersPage           = lazy(() => import('./pages/UsersPage'));
+const ProfilePage         = lazy(() => import('./pages/ProfilePage'));
+const ConfiguracionPage   = lazy(() => import('./pages/ConfiguracionPage'));
+const NotFoundPage        = lazy(() => import('./pages/NotFoundPage'));
 
 
 export default function App() {
@@ -24,41 +30,47 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <RefreshKeyProvider>
-          <Routes>
-            {/* Ruta pública */}
-            <Route path="/login" element={<LoginPage />} />
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              {/* Ruta pública */}
+              <Route path="/login" element={<LoginPage />} />
 
-            {/* Rutas autenticadas dentro del layout con sidebar */}
-            <Route
-              element={
-                <ProtectedRoute>
-                  <AppLayout />
-                </ProtectedRoute>
-              }
-            >
-              <Route path="/dashboard"          element={<DashboardPage />} />
-              <Route path="/galeria"            element={<GaleriaPage />} />
-              <Route path="/galeria/:idMedicion" element={<MedicionDetailPage />} />
-              <Route path="/perfil"             element={<ProfilePage />} />
+              {/* Rutas autenticadas dentro del layout con sidebar */}
+              <Route
+                element={
+                  <ProtectedRoute>
+                    <AppLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route path="/dashboard"           element={<DashboardPage />} />
+                <Route path="/galeria"             element={<GaleriaPage />} />
+                <Route path="/galeria/:idMedicion" element={<MedicionDetailPage />} />
+                <Route path="/perfil"              element={<ProfilePage />} />
 
-              <Route path="/upload" element={
-                <RoleRoute roles={['admin', 'tecnico']}><UploadPage /></RoleRoute>
-              } />
-              <Route path="/plantas" element={
-                <RoleRoute roles={['admin', 'tecnico']}><PlantsPage /></RoleRoute>
-              } />
-              <Route path="/usuarios" element={
-                <RoleRoute roles={['admin']}><UsersPage /></RoleRoute>
-              } />
-              <Route path="/configuracion" element={
-                <RoleRoute roles={['admin']}><ConfiguracionPage /></RoleRoute>
-              } />
-            </Route>
+                <Route path="/upload" element={
+                  <RoleRoute roles={['admin', 'tecnico']}><UploadPage /></RoleRoute>
+                } />
+                <Route path="/plantas" element={
+                  <RoleRoute roles={['admin', 'tecnico']}><PlantsPage /></RoleRoute>
+                } />
+                <Route path="/usuarios" element={
+                  <RoleRoute roles={['admin']}><UsersPage /></RoleRoute>
+                } />
+                <Route path="/configuracion" element={
+                  <RoleRoute roles={['admin']}><ConfiguracionPage /></RoleRoute>
+                } />
 
-            {/* / y cualquier ruta desconocida redirigen al dashboard */}
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
+                {/* Una ruta desconocida muestra un 404 dentro del layout, con
+                    el sidebar disponible. Antes redirigia al dashboard en
+                    silencio y el enlace roto pasaba desapercibido. Sin sesion,
+                    ProtectedRoute manda a /login antes de llegar aca. */}
+                <Route path="*" element={<NotFoundPage />} />
+              </Route>
+
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+          </Suspense>
         </RefreshKeyProvider>
       </AuthProvider>
     </BrowserRouter>

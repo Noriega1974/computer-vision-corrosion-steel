@@ -318,6 +318,35 @@ html {
   scroll-behavior: smooth;
 }
 
+
+/* ================================================================
+   FOCO
+
+   Se maneja aca y no con `outline: none` inline en cada input: el
+   estilo inline le gana por especificidad a cualquier regla :focus,
+   asi que la pagina quedaba imposible de navegar con teclado. El par
+   de reglas de abajo da el comportamiento correcto: sin anillo al
+   hacer click con el mouse, anillo visible al llegar con Tab.
+   ================================================================ */
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* El sidebar tiene fondo propio: el anillo necesita separacion extra
+   para no confundirse con el borde de la casilla activa. */
+.sidebar-nav-item:has(:focus-visible),
+a:focus-visible .sidebar-nav-item {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 3px;
+}
+
 body {
   background: var(--bg-page);
   color: var(--text-primary);

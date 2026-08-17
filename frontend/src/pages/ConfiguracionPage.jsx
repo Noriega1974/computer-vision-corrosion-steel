@@ -224,7 +224,6 @@ export default function ConfiguracionPage() {
       <style>{`
         .config-select,
         .config-input {
-          outline: none;
           transition: border-color 0.15s ease, box-shadow 0.15s ease;
         }
 

@@ -20,7 +20,6 @@ const inputStyle = {
   color: 'var(--text-primary)',
   fontFamily: 'var(--font-ui)',
   fontSize: 14,
-  outline: 'none',
   transition: 'border-color 0.15s',
   boxSizing: 'border-box',
 };

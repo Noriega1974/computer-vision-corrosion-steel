@@ -172,7 +172,7 @@ const inputStyle = {
   width: '100%', padding: '10px 14px', background: 'var(--bg-inset)',
   border: '1px solid var(--border)', borderRadius: 7,
   color: 'var(--text-primary)', fontFamily: 'var(--font-ui)',
-  fontSize: 14, outline: 'none',
+  fontSize: 14,
 };
 const selectStyle = { ...inputStyle, appearance: 'none', cursor: 'pointer' };
 
@@ -338,9 +338,9 @@ export default function UploadPage() {
             style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 20, padding: 0 }}
           >←</button>
           <div>
-            <h1 style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 20, color: 'var(--text-primary)', margin: 0 }}>
+            <h2 style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 20, color: 'var(--text-primary)', margin: 0 }}>
               Nueva Medición
-            </h1>
+            </h2>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0', fontFamily: 'var(--font-ui)' }}>
               Sube una foto y el modelo de IA detectará el nivel de corrosión
             </p>

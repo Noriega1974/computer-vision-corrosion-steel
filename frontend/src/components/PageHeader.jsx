@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import { Menu, Bell, Sun, Moon } from 'lucide-react';
 import { useAlertas } from '../hooks/useAlertas';
@@ -19,12 +19,24 @@ function buildBreadcrumb(pathname) {
     const id = pathname.replace('/galeria/', '');
     return { title: 'Galería', sub: `Medición ${id.substring(0, 12)}…` };
   }
-  return { title: ROUTE_TITLES[pathname] ?? pathname, sub: null };
+  // Una ruta desconocida cae en NotFoundPage: mostrar el pathname crudo como
+  // titulo delataba la implementacion en vez de explicar que paso.
+  const title = ROUTE_TITLES[pathname];
+  if (!title) return { title: 'Página no encontrada', sub: pathname };
+
+  return { title, sub: null };
 }
 
 export default function PageHeader({ onMenuToggle, isMobile, darkMode, onToggleDark }) {
   const location = useLocation();
   const { title, sub } = buildBreadcrumb(location.pathname);
+
+  // Todas las pantallas compartian el mismo <title> estatico, asi que con
+  // varias pestanas abiertas eran indistinguibles.
+  useEffect(() => {
+    document.title = `${title} · CorrIA`;
+  }, [title]);
+
   const { alertas } = useAlertas();
   const alertCount = alertas.filter(a => (a.nivel_corrosion ?? 0) >= 2).length;
 
@@ -46,22 +58,27 @@ export default function PageHeader({ onMenuToggle, isMobile, darkMode, onToggleD
         {isMobile && (
           <button
             onClick={onMenuToggle}
+            aria-label="Abrir menú de navegación"
             style={{
               background: 'transparent', border: 'none', cursor: 'pointer',
               color: 'var(--text-secondary)', display: 'flex', alignItems: 'center',
               padding: 4,
             }}
           >
-            <Menu size={20} />
+            <Menu size={20} aria-hidden="true" />
           </button>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{
+          {/* El h1 de cada pagina vive aca. El header se monta una vez por
+              ruta y ya conoce el titulo, asi que ponerlo aca garantiza
+              exactamente un h1 por vista sin repetirlo en cada pagina. Los
+              titulos dentro del contenido son h2 en adelante. */}
+          <h1 style={{
             fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 15,
-            color: 'var(--text-primary)',
+            color: 'var(--text-primary)', margin: 0, lineHeight: 1.2,
           }}>
             {title}
-          </span>
+          </h1>
           {sub && (
             <>
               <span style={{ color: 'var(--border-strong)', fontSize: 14 }}>·</span>
@@ -81,6 +98,11 @@ export default function PageHeader({ onMenuToggle, isMobile, darkMode, onToggleD
         {/* Icono bell con badge de alertas (placeholder sin lógica de notificaciones) */}
         <button
           title="Notificaciones"
+          aria-label={
+            alertCount > 0
+              ? `Notificaciones, ${alertCount} alertas activas`
+              : 'Notificaciones, sin alertas activas'
+          }
           style={{
             background: 'transparent', border: 'none', cursor: 'pointer',
             color: 'var(--text-muted)', position: 'relative',
@@ -90,9 +112,9 @@ export default function PageHeader({ onMenuToggle, isMobile, darkMode, onToggleD
           onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-inset)'}
           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
         >
-          <Bell size={18} strokeWidth={1.8} />
+          <Bell size={18} strokeWidth={1.8} aria-hidden="true" />
           {alertCount > 0 && (
-            <div style={{
+            <div aria-hidden="true" style={{
               position: 'absolute', top: 3, right: 3,
               width: 8, height: 8, borderRadius: '50%',
               background: 'var(--accent-red)',
@@ -106,6 +128,7 @@ export default function PageHeader({ onMenuToggle, isMobile, darkMode, onToggleD
         <button
           onClick={onToggleDark}
           title={darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+          aria-label={darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
           style={{
             background: 'transparent', border: 'none', cursor: 'pointer',
             color: 'var(--text-muted)', display: 'flex', alignItems: 'center',
