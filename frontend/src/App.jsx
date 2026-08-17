@@ -23,6 +23,7 @@ const UsersPage           = lazy(() => import('./pages/UsersPage'));
 const ProfilePage         = lazy(() => import('./pages/ProfilePage'));
 const ConfiguracionPage   = lazy(() => import('./pages/ConfiguracionPage'));
 const NotFoundPage        = lazy(() => import('./pages/NotFoundPage'));
+const PrivacidadPage      = lazy(() => import('./pages/PrivacidadPage'));
 
 
 export default function App() {
@@ -47,6 +48,7 @@ export default function App() {
                 <Route path="/galeria"             element={<GaleriaPage />} />
                 <Route path="/galeria/:idMedicion" element={<MedicionDetailPage />} />
                 <Route path="/perfil"              element={<ProfilePage />} />
+                <Route path="/privacidad"          element={<PrivacidadPage />} />
 
                 <Route path="/upload" element={
                   <RoleRoute roles={['admin', 'tecnico']}><UploadPage /></RoleRoute>

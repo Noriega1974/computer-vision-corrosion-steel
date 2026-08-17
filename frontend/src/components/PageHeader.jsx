@@ -12,6 +12,7 @@ const ROUTE_TITLES = {
   '/usuarios':     'Usuarios',
   '/configuracion':'Configuración',
   '/deteccion-ia': 'Detección IA',
+  '/privacidad':   'Privacidad',
 };
 
 function buildBreadcrumb(pathname) {

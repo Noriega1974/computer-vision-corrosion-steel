@@ -514,6 +514,17 @@ export default function DashboardPage() {
             YOLOv8 Transfer Learning · ASTM B117
           </span>
 
+          <Link
+            to="/privacidad"
+            style={{
+              color: 'var(--text-muted)',
+              textDecoration: 'underline',
+              textUnderlineOffset: 2,
+            }}
+          >
+            Qué datos guardamos
+          </Link>
+
         </footer>
 
       </div>
