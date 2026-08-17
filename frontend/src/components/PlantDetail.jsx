@@ -169,8 +169,24 @@ export default function PlantDetail({ punto }) {
             Sin mediciones registradas para esta planta.
           </div>
         )}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {mediciones.slice(0, 15).map((m, i) => (
+        {/* Antes esta lista crecia con la cantidad real de fotos: una planta
+            con 10 mediciones estiraba toda la seccion, y como el grid del
+            Dashboard reparte una sola fila entre plantas/mapa/detalle, el
+            mapa se estiraba con ella. `height: 100%` mas arriba solo funciona
+            si un ancestro tiene un alto DEFINIDO — la seccion solo tenia
+            minHeight (un piso, no un techo), asi que "100%" no tenia contra
+            que resolver y el contenido crecia libre. Ahora el visor queda
+            fijo en ~5 filas (280px, medido sobre MedicionRow real) y el
+            resto se recorre con la rueda del mouse ahi adentro, sin mover el
+            alto de nada mas alrededor. */}
+        <div
+          style={{
+            display: 'flex', flexDirection: 'column', gap: 4,
+            maxHeight: 280, overflowY: 'auto', overscrollBehavior: 'contain',
+            paddingRight: 2,
+          }}
+        >
+          {mediciones.slice(0, 50).map((m, i) => (
             <MedicionRow key={m.id_medicion ?? i} medicion={m} />
           ))}
         </div>
@@ -199,6 +215,7 @@ function MedicionRow({ medicion }) {
         <img
           src={medicion.url_imagen}
           alt=""
+          loading="lazy"
           style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 4, flexShrink: 0, border: '1px solid var(--border)' }}
         />
       ) : (
