@@ -50,10 +50,16 @@ function Section({ icon: Icon, title, children }) {
 }
 
 // ─── Field ───────────────────────────────────────────────────────────────────
-function Field({ label, children }) {
+// `htmlFor` es obligatorio: sin el, el label queda de hermano suelto del control
+// y un lector de pantalla no lo anuncia al enfocarlo. El id que reciba tiene que
+// ser el mismo que lleve el control que se pasa como hijo.
+function Field({ label, htmlFor, children }) {
   return (
     <div style={{ marginBottom: 16 }}>
-      <label style={{ display: 'block', fontFamily: 'var(--font-data)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-faint)', marginBottom: 6 }}>
+      <label
+        htmlFor={htmlFor}
+        style={{ display: 'block', fontFamily: 'var(--font-data)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-faint)', marginBottom: 6 }}
+      >
         {label}
       </label>
       {children}
@@ -166,21 +172,35 @@ export default function ProfilePage() {
           <div style={{ height: 60, background: 'var(--border)', borderRadius: 6, animation: 'shimmer 1.5s infinite' }} />
         ) : (
           <>
-            <Field label="Nombre completo">
-              <input value={nombre} onChange={e => setNombre(e.target.value)} style={inputStyle} placeholder="Tu nombre" />
+            <Field label="Nombre completo" htmlFor="perfil-nombre">
+              <input
+                id="perfil-nombre" name="name" autoComplete="name"
+                value={nombre} onChange={e => setNombre(e.target.value)}
+                style={inputStyle} placeholder="Tu nombre"
+              />
             </Field>
-            <Field label="Correo electrónico">
-              <input value={user?.email ?? ''} disabled style={{ ...inputStyle, opacity: 0.6, cursor: 'not-allowed' }} />
+            <Field label="Correo electrónico" htmlFor="perfil-email">
+              <input
+                id="perfil-email" name="email" type="email" autoComplete="email"
+                value={user?.email ?? ''} disabled
+                style={{ ...inputStyle, opacity: 0.6, cursor: 'not-allowed' }}
+              />
             </Field>
 
             {/* Selector de color de avatar */}
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', fontFamily: 'var(--font-data)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-faint)', marginBottom: 8 }}>
+              {/* span y no label: encabeza un grupo de botones, no un control unico. */}
+              <span id="avatar-color-titulo" style={{ display: 'block', fontFamily: 'var(--font-data)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-faint)', marginBottom: 8 }}>
                 Color de avatar
-              </label>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              </span>
+              {/* Los botones solo muestran color: sin aria-label no tienen nombre
+                  accesible, y `title` no alcanza como sustituto. */}
+              <div role="group" aria-labelledby="avatar-color-titulo" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {AVATAR_COLORS.map(c => (
-                  <button key={c.value} title={c.label} onClick={() => handleAvatarColor(c.value)} style={{
+                  <button key={c.value} type="button" title={c.label}
+                    aria-label={`Color ${c.label}`}
+                    aria-pressed={avatarColor === c.value}
+                    onClick={() => handleAvatarColor(c.value)} style={{
                     width: 28, height: 28, borderRadius: 7, background: c.value, border: 'none',
                     cursor: 'pointer', position: 'relative',
                     outline: avatarColor === c.value ? `2px solid ${c.value}` : 'none',
@@ -218,11 +238,11 @@ export default function ProfilePage() {
 
       {/* Cambio de contraseña */}
       <Section icon={Lock} title="Cambiar contraseña">
-        <Field label="Contraseña actual">
-          <input type="password" value={pwOld} onChange={e => setPwOld(e.target.value)} style={inputStyle} autoComplete="current-password" />
+        <Field label="Contraseña actual" htmlFor="perfil-pw-actual">
+          <input id="perfil-pw-actual" name="current-password" type="password" value={pwOld} onChange={e => setPwOld(e.target.value)} style={inputStyle} autoComplete="current-password" />
         </Field>
-        <Field label="Nueva contraseña">
-          <input type="password" value={pwNew} onChange={e => setPwNew(e.target.value)} style={inputStyle} autoComplete="new-password" />
+        <Field label="Nueva contraseña" htmlFor="perfil-pw-nueva">
+          <input id="perfil-pw-nueva" name="new-password" type="password" value={pwNew} onChange={e => setPwNew(e.target.value)} style={inputStyle} autoComplete="new-password" />
           {pwNew && pwErrors.length > 0 && (
             <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
               {pwErrors.map(e => (
@@ -233,8 +253,8 @@ export default function ProfilePage() {
             </div>
           )}
         </Field>
-        <Field label="Confirmar nueva contraseña">
-          <input type="password" value={pwConfirm} onChange={e => setPwConfirm(e.target.value)} style={inputStyle} autoComplete="new-password" />
+        <Field label="Confirmar nueva contraseña" htmlFor="perfil-pw-confirmar">
+          <input id="perfil-pw-confirmar" name="confirm-password" type="password" value={pwConfirm} onChange={e => setPwConfirm(e.target.value)} style={inputStyle} autoComplete="new-password" />
         </Field>
 
         {pwMsg && (

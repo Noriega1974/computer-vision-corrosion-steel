@@ -300,11 +300,13 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
       style={{ padding: '20px' }}
     >
       <div style={{ marginBottom: 14 }}>
-        <label style={LABEL_STYLE}>
+        <label htmlFor="punto-nombre" style={LABEL_STYLE}>
           Nombre del punto *
         </label>
 
         <input
+          id="punto-nombre"
+          name="sede"
           value={form.sede}
           onChange={set('sede')}
           required
@@ -314,11 +316,12 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
 
       {/* Departamento */}
       <div style={{ marginBottom: 14 }}>
-        <label style={LABEL_STYLE}>
+        <label htmlFor="punto-departamento" style={LABEL_STYLE}>
           Departamento *
         </label>
 
         <SearchableSelect
+          id="punto-departamento"
           options={DEPARTAMENTOS}
           value={form.departamento}
           onChange={(v) =>
@@ -338,11 +341,12 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
 
       {/* Ciudad */}
       <div style={{ marginBottom: 14 }}>
-        <label style={LABEL_STYLE}>
+        <label htmlFor="punto-ciudad" style={LABEL_STYLE}>
           Ciudad *
         </label>
 
         <SearchableSelect
+          id="punto-ciudad"
           options={municipiosDisponibles}
           value={form.ciudad}
           onChange={setField('ciudad')}
@@ -357,11 +361,13 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
       </div>
 
       <div style={{ marginBottom: 14 }}>
-        <label style={LABEL_STYLE}>
+        <label htmlFor="punto-descripcion" style={LABEL_STYLE}>
           Descripción
         </label>
 
         <input
+          id="punto-descripcion"
+          name="descripcion"
           value={form.descripcion}
           onChange={set('descripcion')}
           style={inputStyle}
@@ -370,9 +376,11 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
 
       {/* Ubicación */}
       <div style={{ marginBottom: 14 }}>
-        <label style={LABEL_STYLE}>
+        {/* No es <label>: no etiqueta un control, encabeza el bloque entero de
+            ubicacion (deteccion automatica + latitud/longitud manuales). */}
+        <span style={{ ...LABEL_STYLE, display: 'block' }}>
           Ubicación
-        </label>
+        </span>
 
         {/* Estado de detección automática */}
         {geoLoading && (
@@ -466,12 +474,15 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
               ['longitud', 'Longitud']
             ].map(([k, lbl]) => (
               <div key={k}>
-                <label style={LABEL_STYLE}>
+                <label htmlFor={`punto-${k}`} style={LABEL_STYLE}>
                   {lbl}
                 </label>
 
                 <input
+                  id={`punto-${k}`}
+                  name={k}
                   type="number"
+                  inputMode="decimal"
                   step="any"
                   value={form[k]}
                   onChange={set(k)}

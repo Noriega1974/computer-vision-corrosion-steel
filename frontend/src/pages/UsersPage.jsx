@@ -96,6 +96,14 @@ const inputStyle = {
   boxSizing: 'border-box',
 };
 
+// El mismo objeto estaba repetido literal en los siete labels de las dos
+// formas de esta pagina. Una sola definicion evita que se desincronicen.
+const labelStyle = {
+  display: 'block', fontFamily: 'var(--font-data)', fontSize: 10,
+  fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em',
+  color: 'var(--text-faint)', marginBottom: 5,
+};
+
 // ─── Formulario de usuario ────────────────────────────────────────────────────
 function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error }) {
   const [form, setForm] = useState({
@@ -115,25 +123,30 @@ function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error }) {
   return (
     <form onSubmit={handleSubmit}>
       <div style={{ marginBottom: 14 }}>
-        <label style={{ display: 'block', fontFamily: 'var(--font-data)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-faint)', marginBottom: 5 }}>
+        <label htmlFor="usuario-email" style={labelStyle}>
           Correo electrónico *
         </label>
         <input
+          id="usuario-email" name="email" autoComplete="email"
+          spellCheck={false} autoCapitalize="none"
           type="email" required value={form.email} onChange={set('email')}
           disabled={isEdit} style={{ ...inputStyle, opacity: isEdit ? 0.6 : 1, cursor: isEdit ? 'not-allowed' : 'text' }}
         />
       </div>
       <div style={{ marginBottom: 14 }}>
-        <label style={{ display: 'block', fontFamily: 'var(--font-data)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-faint)', marginBottom: 5 }}>
+        <label htmlFor="usuario-nombre" style={labelStyle}>
           Nombre completo
         </label>
-        <input value={form.nombre} onChange={set('nombre')} style={inputStyle} />
+        <input
+          id="usuario-nombre" name="name" autoComplete="name"
+          value={form.nombre} onChange={set('nombre')} style={inputStyle}
+        />
       </div>
       <div style={{ marginBottom: 14 }}>
-        <label style={{ display: 'block', fontFamily: 'var(--font-data)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-faint)', marginBottom: 5 }}>
+        <label htmlFor="usuario-rol" style={labelStyle}>
           Rol *
         </label>
-        <select value={form.rol} onChange={set('rol')} style={inputStyle}>
+        <select id="usuario-rol" name="rol" value={form.rol} onChange={set('rol')} style={inputStyle}>
           <option value="admin">Administrador</option>
           <option value="tecnico">Técnico</option>
           <option value="cliente">Cliente</option>
@@ -242,35 +255,51 @@ function ColaboradorForm({ onSubmit, saving, error }) {
         El acceso del colaborador se revoca automáticamente al vencer el plazo.
       </div>
       <div style={{ marginBottom: 14 }}>
-        <label style={{ display: 'block', fontFamily: 'var(--font-data)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-faint)', marginBottom: 5 }}>
+        <label htmlFor="colaborador-nickname" style={labelStyle}>
           Nickname *
         </label>
-        <input required value={form.nickname} onChange={set('nickname')} placeholder="ej: CorpAcero-tecnico" style={inputStyle} />
+        <input
+          id="colaborador-nickname" name="nickname" autoComplete="off"
+          spellCheck={false} autoCapitalize="none"
+          required value={form.nickname} onChange={set('nickname')}
+          placeholder="ej: CorpAcero-tecnico" style={inputStyle}
+        />
       </div>
       <div style={{ marginBottom: 14 }}>
-        <label style={{ display: 'block', fontFamily: 'var(--font-data)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-faint)', marginBottom: 5 }}>
+        <label htmlFor="colaborador-rol" style={labelStyle}>
           Rol *
         </label>
-        <select value={form.rol} onChange={set('rol')} style={inputStyle}>
+        <select id="colaborador-rol" name="rol" value={form.rol} onChange={set('rol')} style={inputStyle}>
           <option value="admin">Administrador</option>
           <option value="tecnico">Técnico</option>
           <option value="cliente">Cliente</option>
         </select>
       </div>
       <div style={{ marginBottom: 14 }}>
-        <label style={{ display: 'block', fontFamily: 'var(--font-data)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-faint)', marginBottom: 5 }}>
+        <label htmlFor="colaborador-password" style={labelStyle}>
           Contraseña *
         </label>
-        <input required type="password" value={form.password} onChange={set('password')} placeholder="ej: Admin1507!" style={inputStyle} />
-        <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 4 }}>
+        {/* aria-describedby ata los requisitos al campo: un lector de pantalla
+            los anuncia al enfocarlo, en vez de dejarlos como texto suelto. */}
+        <input
+          id="colaborador-password" name="new-password" autoComplete="new-password"
+          aria-describedby="colaborador-password-requisitos"
+          required type="password" value={form.password} onChange={set('password')}
+          placeholder="ej: Admin1507!" style={inputStyle}
+        />
+        <div id="colaborador-password-requisitos" style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 4 }}>
           Debe tener mayúscula, minúscula, número y símbolo (ej: <code>Admin1507!</code>)
         </div>
       </div>
       <div style={{ marginBottom: 18 }}>
-        <label style={{ display: 'block', fontFamily: 'var(--font-data)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-faint)', marginBottom: 5 }}>
+        <label htmlFor="colaborador-dias" style={labelStyle}>
           Duración: <span style={{ color: 'var(--accent-amber)' }}>{form.dias} días</span>
         </label>
-        <input type="range" min={1} max={30} value={form.dias} onChange={set('dias')} style={{ width: '100%', accentColor: 'var(--accent-amber)' }} />
+        <input
+          id="colaborador-dias" name="dias"
+          type="range" min={1} max={30} value={form.dias} onChange={set('dias')}
+          style={{ width: '100%', accentColor: 'var(--accent-amber)' }}
+        />
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-faint)', marginTop: 3 }}>
           <span>1 día</span><span>30 días</span>
         </div>
@@ -460,6 +489,10 @@ export default function UsersPage() {
         {/* Buscador */}
         <div style={{ marginBottom: 16 }}>
           <input
+            type="search"
+            name="buscar-usuario"
+            aria-label="Buscar usuarios por nombre o correo"
+            spellCheck={false}
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar por nombre o correo…"

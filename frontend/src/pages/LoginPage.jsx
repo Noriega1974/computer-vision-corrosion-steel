@@ -175,14 +175,21 @@ export default function LoginPage() {
             </div>
 
             <div style={{ marginBottom: 18 }}>
-              <label style={labelStyle}>{loginMode === 'email' ? 'Correo electrónico' : 'Usuario'}</label>
+              <label htmlFor="login-identificador" style={labelStyle}>
+                {loginMode === 'email' ? 'Correo electrónico' : 'Usuario'}
+              </label>
               <input
+                id="login-identificador"
+                name={loginMode === 'email' ? 'email' : 'username'}
                 type={loginMode === 'email' ? 'email' : 'text'}
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 placeholder={loginMode === 'email' ? 'usuario@ejemplo.com' : 'Nombre de usuario'}
                 required
                 disabled={submitting}
+                autoComplete="username"
+                spellCheck={false}
+                autoCapitalize="none"
                 style={inputStyle}
                 onFocus={e => e.target.style.borderColor = 'var(--accent-amber)'}
                 onBlur={e => e.target.style.borderColor = 'var(--border)'}
@@ -190,13 +197,16 @@ export default function LoginPage() {
             </div>
 
             <div style={{ marginBottom: 24 }}>
-              <label style={labelStyle}>Contraseña</label>
+              <label htmlFor="login-password" style={labelStyle}>Contraseña</label>
               <input
+                id="login-password"
+                name="password"
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
                 disabled={submitting}
+                autoComplete="current-password"
                 style={inputStyle}
                 onFocus={e => e.target.style.borderColor = 'var(--accent-amber)'}
                 onBlur={e => e.target.style.borderColor = 'var(--border)'}
@@ -234,14 +244,16 @@ export default function LoginPage() {
 
             <form onSubmit={handleNuevaContraseña}>
               <div style={{ marginBottom: 18 }}>
-                <label style={labelStyle}>Nueva contraseña</label>
+                <label htmlFor="nueva-password" style={labelStyle}>Nueva contraseña</label>
                 <input
+                  id="nueva-password"
+                  name="new-password"
                   type="password"
                   value={nuevaPw}
                   onChange={e => setNuevaPw(e.target.value)}
-
                   required
                   disabled={submitting}
+                  autoComplete="new-password"
                   autoFocus
                   style={inputStyle}
                   onFocus={e => e.target.style.borderColor = 'var(--accent-amber)'}
@@ -250,14 +262,16 @@ export default function LoginPage() {
               </div>
 
               <div style={{ marginBottom: 24 }}>
-                <label style={labelStyle}>Confirmar nueva contraseña</label>
+                <label htmlFor="confirmar-password" style={labelStyle}>Confirmar nueva contraseña</label>
                 <input
+                  id="confirmar-password"
+                  name="confirm-password"
                   type="password"
                   value={confirmarPw}
                   onChange={e => setConfirmarPw(e.target.value)}
-
                   required
                   disabled={submitting}
+                  autoComplete="new-password"
                   style={inputStyle}
                   onFocus={e => e.target.style.borderColor = 'var(--accent-amber)'}
                   onBlur={e => e.target.style.borderColor = 'var(--border)'}

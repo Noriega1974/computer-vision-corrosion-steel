@@ -64,8 +64,20 @@ export default function DeteccionIAPage() {
 
       {/* Drop zone / preview */}
       {!result && (
+        // Igual que en UploadPage: sin role/tabIndex/onKeyDown esta zona solo
+        // respondia al mouse. Cuando ya hay archivo cargado deja de ser un
+        // control, asi que sale del orden de foco.
         <div
+          role={archivo ? undefined : 'button'}
+          tabIndex={archivo ? undefined : 0}
+          aria-label={archivo ? undefined : 'Seleccionar imagen para analizar: JPG, PNG o WEBP'}
           onClick={() => !archivo && inputRef.current?.click()}
+          onKeyDown={e => {
+            if (!archivo && (e.key === 'Enter' || e.key === ' ')) {
+              e.preventDefault();
+              inputRef.current?.click();
+            }
+          }}
           onDragOver={(e) => { e.preventDefault(); setArrastrando(true); }}
           onDragLeave={() => setArrastrando(false)}
           onDrop={onDrop}
@@ -92,7 +104,7 @@ export default function DeteccionIAPage() {
             />
           ) : (
             <>
-              <span style={{ fontSize: 48, marginBottom: 12 }}>📷</span>
+              <span style={{ fontSize: 48, marginBottom: 12 }} aria-hidden="true">📷</span>
               <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: 15 }}>
                 Arrastrá una imagen o hacé click para seleccionar
               </p>
@@ -103,8 +115,10 @@ export default function DeteccionIAPage() {
           )}
           <input
             ref={inputRef}
+            name="imagen-deteccion"
             type="file"
             accept="image/*"
+            tabIndex={-1}
             style={{ display: 'none' }}
             onChange={(e) => cargarArchivo(e.target.files[0])}
           />

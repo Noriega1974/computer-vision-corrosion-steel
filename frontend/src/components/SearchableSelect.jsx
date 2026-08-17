@@ -14,6 +14,7 @@ const inputStyle = {
  * Texto libre que no coincide con ninguna opción no se puede confirmar.
  */
 export default function SearchableSelect({
+  id,
   options,
   value,
   onChange,
@@ -21,6 +22,10 @@ export default function SearchableSelect({
   disabled = false,
   emptyMessage = 'Sin resultados',
 }) {
+  // Los ids de la lista y de la opcion activa se derivan del id del combobox,
+  // asi dos instancias en la misma pantalla (departamento y ciudad) no chocan.
+  const listboxId = id ? `${id}-listbox` : undefined;
+  const optionId = (i) => (id ? `${id}-option-${i}` : undefined);
   const [query, setQuery] = useState(value ?? '');
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
@@ -81,7 +86,18 @@ export default function SearchableSelect({
   return (
     <div ref={wrapperRef} style={{ position: 'relative' }}>
       <div style={{ position: 'relative' }}>
+        {/* role="combobox" + aria-* es lo que hace que un lector de pantalla
+            anuncie que hay una lista, si esta abierta y que opcion esta activa.
+            Sin esto el control se lee como un campo de texto cualquiera. */}
         <input
+          id={id}
+          role="combobox"
+          aria-expanded={open && !disabled}
+          aria-controls={listboxId}
+          aria-autocomplete="list"
+          aria-activedescendant={
+            open && filtered.length > 0 ? optionId(highlight) : undefined
+          }
           value={query}
           disabled={disabled}
           onChange={e => {
@@ -104,17 +120,28 @@ export default function SearchableSelect({
       </div>
 
       {open && !disabled && (
-        <div style={{
-          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50,
-          background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8,
-          maxHeight: 220, overflowY: 'auto', boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-        }}>
+        <div
+          id={listboxId}
+          role="listbox"
+          style={{
+            position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50,
+            background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8,
+            maxHeight: 220, overflowY: 'auto', boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+            // Evita que el scroll de la lista arrastre la pagina de atras al llegar al tope.
+            overscrollBehavior: 'contain',
+          }}
+        >
           {filtered.length === 0 ? (
             <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-faint)' }}>{emptyMessage}</div>
           ) : (
             filtered.map((opt, i) => (
+              // El teclado se maneja en el input via aria-activedescendant, asi que
+              // la opcion no recibe foco propio: solo necesita rol e identidad.
               <div
                 key={opt}
+                id={optionId(i)}
+                role="option"
+                aria-selected={i === highlight}
                 onMouseDown={(e) => { e.preventDefault(); selectOption(opt); }}
                 onMouseEnter={() => setHighlight(i)}
                 style={{

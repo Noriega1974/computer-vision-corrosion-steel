@@ -352,7 +352,14 @@ export default function UploadPage() {
           {/* ─── SECCIÓN 1: Imagen ─── */}
           <Section title="1. Imagen" accent="var(--accent-amber)">
             {!preview ? (
+              // Era un <div onClick>: se podia usar con el mouse pero no con el
+              // teclado, asi que subir una foto era imposible navegando con Tab.
+              // role + tabIndex + onKeyDown lo devuelven al orden de foco sin
+              // perder el arrastrar-y-soltar, que un <button> real complicaria.
               <div
+                role="button"
+                tabIndex={0}
+                aria-label="Seleccionar imagen: JPG o PNG, máximo 10 MB"
                 onDrop={handleDrop}
                 onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
@@ -360,16 +367,26 @@ export default function UploadPage() {
                   border: `2px dashed ${dragOver ? 'var(--accent-amber)' : 'var(--border)'}`,
                   borderRadius: 10, padding: '36px 20px', textAlign: 'center',
                   background: dragOver ? 'var(--bg-card-hover)' : 'var(--bg-inset)',
-                  cursor: 'pointer', transition: 'all 0.15s',
+                  cursor: 'pointer', transition: 'border-color 0.15s, background 0.15s',
                 }}
                 onClick={() => document.getElementById('file-input').click()}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    document.getElementById('file-input').click();
+                  }
+                }}
               >
-                <div style={{ fontSize: 36, marginBottom: 10 }}>📸</div>
+                <div style={{ fontSize: 36, marginBottom: 10 }} aria-hidden="true">📸</div>
                 <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>
                   Arrastra una imagen aquí o haz clic para seleccionar
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>JPG o PNG · Máximo 10 MB</div>
-                <input id="file-input" type="file" accept="image/jpeg,image/png" onChange={handleFileInput} style={{ display: 'none' }} />
+                <input
+                  id="file-input" name="imagen" type="file"
+                  accept="image/jpeg,image/png" tabIndex={-1}
+                  onChange={handleFileInput} style={{ display: 'none' }}
+                />
               </div>
             ) : (
               <div>
@@ -428,9 +445,11 @@ export default function UploadPage() {
             {/* Planta existente */}
             {modo === 'planta_existente' && (
               <div>
-                <label style={labelStyle}>Buscar planta</label>
+                <label htmlFor="upload-buscar-planta" style={labelStyle}>Buscar planta</label>
                 <input
-                  type="text" placeholder="Nombre o ciudad…" value={busqueda}
+                  id="upload-buscar-planta" name="buscar-planta"
+                  type="search" spellCheck={false}
+                  placeholder="Nombre o ciudad…" value={busqueda}
                   onChange={e => { setBusqueda(e.target.value); setPuntoSeleccionado(null); }}
                   style={inputStyle}
                 />
@@ -479,27 +498,27 @@ export default function UploadPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   <div>
-                    <label style={labelStyle}>Sede / Nombre</label>
-                    <input style={inputStyle} value={sede} onChange={e => setSede(e.target.value)} placeholder="Planta Principal" required />
+                    <label htmlFor="upload-sede" style={labelStyle}>Sede / Nombre</label>
+                    <input id="upload-sede" name="sede" style={inputStyle} value={sede} onChange={e => setSede(e.target.value)} placeholder="Planta Principal" required />
                   </div>
                   <div>
-                    <label style={labelStyle}>Ciudad</label>
-                    <input style={inputStyle} value={ciudad} onChange={e => setCiudad(e.target.value)} placeholder="Barranquilla" required />
+                    <label htmlFor="upload-ciudad" style={labelStyle}>Ciudad</label>
+                    <input id="upload-ciudad" name="ciudad" autoComplete="address-level2" style={inputStyle} value={ciudad} onChange={e => setCiudad(e.target.value)} placeholder="Barranquilla" required />
                   </div>
                   <div>
-                    <label style={labelStyle}>Departamento</label>
-                    <input style={inputStyle} value={departamento} onChange={e => setDepartamento(e.target.value)} placeholder="Atlántico" required />
+                    <label htmlFor="upload-departamento" style={labelStyle}>Departamento</label>
+                    <input id="upload-departamento" name="departamento" autoComplete="address-level1" style={inputStyle} value={departamento} onChange={e => setDepartamento(e.target.value)} placeholder="Atlántico" required />
                   </div>
                   <div>
-                    <label style={labelStyle}>Tipo de material</label>
-                    <select style={selectStyle} value={tipoMaterial} onChange={e => setTipoMaterial(e.target.value)}>
+                    <label htmlFor="upload-material" style={labelStyle}>Tipo de material</label>
+                    <select id="upload-material" name="tipo-material" style={selectStyle} value={tipoMaterial} onChange={e => setTipoMaterial(e.target.value)}>
                       <option value="galvanizado">Galvanizado</option>
                       <option value="A588">A588</option>
                     </select>
                   </div>
                   <div>
-                    <label style={labelStyle}>Tipo de estructura</label>
-                    <select style={selectStyle} value={tipoEstructura} onChange={e => setTipoEstructura(e.target.value)}>
+                    <label htmlFor="upload-estructura" style={labelStyle}>Tipo de estructura</label>
+                    <select id="upload-estructura" name="tipo-estructura" style={selectStyle} value={tipoEstructura} onChange={e => setTipoEstructura(e.target.value)}>
                       <option value="tuberia">Tubería</option>
                       <option value="viga">Viga</option>
                       <option value="tanque">Tanque</option>
@@ -508,7 +527,8 @@ export default function UploadPage() {
                   </div>
                 </div>
                 <div>
-                  <label style={labelStyle}>Ubicación en el mapa (haz clic para marcar)</label>
+                  {/* span y no label: MapPicker no es un control de formulario nativo. */}
+                  <span style={{ ...labelStyle, display: 'block' }}>Ubicación en el mapa (haz clic para marcar)</span>
                   <MapPicker lat={coordNuevaLat} lng={coordNuevaLng} onChange={(la, ln) => { setCoordNuevaLat(la); setCoordNuevaLng(ln); }} />
                 </div>
               </div>
@@ -518,15 +538,16 @@ export default function UploadPage() {
             {modo === 'coordenadas_libres' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div>
-                  <label style={labelStyle}>Descripción del lugar</label>
+                  <label htmlFor="upload-descripcion-libre" style={labelStyle}>Descripción del lugar</label>
                   <input
+                    id="upload-descripcion-libre" name="descripcion-libre"
                     style={inputStyle} value={descripcionLibre}
                     onChange={e => setDescripcionLibre(e.target.value)}
                     placeholder="Esquina norte del taller, columna #3…"
                   />
                 </div>
                 <div>
-                  <label style={labelStyle}>Ubicación en el mapa (haz clic para marcar)</label>
+                  <span style={{ ...labelStyle, display: 'block' }}>Ubicación en el mapa (haz clic para marcar)</span>
                   <MapPicker lat={coordLibreLat} lng={coordLibreLng} onChange={(la, ln) => { setCoordLibreLat(la); setCoordLibreLng(ln); }} />
                 </div>
               </div>
@@ -553,7 +574,7 @@ export default function UploadPage() {
                     background: esMedicionPasada === val ? 'rgba(20,50,163,0.1)' : 'var(--bg-inset)',
                     color: esMedicionPasada === val ? 'var(--accent-amber)' : 'var(--text-muted)',
                     fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 13, cursor: 'pointer',
-                    transition: 'all 0.13s',
+                    transition: 'color 0.13s, background-color 0.13s, border-color 0.13s',
                   }}
                 >
                   {label}
@@ -562,8 +583,10 @@ export default function UploadPage() {
             </div>
             {esMedicionPasada && (
               <div>
-                <label style={labelStyle}>Fecha de la medición</label>
+                <label htmlFor="upload-fecha" style={labelStyle}>Fecha de la medición</label>
                 <input
+                  id="upload-fecha"
+                  name="fecha-medicion"
                   type="date"
                   value={fechaMedicion}
                   max={new Date().toISOString().slice(0, 10)}
@@ -577,8 +600,9 @@ export default function UploadPage() {
           {/* ─── SECCIÓN 4: Detalles opcionales ─── */}
           <Section title="4. Detalles (opcional)" accent="var(--accent-green)">
             <div>
-              <label style={labelStyle}>Notas</label>
+              <label htmlFor="upload-notas" style={labelStyle}>Notas</label>
               <textarea
+                id="upload-notas" name="notas"
                 value={notas} onChange={e => setNotas(e.target.value)}
                 placeholder="Observaciones adicionales sobre esta medición…"
                 rows={3}

@@ -200,6 +200,13 @@ export default function GaleriaPage() {
     fontSize: 12,
   };
 
+  // Mismo aspecto que tenian los <div> que reemplazo, ahora sobre un <label>
+  // real. `display: block` conserva el salto de linea que daba el div.
+  const FILTRO_LABEL_STYLE = {
+    display: 'block', fontSize: 10, color: 'var(--text-faint)',
+    marginBottom: 5, fontFamily: 'var(--font-data)', letterSpacing: '0.1em',
+  };
+
   return (
     <div style={{ padding: '24px 24px 40px' }}>
 
@@ -260,7 +267,8 @@ export default function GaleriaPage() {
                   background: nivelFilter === key ? `${color}18` : 'transparent',
                   color: nivelFilter === key ? color : 'var(--text-muted)',
                   fontFamily: 'var(--font-ui)', fontSize: 11, cursor: 'pointer',
-                  transition: 'all 0.12s',
+                  // Explicito y no `all`: solo cambian estas tres al filtrar.
+                  transition: 'color 0.12s, background-color 0.12s, border-color 0.12s',
                 }}
               >
                 {label}
@@ -271,8 +279,12 @@ export default function GaleriaPage() {
 
         {/* Dropdown de planta */}
         <div>
-          <div style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 5, fontFamily: 'var(--font-data)', letterSpacing: '0.1em' }}>PLANTA</div>
+          {/* Eran <div>: se veian como etiquetas pero no lo eran, asi que ningun
+              control de este bloque tenia nombre accesible. */}
+          <label htmlFor="filtro-planta" style={FILTRO_LABEL_STYLE}>PLANTA</label>
           <select
+            id="filtro-planta"
+            name="filtro-planta"
             value={puntoFilter}
             onChange={e => setPuntoFilter(e.target.value)}
             style={{ ...inputStyle, appearance: 'none', paddingRight: 24 }}
@@ -286,19 +298,20 @@ export default function GaleriaPage() {
 
         {/* Rango de fechas */}
         <div>
-          <div style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 5, fontFamily: 'var(--font-data)', letterSpacing: '0.1em' }}>DESDE</div>
-          <input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} style={inputStyle} />
+          <label htmlFor="filtro-desde" style={FILTRO_LABEL_STYLE}>DESDE</label>
+          <input id="filtro-desde" name="fecha-desde" type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} style={inputStyle} />
         </div>
         <div>
-          <div style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 5, fontFamily: 'var(--font-data)', letterSpacing: '0.1em' }}>HASTA</div>
-          <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} style={inputStyle} />
+          <label htmlFor="filtro-hasta" style={FILTRO_LABEL_STYLE}>HASTA</label>
+          <input id="filtro-hasta" name="fecha-hasta" type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} style={inputStyle} />
         </div>
 
         {/* Búsqueda por notas */}
         <div style={{ flex: 1, minWidth: 160 }}>
-          <div style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 5, fontFamily: 'var(--font-data)', letterSpacing: '0.1em' }}>BUSCAR EN NOTAS</div>
+          <label htmlFor="filtro-notas" style={FILTRO_LABEL_STYLE}>BUSCAR EN NOTAS</label>
           <input
-            type="text" placeholder="Buscar…"
+            id="filtro-notas" name="buscar-notas"
+            type="search" spellCheck={false} placeholder="Buscar…"
             value={notasQuery} onChange={e => setNotasQuery(e.target.value)}
             style={{ ...inputStyle, width: '100%' }}
           />

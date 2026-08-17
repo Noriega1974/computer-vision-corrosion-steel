@@ -361,7 +361,7 @@ export default function MedicionDetailPage() {
                   fontFamily: 'var(--font-ui)', fontWeight: activeTab === tab.key ? 600 : 400,
                   fontSize: 13,
                   color: activeTab === tab.key ? 'var(--text-primary)' : 'var(--text-muted)',
-                  transition: 'all 0.13s',
+                  transition: 'color 0.13s, background-color 0.13s, border-bottom-color 0.13s',
                 }}
               >
                 {tab.label}

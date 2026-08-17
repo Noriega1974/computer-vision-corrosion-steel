@@ -464,7 +464,7 @@ export default function ConfiguracionPage() {
 
               {/* Leve */}
               <div>
-                <label style={labelStyle}>
+                <label htmlFor="umbral-leve" style={labelStyle}>
                   Corrosión leve
                 </label>
 
@@ -476,8 +476,11 @@ export default function ConfiguracionPage() {
                   }}
                 >
                   <input
+                    id="umbral-leve"
+                    name="umbral-leve"
                     className="config-input"
                     type="number"
+                    inputMode="numeric"
                     min="0"
                     max="100"
                     value={thresholds.leve}
@@ -519,7 +522,7 @@ export default function ConfiguracionPage() {
 
               {/* Moderada */}
               <div>
-                <label style={labelStyle}>
+                <label htmlFor="umbral-moderada" style={labelStyle}>
                   Corrosión moderada
                 </label>
 
@@ -531,8 +534,11 @@ export default function ConfiguracionPage() {
                   }}
                 >
                   <input
+                    id="umbral-moderada"
+                    name="umbral-moderada"
                     className="config-input"
                     type="number"
+                    inputMode="numeric"
                     min="0"
                     max="100"
                     value={thresholds.moderada}
@@ -574,7 +580,7 @@ export default function ConfiguracionPage() {
 
               {/* Severa */}
               <div>
-                <label style={labelStyle}>
+                <label htmlFor="umbral-severa" style={labelStyle}>
                   Corrosión severa
                 </label>
 
@@ -586,8 +592,11 @@ export default function ConfiguracionPage() {
                   }}
                 >
                   <input
+                    id="umbral-severa"
+                    name="umbral-severa"
                     className="config-input"
                     type="number"
+                    inputMode="numeric"
                     min="0"
                     max="100"
                     value={thresholds.severa}
