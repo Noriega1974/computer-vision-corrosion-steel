@@ -1,3 +1,9 @@
 .DS_Store
 node_modules/
 .env
+
+# Agent skills materializados (npx skills). El contenido se regenera desde
+# skills-lock.json, que si se versiona: son 2.4 MB de markdown de terceros
+# que no aportan al entregable del PF.
+.agents/
+.claude/
