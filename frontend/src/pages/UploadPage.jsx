@@ -4,6 +4,7 @@ import exifr from 'exifr';
 import { usePuntos } from '../hooks/usePuntos';
 import { useUploadMedicion } from '../hooks/useUploadMedicion';
 import { nivelColor, nivelLabel } from '../lib/statusUtils';
+import SearchableSelect from '../components/SearchableSelect';
 
 // ─── Carga Leaflet para el picker de mapa ────────────────────────────────────
 function useLeaflet() {
@@ -192,7 +193,6 @@ export default function UploadPage() {
 
   // Modo "planta existente"
   const [puntoSeleccionado, setPuntoSeleccionado] = useState(null);
-  const [busqueda, setBusqueda] = useState('');
 
   // Modo "planta nueva"
   const [sede, setSede] = useState('');
@@ -213,12 +213,13 @@ export default function UploadPage() {
   const [esMedicionPasada, setEsMedicionPasada] = useState(false);
   const [fechaMedicion, setFechaMedicion] = useState(() => new Date().toISOString().slice(0, 10));
 
-  // Filtrado del autocomplete de puntos existentes
-  const puntosFiltrados = puntos.filter(p => {
-    if (!busqueda) return true;
-    const q = busqueda.toLowerCase();
-    return (p.sede?.toLowerCase().includes(q) || p.ciudad?.toLowerCase().includes(q));
-  }).slice(0, 8);
+  // El combobox de plantas existentes trabaja con strings (mismo componente
+  // que usa PlantsPage para departamento/ciudad, no un input suelto): arma
+  // una etiqueta legible por punto y un mapa para volver del string elegido
+  // al objeto punto real.
+  const plantaLabel = p => `${p.sede} · ${p.ciudad}`;
+  const plantaOpciones = puntos.map(plantaLabel);
+  const plantaPorLabel = Object.fromEntries(puntos.map(p => [plantaLabel(p), p]));
 
   // Procesar archivo de imagen
   const procesarImagen = useCallback(async (file) => {
@@ -446,36 +447,15 @@ export default function UploadPage() {
             {modo === 'planta_existente' && (
               <div>
                 <label htmlFor="upload-buscar-planta" style={labelStyle}>Buscar planta</label>
-                <input
-                  id="upload-buscar-planta" name="buscar-planta"
-                  type="search" spellCheck={false}
-                  placeholder="Nombre o ciudad…" value={busqueda}
-                  onChange={e => { setBusqueda(e.target.value); setPuntoSeleccionado(null); }}
-                  style={inputStyle}
+                <SearchableSelect
+                  id="upload-buscar-planta"
+                  options={plantaOpciones}
+                  value={puntoSeleccionado ? plantaLabel(puntoSeleccionado) : ''}
+                  onChange={label => setPuntoSeleccionado(plantaPorLabel[label] ?? null)}
+                  placeholder="Nombre o ciudad"
+                  emptyMessage="Sin plantas que coincidan"
+                  disabled={puntos.length === 0}
                 />
-                {busqueda && puntosFiltrados.length > 0 && !puntoSeleccionado && (
-                  <div style={{
-                    border: '1px solid var(--border)', borderTop: 'none', borderRadius: '0 0 7px 7px',
-                    background: 'var(--bg-card)', maxHeight: 200, overflow: 'auto',
-                  }}>
-                    {puntosFiltrados.map(p => (
-                      <div
-                        key={p.id_punto}
-                        onClick={() => { setPuntoSeleccionado(p); setBusqueda(`${p.sede} · ${p.ciudad}`); }}
-                        style={{
-                          padding: '10px 14px', cursor: 'pointer',
-                          borderBottom: '1px solid var(--border)',
-                          display: 'flex', flexDirection: 'column', gap: 2,
-                        }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card-hover)'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                      >
-                        <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>{p.sede}</span>
-                        <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>{p.ciudad}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
                 {puntoSeleccionado && (
                   <div style={{
                     marginTop: 'var(--space-2-5)', padding: '10px 14px',
