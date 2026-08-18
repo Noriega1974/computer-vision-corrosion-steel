@@ -111,7 +111,7 @@ export default function LoginPage() {
       {/* Franja superior con acento */}
       <div style={{
         height: 4,
-        background: `linear-gradient(90deg, #B83700, #FFB58A)`,
+        background: 'var(--gradient-brand)',
       }} />
 
       <div style={{ padding: '36px 36px 40px' }}>

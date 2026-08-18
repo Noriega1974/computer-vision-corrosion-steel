@@ -181,11 +181,10 @@ function NavItem({ item, collapsed }) {
 
               borderRadius: '0 4px 4px 0',
 
-              background:
-                'linear-gradient(180deg, #FF8A3D, #B83700)',
+              background: 'var(--gradient-brand)',
 
               boxShadow:
-                '0 0 10px rgba(184,55,0,0.45)',
+                '0 0 10px rgba(217,45,32,0.45)',
             }}
           />
         )}
@@ -538,11 +537,10 @@ export default function Sidebar({
 
                 borderRadius: '50%',
 
-                background:
-                  'linear-gradient(135deg, #FF8A3D, #B83700)',
+                background: 'var(--gradient-brand)',
 
                 boxShadow:
-                  '0 0 10px rgba(184,55,0,0.5)',
+                  '0 0 10px rgba(217,45,32,0.5)',
 
                 flexShrink: 0,
               }}
@@ -752,7 +750,7 @@ export default function Sidebar({
                   borderRadius: 10,
 
                   background:
-                    `linear-gradient(135deg, ${avatarColor}, #B83700)`,
+                    `linear-gradient(135deg, ${avatarColor}, var(--accent-amber))`,
 
                   display: 'flex',
 
@@ -863,7 +861,7 @@ export default function Sidebar({
                 borderRadius: 10,
 
                 background:
-                  `linear-gradient(135deg, ${avatarColor}, #B83700)`,
+                  `linear-gradient(135deg, ${avatarColor}, var(--accent-amber))`,
 
                 display: 'flex',
 

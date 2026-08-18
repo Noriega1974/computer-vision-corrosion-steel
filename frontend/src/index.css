@@ -79,12 +79,30 @@
      aca: 100% saturacion, mismo matiz que Reddit (~18° vs ~16°).
 
      Contraste verificado (WCAG): #B83700 da 5.3:1 contra --bg-page y 5.9:1
-     contra blanco — pasa AA. #A84A38 da 5.1:1 y 5.7:1 — pasa AA. */
-  --accent-amber: #B83700;
-  --accent-amber-dim: #7A2400;
+     contra blanco — pasa AA. #A84A38 da 5.1:1 y 5.7:1 — pasa AA.
+
+     2026-08-17: paleta de marca "PixelRust" (logo aportado por el usuario).
+     --accent-amber pasa a ser el matiz de Oxido Primario (#F0570E, hue
+     ~19.4°, 89% saturacion) de esa paleta, oscurecido al minimo que sigue
+     pasando AA -- exactamente el mismo metodo que ya se uso para #B83700:
+     se preserva hue y saturacion, solo baja la luminosidad hasta el piso de
+     4.5:1. #C1460B da 4.56:1 contra --bg-page y 5.06:1 contra blanco.
+     --accent-amber-dim usa Oxido-Dim (#904521) de la misma paleta, que ya
+     pasa AA sin ajustar (6.2:1 / 6.9:1). --accent-cyan pasa a Oxido-Glow
+     (#F7B681), el tono claro de la misma paleta -- casi identico al #FFB58A
+     que tenia antes, ahora es el hex exacto del logo. */
+  --accent-amber: #C1460B;
+  --accent-amber-dim: #904521;
 
   --accent-blue: #A84A38;
-  --accent-cyan: #FFB58A;
+  --accent-cyan: #F7B681;
+
+  /* Gradiente de marca "PixelRust", tal cual lo da el logo:
+     linear-135deg, centro #FFB44D, borde #FF8C00, profundidad #D92D20.
+     Para superficies decorativas grandes (franja del login, avatar/logo del
+     sidebar) -- NO para texto ni fondos de pagina, eso quedo fuera de
+     alcance en esta pasada. */
+  --gradient-brand: linear-gradient(135deg, #FFB44D 0%, #FF8C00 55%, #D92D20 100%);
 
   /* Verde y naranja se usan como color de TEXTO en las tarjetas de KPI, no
      como fondo. Los valores originales (#16A34A y #F59E0B) daban 2.89:1 y
@@ -205,23 +223,28 @@
      NAVIGATION
      ───────────────────────────────────────────────────────────── */
 
-  --nav-active-bg: rgba(156, 54, 16, 0.10);
-  --nav-active-text: #B83700;
+  --nav-active-bg: rgba(193, 70, 11, 0.10);
+  --nav-active-text: #C1460B;
 
   /* Estado de la casilla de navegacion. El Sidebar referenciaba estas
      variables sin que estuvieran definidas, asi que el item activo se
      renderizaba sin fondo ni sombra y solo se distinguia por la barrita
-     lateral de 3px. */
+     lateral de 3px.
 
-  --sidebar-active-bg: rgba(156, 54, 16, 0.09);
-  --sidebar-active-border: rgba(156, 54, 16, 0.22);
+     2026-08-17: la base rgba (antes 156,54,16, el hex #9C3610 descartado en
+     la primera iteracion de marca) se actualizo al RGB del --accent-amber
+     nuevo (193,70,11 = #C1460B) para que estas tintas de fondo sigan el
+     mismo matiz que el resto de la marca. */
+
+  --sidebar-active-bg: rgba(193, 70, 11, 0.09);
+  --sidebar-active-border: rgba(193, 70, 11, 0.22);
   --sidebar-active-shadow:
-    0 0 0 1px rgba(156, 54, 16, 0.10),
-    0 2px 10px rgba(156, 54, 16, 0.16),
+    0 0 0 1px rgba(193, 70, 11, 0.10),
+    0 2px 10px rgba(193, 70, 11, 0.16),
     inset 0 1px 0 rgba(255, 255, 255, 0.55);
 
-  --sidebar-hover-bg: rgba(156, 54, 16, 0.045);
-  --sidebar-hover-border: rgba(156, 54, 16, 0.12);
+  --sidebar-hover-bg: rgba(193, 70, 11, 0.045);
+  --sidebar-hover-border: rgba(193, 70, 11, 0.12);
 
 
   /* ─────────────────────────────────────────────────────────────
@@ -292,15 +315,19 @@
 
   /* Accents */
 
-  /* Mismo naranja de marca que el tema claro, mas claro/saturado para leerse
-     sobre fondo oscuro. #FF6B35 da 6.7:1 contra --bg-page y 5.9:1 contra
-     --bg-card — pasa AA holgado en ambos. Mismo matiz ~15-16° que el tema
-     claro, para que la marca se sienta igual cambiando de tema. */
-  --accent-amber: #FF6B35;
-  --accent-amber-dim: #B8481C;
+  /* 2026-08-17: paleta "PixelRust". Sobre fondo oscuro el Oxido Primario de
+     la paleta (#F0570E) ya pasa AA sin oscurecer -- 5.5:1 contra --bg-page,
+     4.8:1 contra --bg-card -- asi que se usa tal cual, sin derivar un tono
+     mas claro como hacia falta con el naranja anterior. --accent-amber-dim
+     usa Deep-Core Luminoso (#D64A17), el escalon mas oscuro de la paleta que
+     sigue siendo legible sobre fondo oscuro (4.4:1 contra --bg-page); hoy no
+     esta referenciado en ningun selector, queda coherente para cuando se
+     use. */
+  --accent-amber: #F0570E;
+  --accent-amber-dim: #D64A17;
 
   --accent-blue: #F0917A;
-  --accent-cyan: #FFB58A;
+  --accent-cyan: #F7B681;
 
   --accent-green: #22C55E;
   --accent-red: #EF4444;
@@ -879,8 +906,8 @@ body {
   background:
     linear-gradient(
       135deg,
-      #B83700,
-      #E04D0F
+      var(--accent-amber),
+      #D64A17
     );
 
   border: 1px solid rgba(255,255,255,0.18);
