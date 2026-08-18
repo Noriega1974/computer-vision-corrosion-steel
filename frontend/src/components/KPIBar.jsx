@@ -17,6 +17,7 @@ function KPICard({
   sub,
   color,
   loading,
+  featured,
 }) {
 
   return (
@@ -36,6 +37,14 @@ function KPICard({
 
         borderTop:
           `2px solid ${color}`,
+
+        // La unica tarjeta de KPI que lleva el brillo de marca -- es la
+        // metrica central del producto (area corroida). El resto queda sin
+        // tocar a proposito: si todas brillan, ninguna se distingue.
+        boxShadow:
+          featured
+            ? '0 0 28px rgba(240,87,14,0.16), var(--shadow-sm)'
+            : undefined,
       }}
     >
 
@@ -100,6 +109,11 @@ function KPICard({
 
           letterSpacing:
             '-0.035em',
+
+          textShadow:
+            featured
+              ? '0 0 20px rgba(240,87,14,0.45)'
+              : undefined,
         }}
       >
 
@@ -304,6 +318,9 @@ export default function KPIBar() {
 
       color:
         'var(--accent-amber)',
+
+      // La metrica central del producto -- la unica con el brillo de marca.
+      featured: true,
     },
 
 

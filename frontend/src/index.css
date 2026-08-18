@@ -203,32 +203,37 @@
      SECTION TINTS
      ───────────────────────────────────────────────────────────── */
 
+  /* 2026-08-17: recalentadas de azul frio a la familia del naranja de
+     marca -- antes rgba(239,247,253,...) y variantes, el mismo tono
+     heredado del celeste CorpoAcero que la identidad de marca ya habia
+     dejado atras en --accent-amber. Diferencia sutil entre las 4 a
+     proposito, igual de sutil que el azul que reemplazan. */
   --section-kpi:
     linear-gradient(
       135deg,
       rgba(255,255,255,0.78),
-      rgba(239,247,253,0.60)
+      rgba(255,244,235,0.60)
     );
 
   --section-map:
     linear-gradient(
       135deg,
-      rgba(239,247,255,0.70),
-      rgba(248,252,255,0.50)
+      rgba(255,247,240,0.70),
+      rgba(255,251,246,0.50)
     );
 
   --section-detail:
     linear-gradient(
       135deg,
-      rgba(239,244,255,0.70),
-      rgba(248,251,255,0.50)
+      rgba(255,245,238,0.70),
+      rgba(255,250,245,0.50)
     );
 
   --section-charts:
     linear-gradient(
       135deg,
-      rgba(241,248,252,0.68),
-      rgba(248,252,250,0.52)
+      rgba(255,248,242,0.68),
+      rgba(255,251,248,0.52)
     );
 
 
@@ -728,10 +733,22 @@ body {
 .section-charts {
   position: relative;
 
-  background: transparent;
-
   border: none;
 }
+
+/* 2026-08-17: estos 4 tokens --section-* estaban definidos (claro y
+   oscuro) pero ningun selector los consumia -- las 4 secciones del
+   dashboard se veian identicas mas alla de su contenido. Se conectan aca,
+   recalentados hacia el naranja de marca en vez del azul frio que tenian
+   (ver --section-kpi/--section-map/--section-detail/--section-charts en la
+   seccion ACCENTS de :root). .section-plants queda sin tinte propio: nunca
+   tuvo un token --section-plants definido, agregar uno ahora es una
+   decision de color nueva que no se pidio. */
+.section-kpi    { background: var(--section-kpi); }
+.section-map    { background: var(--section-map); }
+.section-detail { background: var(--section-detail); }
+.section-charts { background: var(--section-charts); }
+.section-plants { background: transparent; }
 
 
 /* ================================================================
