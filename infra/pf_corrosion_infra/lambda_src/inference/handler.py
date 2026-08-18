@@ -227,7 +227,12 @@ def _calcular_nivel(area_pct: float) -> int:
 
 
 def _bbox_a_poligono(cx: float, cy: float, w: float, h: float) -> list[dict]:
-    """Convierte un bbox (centro normalizado) a polígono de 4 puntos [0,1]."""
+    """Convierte un bbox (centro normalizado) a polígono de 4 puntos [0,1].
+
+    Se usa como respaldo cuando una máscara decodificada queda vacía (no
+    debería pasar en la práctica, pero un polígono degenerado rompería
+    SegmentationOverlay en el frontend).
+    """
     x1 = max(0.0, cx - w / 2)
     y1 = max(0.0, cy - h / 2)
     x2 = min(1.0, cx + w / 2)
@@ -240,14 +245,83 @@ def _bbox_a_poligono(cx: float, cy: float, w: float, h: float) -> list[dict]:
     ]
 
 
+def _nms(cajas_xyxy: np.ndarray, confianzas: np.ndarray, iou_umbral: float = 0.7) -> list[int]:
+    """Non-Maximum Suppression clásico, greedy. `cajas_xyxy`: (N,4) en
+    x1,y1,x2,y2. Devuelve los índices que sobreviven, ordenados de mayor a
+    menor confianza.
+
+    iou_umbral=0.7 replica el default de Ultralytics (que el ONNX exportado
+    NO trae incorporado -- el postprocesado de NMS de Ultralytics no forma
+    parte del grafo ONNX, hay que hacerlo acá).
+    """
+    x1, y1, x2, y2 = cajas_xyxy[:, 0], cajas_xyxy[:, 1], cajas_xyxy[:, 2], cajas_xyxy[:, 3]
+    areas = (x2 - x1) * (y2 - y1)
+    orden = confianzas.argsort()[::-1]
+
+    sobreviven = []
+    while orden.size > 0:
+        i = orden[0]
+        sobreviven.append(int(i))
+        resto = orden[1:]
+        if resto.size == 0:
+            break
+
+        xx1 = np.maximum(x1[i], x1[resto])
+        yy1 = np.maximum(y1[i], y1[resto])
+        xx2 = np.minimum(x2[i], x2[resto])
+        yy2 = np.minimum(y2[i], y2[resto])
+        inter = np.maximum(0.0, xx2 - xx1) * np.maximum(0.0, yy2 - yy1)
+        iou = inter / (areas[i] + areas[resto] - inter)
+
+        orden = resto[iou <= iou_umbral]
+
+    return sobreviven
+
+
+def _casco_convexo(mask: np.ndarray) -> np.ndarray | None:
+    """Casco convexo (algoritmo de la cadena monótona de Andrew) de los
+    píxeles True de una máscara binaria. Devuelve un array (K,2) de puntos
+    (x,y) en píxeles, o None si la máscara no tiene suficientes puntos.
+
+    Es una aproximación real a la forma de la mancha -- ya no un rectángulo
+    -- pero no captura concavidades (una "C" de corrosión se dibujaría con
+    la abertura rellena). Trazar el contorno exacto pixel a pixel pide un
+    algoritmo de vision (Moore/Suzuki) que no está en ninguna librería ya
+    instalada en el layer de la Lambda (no hay cv2 ni skimage, solo numpy y
+    PIL) -- implementarlo a mano a esta altura es más riesgo de bug sutil en
+    producción del que vale la pena para esta pasada. El casco convexo usa
+    solo numpy, es un algoritmo de texto de facultad sin casos borde raros,
+    y ya es una mejora real sobre el rectángulo.
+    """
+    ys, xs = np.nonzero(mask)
+    if len(xs) < 3:
+        return None
+    puntos = sorted(set(zip(xs.tolist(), ys.tolist())))
+    if len(puntos) < 3:
+        return None
+
+    def cruz(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+    inferior: list[tuple[int, int]] = []
+    for p in puntos:
+        while len(inferior) >= 2 and cruz(inferior[-2], inferior[-1], p) <= 0:
+            inferior.pop()
+        inferior.append(p)
+
+    superior: list[tuple[int, int]] = []
+    for p in reversed(puntos):
+        while len(superior) >= 2 and cruz(superior[-2], superior[-1], p) <= 0:
+            superior.pop()
+        superior.append(p)
+
+    casco = inferior[:-1] + superior[:-1]
+    return np.array(casco)
+
+
 def _mascara_binaria(mask_coefs: np.ndarray, protos: np.ndarray, cx: float, cy: float, w: float, h: float, imgsz: int) -> np.ndarray:
     """Decodifica la máscara real de UNA detección (mask_coefs @ prototipos),
     la sube a resolución imgsz y la recorta a su bbox.
-
-    Esto SOLO se usa para calcular area_corroida_pct con precisión de píxel.
-    El campo `mascaras` que devuelve la API sigue siendo el bbox como polígono
-    de 4 puntos (_bbox_a_poligono) -- cambiar la forma que dibuja la pestaña
-    "Segmentación" es un cambio de API distinto, no pedido en esta pasada.
     """
     mh, mw = protos.shape[1], protos.shape[2]
     logits = mask_coefs @ protos.reshape(32, -1)
@@ -278,14 +352,21 @@ def _inferir(imagen: Image.Image) -> dict:
       output0: [1, 37, 21504] — bbox(4) + conf(1) + mask_coefs(32)
       output1: [1, 32, 256, 256] — prototipos de máscara
 
-    Los polígonos de `mascaras` siguen siendo el bbox de cada detección (4
-    puntos) -- eso no cambió acá. Lo que sí cambió es area_corroida_pct: antes
-    sumaba el área de cada bbox sin sacar superposiciones (con dos cajas
-    encimadas sobre la misma mancha, la contaba dos veces -- sobreestimaba,
-    llegó a marcar ~48% en fotos con ~15-20% real). Ahora decodifica la
-    máscara real de cada detección (output1, antes sin usar) y las une en un
-    solo mapa de píxeles antes de contar: una mancha cubierta por dos cajas
-    ahora se cuenta una sola vez.
+    El ONNX exportado NO trae NMS incorporado (Ultralytics lo aplica en su
+    postprocesado normal, que queda afuera del grafo al exportar) -- de las
+    21504 celdas de la grilla, decenas caen sobre la misma mancha real y
+    pasaban el filtro de confianza todas. Confirmado en una foto real: 460
+    detecciones para un puñado de manchas. Ahora se filtra por confianza,
+    se aplica NMS (descarta cajas muy superpuestas con otra de más
+    confianza) y recién con lo que sobrevive se decodifica la máscara real
+    -- además de arreglar las cajas duplicadas en pantalla, evita decodificar
+    460 máscaras cuando alcanza con una decena.
+
+    `mascaras` ya no es el bbox como rectángulo: es el casco convexo de la
+    máscara real decodificada (ver _casco_convexo -- aproxima la forma real,
+    no captura concavidades). area_corroida_pct sale de unir esas mismas
+    máscaras en un solo mapa de píxeles antes de contar, así una mancha
+    cubierta por dos detecciones no se cuenta dos veces.
     """
     sesion = _obtener_sesion()
     arr, orig_w, orig_h = _preprocesar(imagen)
@@ -296,36 +377,51 @@ def _inferir(imagen: Image.Image) -> dict:
     dets_raw = salidas[0][0].T          # [N, 37]
     protos = salidas[1][0]              # [32, 256, 256]
 
+    # Filtro de confianza, vectorizado, antes de tocar máscaras.
+    confs_todas = dets_raw[:, 4]
+    pasan = confs_todas >= CONF_MINIMA
+    dets_pasan = dets_raw[pasan]
+
     area_total_px = IMGSZ * IMGSZ
     area_union = np.zeros((IMGSZ, IMGSZ), dtype=bool)
     detecciones = []
     mascaras = []
     confianzas = []
 
-    for det in dets_raw:
-        conf = float(det[4])
-        if conf < CONF_MINIMA:
-            continue
+    if dets_pasan.shape[0] > 0:
+        cx_n = dets_pasan[:, 0] / IMGSZ
+        cy_n = dets_pasan[:, 1] / IMGSZ
+        w_n  = dets_pasan[:, 2] / IMGSZ
+        h_n  = dets_pasan[:, 3] / IMGSZ
+        conf_n = dets_pasan[:, 4]
 
-        # Coordenadas en píxeles del modelo (IMGSZ x IMGSZ) → normalizadas [0,1]
-        cx = float(det[0]) / IMGSZ
-        cy = float(det[1]) / IMGSZ
-        w  = float(det[2]) / IMGSZ
-        h  = float(det[3]) / IMGSZ
+        cajas_xyxy = np.stack([cx_n - w_n / 2, cy_n - h_n / 2, cx_n + w_n / 2, cy_n + h_n / 2], axis=1)
+        sobrevive = _nms(cajas_xyxy, conf_n)
 
-        detecciones.append({
-            "x": round(cx, 5),
-            "y": round(cy, 5),
-            "w": round(w, 5),
-            "h": round(h, 5),
-            "confianza": round(conf, 4),
-            "clase": "corrosion",
-        })
+        for i in sobrevive:
+            cx, cy, w, h, conf = float(cx_n[i]), float(cy_n[i]), float(w_n[i]), float(h_n[i]), float(conf_n[i])
 
-        area_union |= _mascara_binaria(det[5:37], protos, cx, cy, w, h, IMGSZ)
+            detecciones.append({
+                "x": round(cx, 5),
+                "y": round(cy, 5),
+                "w": round(w, 5),
+                "h": round(h, 5),
+                "confianza": round(conf, 4),
+                "clase": "corrosion",
+            })
 
-        mascaras.append({"puntos": _bbox_a_poligono(cx, cy, w, h)})
-        confianzas.append(conf)
+            mask_coefs = dets_pasan[i, 5:37]
+            binaria = _mascara_binaria(mask_coefs, protos, cx, cy, w, h, IMGSZ)
+            area_union |= binaria
+
+            casco = _casco_convexo(binaria)
+            if casco is not None:
+                puntos = [{"x": round(float(px) / IMGSZ, 5), "y": round(float(py) / IMGSZ, 5)} for px, py in casco]
+                mascaras.append({"puntos": puntos})
+            else:
+                mascaras.append({"puntos": _bbox_a_poligono(cx, cy, w, h)})
+
+            confianzas.append(conf)
 
     area_pct = (area_union.sum() / area_total_px) * 100
     conf_promedio = float(np.mean(confianzas)) if confianzas else 0.0
