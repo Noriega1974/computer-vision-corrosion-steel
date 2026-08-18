@@ -100,13 +100,10 @@ export default function LoginPage() {
 
   // ─── Bloque visual compartido ────────────────────────────────────────────────
   const card = (
-    <div style={{
+    <div className="glass-panel" style={{
       width: '100%',
       maxWidth: 420,
-      background: 'var(--bg-card)',
-      border: '1px solid var(--border)',
       borderRadius: 12,
-      boxShadow: 'var(--shadow-lg)',
       overflow: 'hidden',
     }}>
       {/* Franja superior con acento */}
@@ -328,12 +325,11 @@ export default function LoginPage() {
   );
 
   return (
-    <div style={{
+    <div className="dashboard-shell" style={{
       minHeight: '100vh',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'var(--bg-page)',
       padding: '24px 16px',
     }}>
       {card}

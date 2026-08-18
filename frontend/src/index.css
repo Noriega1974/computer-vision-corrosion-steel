@@ -34,8 +34,14 @@
      Used for the blurred background
      ───────────────────────────────────────────────────────────── */
 
-  --ambient-blue: rgba(156, 54, 16, 0.10);
-  --ambient-cyan: rgba(255, 181, 138, 0.12);
+  /* 2026-08-17: --ambient-blue estaba en rgba(156,54,16,...), el RGB del hex
+     #9C3610 huerfano de la primera iteracion de marca (mismo bug que ya se
+     encontro en las variables del sidebar activo). Rebasado al RGB de
+     --accent-amber actual. --ambient-cyan rebasado al RGB exacto de
+     Oxido-Glow (--accent-cyan). --ambient-sky es un color de variedad
+     visual, no deriva de ningun token de marca -- se deja como esta. */
+  --ambient-blue: rgba(193, 70, 11, 0.10);
+  --ambient-cyan: rgba(247, 182, 129, 0.12);
   --ambient-sky: rgba(232, 138, 110, 0.10);
   --ambient-green: rgba(22, 163, 74, 0.055);
 
@@ -305,8 +311,11 @@
 
   /* Ambient */
 
-  --ambient-blue: rgba(255, 107, 53, 0.14);
-  --ambient-cyan: rgba(255, 181, 138, 0.12);
+  /* Mismo rebase que el tema claro: RGB del --accent-amber y --accent-cyan
+     de este tema (antes #FF6B35, el naranja oscuro huerfano de antes del
+     cambio a "PixelRust"). */
+  --ambient-blue: rgba(240, 87, 14, 0.14);
+  --ambient-cyan: rgba(247, 182, 129, 0.12);
   --ambient-sky: rgba(240, 145, 122, 0.10);
   --ambient-green: rgba(34, 197, 94, 0.045);
 
@@ -759,6 +768,29 @@ body {
       rgba(16,31,47,0.72),
       rgba(8,22,35,0.52)
     );
+}
+
+/* Mismo destello reflejo que .glass-panel::before -- el dashboard tenia el
+   blur/gradiente de vidrio pero no este detalle, asi que las secciones se
+   sentian mas planas que el resto de la UI que ya lo usa. */
+.dashboard-section::before {
+  content: "";
+
+  position: absolute;
+  inset: 0;
+
+  pointer-events: none;
+
+  background:
+    linear-gradient(
+      120deg,
+      rgba(255,255,255,0.14),
+      transparent 28%,
+      transparent 70%,
+      rgba(255,255,255,0.03)
+    );
+
+  opacity: 0.8;
 }
 
 
