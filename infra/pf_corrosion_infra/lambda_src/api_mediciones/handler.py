@@ -62,7 +62,14 @@ def _es_admin(event: dict) -> bool:
 
 
 def _agregar_url_imagen(items: list) -> list:
-    """Agrega URLs prefirmadas S3 (válidas 1 hora) a cada medición."""
+    """Agrega URLs prefirmadas S3 (válidas 1 hora) a cada medición.
+
+    `url_thumbnail` apunta a la miniatura (~400px) para las tarjetas de la
+    galería. Las mediciones de antes de 2026-08-18 no tienen
+    `s3_key_thumbnail` (nunca se generó una) -- para esas, url_thumbnail cae
+    a la imagen original, así el frontend no necesita saber cuáles son
+    viejas: siempre puede usar url_thumbnail si existe.
+    """
     for item in items:
         if item.get("s3_key_imagen"):
             try:
@@ -74,6 +81,20 @@ def _agregar_url_imagen(items: list) -> list:
             except Exception as e:
                 logger.warning("No se pudo generar URL prefirmada para %s: %s", item["s3_key_imagen"], e)
                 item["url_imagen"] = None
+
+        clave_thumb = item.get("s3_key_thumbnail")
+        if clave_thumb:
+            try:
+                item["url_thumbnail"] = s3.generate_presigned_url(
+                    "get_object",
+                    Params={"Bucket": BUCKET_NAME, "Key": clave_thumb},
+                    ExpiresIn=3600,
+                )
+            except Exception as e:
+                logger.warning("No se pudo generar URL prefirmada para %s: %s", clave_thumb, e)
+                item["url_thumbnail"] = item.get("url_imagen")
+        else:
+            item["url_thumbnail"] = item.get("url_imagen")
     return items
 
 
@@ -95,7 +116,7 @@ def _eliminar_medicion(event: dict, id_punto: str) -> dict:
 
     tabla.delete_item(Key={"id_punto": id_punto, "sk": item["sk"]})
 
-    for campo in ("s3_key_imagen", "s3_key_resultado"):
+    for campo in ("s3_key_imagen", "s3_key_thumbnail", "s3_key_resultado"):
         key = item.get(campo)
         if key:
             try:

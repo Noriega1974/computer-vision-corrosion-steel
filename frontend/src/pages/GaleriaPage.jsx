@@ -53,7 +53,11 @@ function MedicionCard({ medicion, puntoInfo, to, state }) {
       }}>
         {medicion.url_imagen ? (
           <img
-            src={medicion.url_imagen}
+            // Miniatura (~400px, unos 40KB) en vez de la foto original
+            // (hasta 4032x3024, 2-4MB) -- acá solo se muestra en un
+            // cuadrito de 170px. `url_thumbnail` cae a `url_imagen` para
+            // mediciones de antes de que existiera la miniatura.
+            src={medicion.url_thumbnail || medicion.url_imagen}
             alt="Medición"
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
             loading="lazy"

@@ -210,10 +210,11 @@ function MedicionRow({ medicion }) {
       display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
       borderLeft: `3px solid ${color}`,
     }}>
-      {/* Miniatura */}
+      {/* Miniatura -- 36px, así que usa url_thumbnail (~400px) en vez de
+          bajar la foto original completa para mostrar un cuadrito */}
       {medicion.url_imagen ? (
         <img
-          src={medicion.url_imagen}
+          src={medicion.url_thumbnail || medicion.url_imagen}
           alt=""
           loading="lazy"
           style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 4, flexShrink: 0, border: '1px solid var(--border)' }}

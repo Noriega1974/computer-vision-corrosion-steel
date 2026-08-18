@@ -538,12 +538,23 @@ def lambda_handler(event: dict, context) -> dict:
 
         resultado_ml = _inferir(imagen)
 
-        id_medicion      = f"MED-{uuid.uuid4()}"
-        s3_key_imagen    = f"raw/{id_punto}/{id_medicion}.jpg"
-        s3_key_resultado = f"resultados/{id_punto}/{id_medicion}.json"
+        id_medicion       = f"MED-{uuid.uuid4()}"
+        s3_key_imagen     = f"raw/{id_punto}/{id_medicion}.jpg"
+        s3_key_thumbnail  = f"raw/{id_punto}/{id_medicion}_thumb.jpg"
+        s3_key_resultado  = f"resultados/{id_punto}/{id_medicion}.json"
 
         buffer = io.BytesIO()
         imagen.save(buffer, format="JPEG", quality=85)
+
+        # Miniatura para las tarjetas de la galería (grillas de 170px de alto).
+        # Sin esto, cada tarjeta bajaba la foto original completa (hasta
+        # 4032x3024, unos 2-4 MB) solo para mostrarla achicada -- con 24
+        # fotos por página eran 50-100 MB por carga de galería. `thumbnail()`
+        # in-place preserva la relación de aspecto, no la fuerza a cuadrada.
+        imagen_thumb = imagen.copy()
+        imagen_thumb.thumbnail((400, 400), Image.LANCZOS)
+        buffer_thumb = io.BytesIO()
+        imagen_thumb.save(buffer_thumb, format="JPEG", quality=80)
 
         # Si el put_item final a DynamoDB falla después de escribir en S3,
         # no queremos que las imágenes/resultados queden sueltos en el bucket
@@ -551,6 +562,7 @@ def lambda_handler(event: dict, context) -> dict:
         # los limpie sola). Track de qué se llegó a escribir para poder
         # deshacerlo si algo falla más adelante en el mismo intento.
         s3_imagen_escrita    = False
+        s3_thumb_escrito     = False
         s3_resultado_escrito = False
         try:
             s3.put_object(
@@ -560,6 +572,14 @@ def lambda_handler(event: dict, context) -> dict:
                 ContentType="image/jpeg",
             )
             s3_imagen_escrita = True
+
+            s3.put_object(
+                Bucket=BUCKET_NAME,
+                Key=s3_key_thumbnail,
+                Body=buffer_thumb.getvalue(),
+                ContentType="image/jpeg",
+            )
+            s3_thumb_escrito = True
 
             resultado_completo = {
                 "id_medicion":    id_medicion,
@@ -571,8 +591,9 @@ def lambda_handler(event: dict, context) -> dict:
                 "longitud_real":  longitud_real,
                 "notas":          notas,
                 "inferencia_local": inferencia_local,
-                "s3_key_imagen":    s3_key_imagen,
-                "s3_key_resultado": s3_key_resultado,
+                "s3_key_imagen":     s3_key_imagen,
+                "s3_key_thumbnail":  s3_key_thumbnail,
+                "s3_key_resultado":  s3_key_resultado,
                 "clima":            clima,
             }
 
@@ -594,6 +615,7 @@ def lambda_handler(event: dict, context) -> dict:
                 "area_corroida_pct": str(resultado_ml["area_corroida_pct"]),
                 "confianza_promedio": str(resultado_ml["confianza_promedio"]),
                 "s3_key_imagen":    s3_key_imagen,
+                "s3_key_thumbnail": s3_key_thumbnail,
                 "s3_key_resultado": s3_key_resultado,
                 "fuente":           fuente,
                 "notas":            notas,
@@ -624,6 +646,11 @@ def lambda_handler(event: dict, context) -> dict:
                     s3.delete_object(Bucket=BUCKET_NAME, Key=s3_key_imagen)
                 except Exception as rb:
                     logger.error("Rollback S3 (imagen) falló para %s: %s", s3_key_imagen, rb)
+            if s3_thumb_escrito:
+                try:
+                    s3.delete_object(Bucket=BUCKET_NAME, Key=s3_key_thumbnail)
+                except Exception as rb:
+                    logger.error("Rollback S3 (thumbnail) falló para %s: %s", s3_key_thumbnail, rb)
             if s3_resultado_escrito:
                 try:
                     s3.delete_object(Bucket=BUCKET_NAME, Key=s3_key_resultado)
