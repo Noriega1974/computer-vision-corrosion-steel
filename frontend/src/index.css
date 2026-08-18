@@ -5,7 +5,7 @@
 
 /* ── FONTS ─────────────────────────────────────────────────────── */
 
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Bitter:wght@700;800;900&display=swap');
 
 
 /* ================================================================
@@ -133,6 +133,13 @@
 
   --font-ui: 'IBM Plex Sans', system-ui, sans-serif;
   --font-data: 'IBM Plex Mono', 'Courier New', monospace;
+
+  /* Wordmark "PIXELRUST" -- del logo de marca (2026-08-17). Slab serif con
+     serifas biseladas, no la misma familia que el resto de la UI a
+     proposito: es una marca, no un titulo de seccion. Solo para el nombre
+     de marca (sidebar, login) -- el resto de la tipografia sigue en
+     --font-ui/--font-data. */
+  --font-display: 'Bitter', 'IBM Plex Serif', Georgia, serif;
 
   /* Escala tipografica.
 

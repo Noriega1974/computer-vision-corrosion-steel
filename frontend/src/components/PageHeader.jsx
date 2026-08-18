@@ -35,7 +35,7 @@ export default function PageHeader({ onMenuToggle, isMobile, darkMode, onToggleD
   // Todas las pantallas compartian el mismo <title> estatico, asi que con
   // varias pestanas abiertas eran indistinguibles.
   useEffect(() => {
-    document.title = `${title} · CorrIA`;
+    document.title = `${title} · PixelRust`;
   }, [title]);
 
   const { alertas } = useAlertas();

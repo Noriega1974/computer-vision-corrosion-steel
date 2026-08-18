@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 
 import { useAuth } from '../auth/AuthContext';
+import pixelrustLogo from '../assets/pixelrust-logo.png';
 
 const AVATAR_STORAGE_KEY = 'corria-avatar-color';
 const NAME_STORAGE_KEY = 'corria-display-name';
@@ -529,18 +530,15 @@ export default function Sidebar({
               gap: 9,
             }}
           >
-            {/* Punto luminoso */}
-            <span
+            {/* Logo PixelRust */}
+            <img
+              src={pixelrustLogo}
+              alt=""
               style={{
-                width: 8,
-                height: 8,
+                width: 22,
+                height: 22,
 
-                borderRadius: '50%',
-
-                background: 'var(--gradient-brand)',
-
-                boxShadow:
-                  '0 0 10px rgba(217,45,32,0.5)',
+                objectFit: 'contain',
 
                 flexShrink: 0,
               }}
@@ -549,20 +547,20 @@ export default function Sidebar({
             <span
               style={{
                 fontFamily:
-                  'var(--font-ui)',
+                  'var(--font-display)',
 
-                fontWeight: 700,
+                fontWeight: 800,
 
                 fontSize: 'var(--text-md)',
 
                 letterSpacing:
-                  '-0.01em',
+                  '0.01em',
 
                 color:
-                  'var(--text-primary)',
+                  'var(--accent-amber)',
               }}
             >
-              pf-corrosion
+              PIXELRUST
             </span>
           </div>
         )}

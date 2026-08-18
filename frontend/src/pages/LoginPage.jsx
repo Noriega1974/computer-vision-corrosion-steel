@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import pixelrustLogo from '../assets/pixelrust-logo.png';
 
 // Valida requisitos mínimos de contraseña según política de Cognito
 function validarContraseña(pw) {
@@ -118,20 +119,31 @@ export default function LoginPage() {
 
         {/* Título */}
         <div style={{ textAlign: 'center', marginBottom: 'var(--space-6)' }}>
+          <img
+            src={pixelrustLogo}
+            alt=""
+            style={{
+              width: 44,
+              height: 44,
+              objectFit: 'contain',
+              marginBottom: 'var(--space-2)',
+            }}
+          />
           <div style={{
-            fontFamily: 'var(--font-ui)',
-            fontWeight: 700,
-            fontSize: 20,
-            color: 'var(--text-primary)',
+            fontFamily: 'var(--font-display)',
+            fontWeight: 800,
+            fontSize: 26,
+            letterSpacing: '0.01em',
+            color: 'var(--accent-amber)',
             marginBottom: 'var(--space-3-5)',
           }}>
-            Sistema de Detección de Corrosión
+            PIXELRUST
           </div>
           <div style={{
             fontFamily: 'var(--font-ui)',
             fontWeight: 500,
             fontSize: 'var(--text-sm)',
-            color: 'var(--accent-amber)',
+            color: 'var(--text-secondary)',
             marginTop: 2,
           }}>
             Detección de corrosión mediante inteligencia artificial
