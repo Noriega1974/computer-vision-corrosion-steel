@@ -240,6 +240,33 @@ def _bbox_a_poligono(cx: float, cy: float, w: float, h: float) -> list[dict]:
     ]
 
 
+def _mascara_binaria(mask_coefs: np.ndarray, protos: np.ndarray, cx: float, cy: float, w: float, h: float, imgsz: int) -> np.ndarray:
+    """Decodifica la máscara real de UNA detección (mask_coefs @ prototipos),
+    la sube a resolución imgsz y la recorta a su bbox.
+
+    Esto SOLO se usa para calcular area_corroida_pct con precisión de píxel.
+    El campo `mascaras` que devuelve la API sigue siendo el bbox como polígono
+    de 4 puntos (_bbox_a_poligono) -- cambiar la forma que dibuja la pestaña
+    "Segmentación" es un cambio de API distinto, no pedido en esta pasada.
+    """
+    mh, mw = protos.shape[1], protos.shape[2]
+    logits = mask_coefs @ protos.reshape(32, -1)
+    mask_baja = (1 / (1 + np.exp(-logits))).reshape(mh, mw)
+
+    mask_img = Image.fromarray((mask_baja * 255).astype(np.uint8))
+    mask_completa = np.asarray(mask_img.resize((imgsz, imgsz), Image.BILINEAR), dtype=np.float32) / 255.0
+
+    x1 = max(0, int((cx - w / 2) * imgsz))
+    y1 = max(0, int((cy - h / 2) * imgsz))
+    x2 = min(imgsz, int((cx + w / 2) * imgsz))
+    y2 = min(imgsz, int((cy + h / 2) * imgsz))
+
+    binaria = np.zeros((imgsz, imgsz), dtype=bool)
+    if x2 > x1 and y2 > y1:
+        binaria[y1:y2, x1:x2] = mask_completa[y1:y2, x1:x2] > 0.5
+    return binaria
+
+
 def _inferir(imagen: Image.Image) -> dict:
     """
     Corre inferencia YOLOv8-seg ONNX y devuelve:
@@ -249,10 +276,16 @@ def _inferir(imagen: Image.Image) -> dict:
 
     YOLOv8n-seg (1 clase) devuelve, a 1024px de entrada:
       output0: [1, 37, 21504] — bbox(4) + conf(1) + mask_coefs(32)
-      output1: [1, 32, 256, 256] — prototipos de máscara (no usados en esta versión)
+      output1: [1, 32, 256, 256] — prototipos de máscara
 
-    Los polígonos devueltos son los bounding boxes de cada detección (4 puntos),
-    con coordenadas normalizadas a [0,1] relativas al tamaño de la imagen original.
+    Los polígonos de `mascaras` siguen siendo el bbox de cada detección (4
+    puntos) -- eso no cambió acá. Lo que sí cambió es area_corroida_pct: antes
+    sumaba el área de cada bbox sin sacar superposiciones (con dos cajas
+    encimadas sobre la misma mancha, la contaba dos veces -- sobreestimaba,
+    llegó a marcar ~48% en fotos con ~15-20% real). Ahora decodifica la
+    máscara real de cada detección (output1, antes sin usar) y las une en un
+    solo mapa de píxeles antes de contar: una mancha cubierta por dos cajas
+    ahora se cuenta una sola vez.
     """
     sesion = _obtener_sesion()
     arr, orig_w, orig_h = _preprocesar(imagen)
@@ -260,10 +293,11 @@ def _inferir(imagen: Image.Image) -> dict:
     nombre_entrada = sesion.get_inputs()[0].name
     salidas = sesion.run(None, {nombre_entrada: arr})
 
-    dets_raw = salidas[0][0].T   # [8400, 37]
+    dets_raw = salidas[0][0].T          # [N, 37]
+    protos = salidas[1][0]              # [32, 256, 256]
 
     area_total_px = IMGSZ * IMGSZ
-    area_corroida_px = 0
+    area_union = np.zeros((IMGSZ, IMGSZ), dtype=bool)
     detecciones = []
     mascaras = []
     confianzas = []
@@ -288,12 +322,12 @@ def _inferir(imagen: Image.Image) -> dict:
             "clase": "corrosion",
         })
 
-        mascaras.append({"puntos": _bbox_a_poligono(cx, cy, w, h)})
+        area_union |= _mascara_binaria(det[5:37], protos, cx, cy, w, h, IMGSZ)
 
-        area_corroida_px += int(w * h * area_total_px)
+        mascaras.append({"puntos": _bbox_a_poligono(cx, cy, w, h)})
         confianzas.append(conf)
 
-    area_pct = min((area_corroida_px / area_total_px) * 100, 100.0)
+    area_pct = (area_union.sum() / area_total_px) * 100
     conf_promedio = float(np.mean(confianzas)) if confianzas else 0.0
 
     logger.info(

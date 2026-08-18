@@ -117,7 +117,13 @@ class CorriaStorageStack(Stack):
                     allowed_methods=[s3.HttpMethods.GET, s3.HttpMethods.PUT, s3.HttpMethods.POST],
                     allowed_origins=[
                         "http://localhost:5173",
-                        # TODO: update with real Vercel domain once frontend project exists
+                        # 2026-08-18: el frontend real ya existe (era un TODO)
+                        # -- sin este origen, cualquier `fetch(url_imagen)`
+                        # desde la app en producción fallaba por CORS. Esto
+                        # rompía la descarga de imágenes (necesita leer los
+                        # bytes vía fetch, no solo mostrarlas en un <img>).
+                        "https://computer-vision-corrosion-steel.vercel.app",
+                        "https://computer-vision-corrosion-steel-noriega1974s-projects.vercel.app",
                     ],
                     allowed_headers=["*"],
                     max_age=3600,

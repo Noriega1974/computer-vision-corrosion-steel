@@ -158,19 +158,18 @@ export default function MedicionDetailPage() {
     }
   }
 
-  async function handleDescargar() {
-    if (!medicion?.url_imagen) return;
-    const link = document.createElement('a');
-    link.href = medicion.url_imagen;
-    link.download = `medicion-${idMedicion}.jpg`;
-    link.click();
-  }
-
-  // Descarga la vista activa (original/detección/segmentación) quemando el overlay sobre la imagen
+  // Descarga la vista activa (original/detección/segmentación).
+  //
+  // La versión anterior de "original" ponía la URL de S3 directo en
+  // `<a href download>` -- el atributo `download` NO fuerza la descarga en
+  // recursos cross-origin (S3 nunca es el mismo origen que Vercel), así que
+  // el navegador simplemente navegaba a la imagen en vez de guardarla. Las
+  // otras dos vistas sí traían la imagen por `fetch` primero, así que las
+  // tres ahora comparten ese mismo camino -- "original" se descarga tal cual
+  // (sin pasar por canvas, conserva el archivo original byte a byte).
   const [descargandoVista, setDescargandoVista] = useState(false);
   async function handleDescargarVistaActual() {
     if (!medicion?.url_imagen) return;
-    if (activeTab === 'original') return handleDescargar();
 
     setDescargandoVista(true);
     let objectUrl;
@@ -181,6 +180,17 @@ export default function MedicionDetailPage() {
       const resp = await fetch(medicion.url_imagen, { mode: 'cors', cache: 'no-store' });
       if (!resp.ok) throw new Error(`No se pudo obtener la imagen (HTTP ${resp.status})`);
       const sourceBlob = await resp.blob();
+
+      if (activeTab === 'original') {
+        const url = URL.createObjectURL(sourceBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `medicion-${idMedicion}-original.jpg`;
+        link.click();
+        URL.revokeObjectURL(url);
+        return;
+      }
+
       objectUrl = URL.createObjectURL(sourceBlob);
 
       const img = new Image();
