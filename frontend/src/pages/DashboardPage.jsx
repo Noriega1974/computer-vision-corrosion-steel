@@ -109,8 +109,8 @@ export default function DashboardPage() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              gap: 16,
-              marginBottom: 16,
+              gap: 'var(--space-4)',
+              marginBottom: 'var(--space-4)',
             }}
           >
 
@@ -125,7 +125,7 @@ export default function DashboardPage() {
               <div
                 style={{
                   marginTop: 5,
-                  fontSize: 11,
+                  fontSize: 'var(--text-2xs)',
                   color: 'var(--text-faint)',
                 }}
               >
@@ -196,7 +196,7 @@ export default function DashboardPage() {
               display: 'flex',
               flexDirection: 'column',
 
-              gap: 12,
+              gap: 'var(--space-3)',
 
               minHeight: 430,
 
@@ -216,7 +216,7 @@ export default function DashboardPage() {
                 style={{
                   marginTop: 5,
 
-                  fontSize: 11,
+                  fontSize: 'var(--text-2xs)',
 
                   color: 'var(--text-faint)',
                 }}
@@ -266,7 +266,7 @@ export default function DashboardPage() {
               display: 'flex',
               flexDirection: 'column',
 
-              gap: 12,
+              gap: 'var(--space-3)',
 
               minHeight: 430,
             }}
@@ -351,7 +351,7 @@ export default function DashboardPage() {
                     color:
                       'var(--text-muted)',
 
-                    fontSize: 13,
+                    fontSize: 'var(--text-sm)',
                   }}
                 >
 
@@ -379,7 +379,7 @@ export default function DashboardPage() {
               display: 'flex',
               flexDirection: 'column',
 
-              gap: 12,
+              gap: 'var(--space-3)',
 
               minHeight: 430,
 
@@ -445,7 +445,7 @@ export default function DashboardPage() {
 
               gap: 10,
 
-              marginBottom: 16,
+              marginBottom: 'var(--space-4)',
             }}
           >
 
@@ -461,7 +461,7 @@ export default function DashboardPage() {
                 style={{
                   marginTop: 5,
 
-                  fontSize: 11,
+                  fontSize: 'var(--text-2xs)',
 
                   color:
                     'var(--text-faint)',
@@ -496,7 +496,7 @@ export default function DashboardPage() {
 
             flexWrap: 'wrap',
 
-            gap: 8,
+            gap: 'var(--space-2)',
 
             padding:
               '12px 6px 4px',
