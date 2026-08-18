@@ -42,7 +42,10 @@ REGION = os.environ["REGION"]
 
 RUTA_MODELO = Path(__file__).parent / "model" / "yolov8n-seg.onnx"
 CONF_MINIMA = 0.4
-IMGSZ = 640
+# 2026-08-18: modelo "produccion_v3" (corrosion-beta/runs/definitivo/split_10_2),
+# entrenado y validado a 1024px -- antes era 640. Todo lo que sigue en este
+# archivo deriva el tamano de IMGSZ, asi que no hay mas literales que tocar.
+IMGSZ = 1024
 SK_METADATA = "METADATA"
 
 _sesion_onnx: ort.InferenceSession | None = None
@@ -244,9 +247,9 @@ def _inferir(imagen: Image.Image) -> dict:
       - detecciones: [{x, y, w, h, confianza, clase}]           (para BoundingBoxOverlay)
       - mascaras: [{puntos: [{x, y}...]}]                       (para SegmentationOverlay)
 
-    YOLOv8n-seg (1 clase) devuelve:
-      output0: [1, 37, 8400] — bbox(4) + conf(1) + mask_coefs(32)
-      output1: [1, 32, 160, 160] — prototipos de máscara (no usados en esta versión)
+    YOLOv8n-seg (1 clase) devuelve, a 1024px de entrada:
+      output0: [1, 37, 21504] — bbox(4) + conf(1) + mask_coefs(32)
+      output1: [1, 32, 256, 256] — prototipos de máscara (no usados en esta versión)
 
     Los polígonos devueltos son los bounding boxes de cada detección (4 puntos),
     con coordenadas normalizadas a [0,1] relativas al tamaño de la imagen original.
@@ -270,7 +273,7 @@ def _inferir(imagen: Image.Image) -> dict:
         if conf < CONF_MINIMA:
             continue
 
-        # Coordenadas en píxeles del modelo (640x640) → normalizadas [0,1]
+        # Coordenadas en píxeles del modelo (IMGSZ x IMGSZ) → normalizadas [0,1]
         cx = float(det[0]) / IMGSZ
         cy = float(det[1]) / IMGSZ
         w  = float(det[2]) / IMGSZ
