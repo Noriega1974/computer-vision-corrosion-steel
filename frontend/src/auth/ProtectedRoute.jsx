@@ -15,7 +15,7 @@ export default function ProtectedRoute({ children }) {
         justifyContent: 'center',
         background: 'var(--bg-page)',
         flexDirection: 'column',
-        gap: 16,
+        gap: 'var(--space-4)',
       }}>
         <div style={{
           width: 40,
@@ -27,7 +27,7 @@ export default function ProtectedRoute({ children }) {
         }} />
         <span style={{
           fontFamily: 'var(--font-data)',
-          fontSize: 12,
+          fontSize: 'var(--text-xs)',
           color: 'var(--text-muted)',
           letterSpacing: '0.08em',
         }}>

@@ -77,7 +77,7 @@ function MiniMapa({ lat, lng, latReal, lngReal }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         border: '1px solid var(--border)',
       }}>
-        <div style={{ textAlign: 'center', color: 'var(--text-faint)', fontSize: 12, fontFamily: 'var(--font-data)' }}>
+        <div style={{ textAlign: 'center', color: 'var(--text-faint)', fontSize: 'var(--text-xs)', fontFamily: 'var(--font-data)' }}>
           Sin coordenadas
         </div>
       </div>
@@ -116,7 +116,7 @@ function BarraPorcentaje({ valor, color, max = 100 }) {
       <div style={{
         textAlign: 'right', marginTop: 3,
         fontFamily: 'var(--font-data)', fontWeight: 700,
-        fontSize: 13, color,
+        fontSize: 'var(--text-sm)', color,
       }}>
         {(valor ?? 0).toFixed(1)}%
       </div>
@@ -255,13 +255,13 @@ export default function MedicionDetailPage() {
   // ─── Loading / Error ─────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', flexDirection: 'column', gap: 'var(--space-3)' }}>
         <div style={{
           width: 36, height: 36, border: '3px solid var(--border)',
           borderTopColor: 'var(--accent-amber)', borderRadius: '50%',
           animation: 'spin 0.8s linear infinite',
         }} />
-        <span style={{ fontFamily: 'var(--font-data)', fontSize: 12, color: 'var(--text-muted)' }}>
+        <span style={{ fontFamily: 'var(--font-data)', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
           Cargando medición…
         </span>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -271,11 +271,11 @@ export default function MedicionDetailPage() {
 
   if (error || !medicion) {
     return (
-      <div style={{ padding: 32 }}>
+      <div style={{ padding: 'var(--space-6)' }}>
         <button onClick={handleBack} style={{
           display: 'flex', alignItems: 'center', gap: 6,
           background: 'transparent', border: 'none', cursor: 'pointer',
-          color: 'var(--text-muted)', fontFamily: 'var(--font-ui)', fontSize: 13,
+          color: 'var(--text-muted)', fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)',
           marginBottom: 20, padding: 0,
         }}>
           <ArrowLeft size={16} /> Volver a galería
@@ -284,11 +284,11 @@ export default function MedicionDetailPage() {
           padding: '32px 24px', background: 'var(--bg-card)',
           border: '1px solid var(--border)', borderRadius: 10, textAlign: 'center',
         }}>
-          <AlertCircle size={40} strokeWidth={1.5} style={{ color: 'var(--text-faint)', marginBottom: 12 }} />
-          <div style={{ fontFamily: 'var(--font-ui)', fontSize: 15, color: 'var(--text-primary)', marginBottom: 6 }}>
+          <AlertCircle size={40} strokeWidth={1.5} style={{ color: 'var(--text-faint)', marginBottom: 'var(--space-3)' }} />
+          <div style={{ fontFamily: 'var(--font-ui)', fontSize: 'var(--text-md)', color: 'var(--text-primary)', marginBottom: 6 }}>
             Medición no disponible
           </div>
-          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{error}</div>
+          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>{error}</div>
         </div>
       </div>
     );
@@ -316,13 +316,13 @@ export default function MedicionDetailPage() {
   ];
 
   return (
-    <div style={{ padding: '24px', maxWidth: 1200, margin: '0 auto' }}>
+    <div style={{ padding: 'var(--space-5)', maxWidth: 1200, margin: '0 auto' }}>
 
       {/* Botón volver */}
       <button onClick={handleBack} style={{
         display: 'inline-flex', alignItems: 'center', gap: 6,
         background: 'transparent', border: 'none', cursor: 'pointer',
-        color: 'var(--text-muted)', fontFamily: 'var(--font-ui)', fontSize: 13,
+        color: 'var(--text-muted)', fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)',
         marginBottom: 20, padding: '6px 0', borderRadius: 6,
       }}
         onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
@@ -341,7 +341,7 @@ export default function MedicionDetailPage() {
       }}>
 
         {/* ── Columna izquierda: imagen con tabs + secciones que antes iban a la derecha ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3-5)' }}>
         <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
           {/* Tabs */}
           <div style={{
@@ -359,7 +359,7 @@ export default function MedicionDetailPage() {
                   borderBottom: activeTab === tab.key ? `2px solid ${color}` : '2px solid transparent',
                   cursor: 'pointer',
                   fontFamily: 'var(--font-ui)', fontWeight: activeTab === tab.key ? 600 : 400,
-                  fontSize: 13,
+                  fontSize: 'var(--text-sm)',
                   color: activeTab === tab.key ? 'var(--text-primary)' : 'var(--text-muted)',
                   transition: 'color 0.13s, background-color 0.13s, border-bottom-color 0.13s',
                 }}
@@ -408,7 +408,7 @@ export default function MedicionDetailPage() {
           {medicion.notas && (
             <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 20px' }}>
               <SectionTitle>Notas</SectionTitle>
-              <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0, fontFamily: 'var(--font-ui)' }}>
+              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0, fontFamily: 'var(--font-ui)' }}>
                 {medicion.notas}
               </p>
             </div>
@@ -424,7 +424,7 @@ export default function MedicionDetailPage() {
               lngReal={medicion.longitud_real}
             />
             {lat && lng && (
-              <div style={{ marginTop: 8, fontSize: 10, color: 'var(--text-faint)', fontFamily: 'var(--font-data)', display: 'flex', gap: 12 }}>
+              <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', fontFamily: 'var(--font-data)', display: 'flex', gap: 'var(--space-3)' }}>
                 <span style={{ color: '#B83700' }}>● Planta: {lat?.toFixed(5)}, {lng?.toFixed(5)}</span>
                 {medicion.latitud_real && medicion.longitud_real && (
                   <span style={{ color: '#38bdf8' }}>● Foto: {medicion.latitud_real.toFixed(5)}, {medicion.longitud_real.toFixed(5)}</span>
@@ -436,7 +436,7 @@ export default function MedicionDetailPage() {
           {/* Acciones */}
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 20px' }}>
             <SectionTitle>Acciones</SectionTitle>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
 
               <ActionButton icon={<Download size={15} />} onClick={handleDescargarVistaActual} disabled={!medicion.url_imagen || descargandoVista}>
                 {descargandoVista ? 'Generando…' : `Descargar vista actual (${TABS.find(t => t.key === activeTab)?.label})`}
@@ -470,21 +470,21 @@ export default function MedicionDetailPage() {
                       padding: '12px 14px',
                       background: 'rgba(220,38,38,0.08)',
                       border: '1px solid rgba(220,38,38,0.3)',
-                      borderRadius: 8, fontSize: 12,
+                      borderRadius: 8, fontSize: 'var(--text-xs)',
                       color: 'var(--text-secondary)', lineHeight: 1.5,
                     }}>
                       Esta acción borra la medición y su foto de forma permanente. ¿Confirmás?
                       {errorEliminar && (
                         <div style={{ color: 'var(--accent-red)', marginTop: 6 }}>{errorEliminar}</div>
                       )}
-                      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
                         <button
                           onClick={handleEliminar}
                           disabled={eliminando}
                           style={{
                             background: 'var(--accent-red)', border: 'none', borderRadius: 5,
                             padding: '6px 12px', cursor: eliminando ? 'not-allowed' : 'pointer',
-                            fontSize: 11, color: 'white', fontWeight: 600, opacity: eliminando ? 0.6 : 1,
+                            fontSize: 'var(--text-2xs)', color: 'white', fontWeight: 600, opacity: eliminando ? 0.6 : 1,
                           }}
                         >
                           {eliminando ? 'Eliminando…' : 'Sí, eliminar'}
@@ -494,7 +494,7 @@ export default function MedicionDetailPage() {
                           disabled={eliminando}
                           style={{
                             background: 'transparent', border: '1px solid var(--border)', borderRadius: 5,
-                            padding: '6px 12px', cursor: 'pointer', fontSize: 11, color: 'var(--text-muted)',
+                            padding: '6px 12px', cursor: 'pointer', fontSize: 'var(--text-2xs)', color: 'var(--text-muted)',
                           }}
                         >
                           Cancelar
@@ -509,7 +509,7 @@ export default function MedicionDetailPage() {
         </div>
 
         {/* ── Columna derecha: metadata ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3-5)' }}>
 
           {/* Badge de nivel grande */}
           <div style={{
@@ -519,12 +519,12 @@ export default function MedicionDetailPage() {
           }}>
             <div style={{
               fontFamily: 'var(--font-data)', fontWeight: 700,
-              fontSize: 22, color, marginBottom: 4,
+              fontSize: 'var(--text-xl)', color, marginBottom: 'var(--space-1)',
               animation: nivel === 3 ? 'blink 1.2s ease-in-out infinite' : 'none',
             }}>
               {nivelLabel(nivel)}
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-data)', letterSpacing: '0.08em' }}>
+            <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)', letterSpacing: '0.08em' }}>
               NIVEL {nivel} / 3 · {nivelToStatus(nivel)}
             </div>
           </div>
@@ -533,12 +533,12 @@ export default function MedicionDetailPage() {
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px 20px' }}>
             <SectionTitle>Resultados del análisis</SectionTitle>
 
-            <div style={{ marginBottom: 14 }}>
+            <div style={{ marginBottom: 'var(--space-3-5)' }}>
               <MetaLabel>Área corroída</MetaLabel>
               <BarraPorcentaje valor={medicion.area_corroida_pct ?? 0} color={color} />
             </div>
 
-            <div style={{ marginBottom: 14 }}>
+            <div style={{ marginBottom: 'var(--space-3-5)' }}>
               <MetaLabel>Confianza del modelo</MetaLabel>
               <BarraPorcentaje
                 valor={medicion.confianza_promedio != null ? medicion.confianza_promedio * 100 : 0}
@@ -546,7 +546,7 @@ export default function MedicionDetailPage() {
               />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2-5)' }}>
               <MetaItem label="ID medición" value={medicion.id_medicion ?? '—'} wrap />
               <MetaItem label="ID punto" value={medicion.id_punto ?? '—'} wrap />
               <MetaItem label="Planta" value={punto.sede ?? '—'} />
@@ -563,7 +563,7 @@ export default function MedicionDetailPage() {
                 hour: '2-digit', minute: '2-digit', second: '2-digit',
               }) : '—'}
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
+            <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
               {tiempoRelativo(medicion.timestamp)}
             </div>
           </div>
@@ -572,7 +572,7 @@ export default function MedicionDetailPage() {
           {medicion.clima && (
             <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 20px' }}>
               <SectionTitle>Condiciones meteorológicas</SectionTitle>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)' }}>
                 <ClimaItem icon={<Thermometer size={13} />} label="Temperatura" value={medicion.clima.temperatura_c != null ? `${medicion.clima.temperatura_c} °C` : '—'} />
                 <ClimaItem icon={<Droplets size={13} />} label="Humedad" value={medicion.clima.humedad_pct != null ? `${medicion.clima.humedad_pct} %` : '—'} />
                 <ClimaItem icon={<Wind size={13} />} label="Viento" value={medicion.clima.viento_kmh != null ? `${medicion.clima.viento_kmh} km/h` : '—'} />
@@ -597,9 +597,9 @@ export default function MedicionDetailPage() {
 function SectionTitle({ children }) {
   return (
     <div style={{
-      fontFamily: 'var(--font-data)', fontSize: 10, fontWeight: 600,
+      fontFamily: 'var(--font-data)', fontSize: 'var(--text-3xs)', fontWeight: 600,
       color: 'var(--text-faint)', letterSpacing: '0.12em',
-      textTransform: 'uppercase', marginBottom: 10,
+      textTransform: 'uppercase', marginBottom: 'var(--space-2-5)',
     }}>
       {children}
     </div>
@@ -609,8 +609,8 @@ function SectionTitle({ children }) {
 function MetaLabel({ children }) {
   return (
     <div style={{
-      fontFamily: 'var(--font-data)', fontSize: 10,
-      color: 'var(--text-muted)', letterSpacing: '0.08em', marginBottom: 4,
+      fontFamily: 'var(--font-data)', fontSize: 'var(--text-3xs)',
+      color: 'var(--text-muted)', letterSpacing: '0.08em', marginBottom: 'var(--space-1)',
     }}>
       {children}
     </div>
@@ -622,10 +622,10 @@ function MetaItem({ label, value, wrap }) {
     <div style={{ background: 'var(--bg-inset)', borderRadius: 6, padding: '8px 10px' }}>
       <div style={{ fontSize: 9, color: 'var(--text-faint)', marginBottom: 2, fontFamily: 'var(--font-data)', letterSpacing: '0.08em' }}>{label}</div>
       <div style={wrap ? {
-        fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 11,
+        fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 'var(--text-2xs)',
         color: 'var(--text-primary)', wordBreak: 'break-all', lineHeight: 1.4,
       } : {
-        fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 12,
+        fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 'var(--text-xs)',
         color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>{value}</div>
     </div>
@@ -638,11 +638,11 @@ function ActionButton({ icon, onClick, danger, disabled, children }) {
       onClick={onClick}
       disabled={disabled}
       style={{
-        width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+        width: '100%', display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
         padding: '9px 14px', background: 'transparent',
         border: `1px solid ${danger ? 'rgba(220,38,38,0.3)' : 'var(--border)'}`,
         borderRadius: 8, cursor: disabled ? 'not-allowed' : 'pointer',
-        fontFamily: 'var(--font-ui)', fontSize: 12,
+        fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)',
         color: danger ? 'var(--accent-red)' : disabled ? 'var(--text-faint)' : 'var(--text-secondary)',
         opacity: disabled ? 0.5 : 1,
         transition: 'background 0.12s',
@@ -659,12 +659,12 @@ function ActionButton({ icon, onClick, danger, disabled, children }) {
 
 function ClimaItem({ icon, label, value }) {
   return (
-    <div style={{ background: 'var(--bg-inset)', borderRadius: 6, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-faint)', fontSize: 9, fontFamily: 'var(--font-data)', letterSpacing: '0.08em' }}>
+    <div style={{ background: 'var(--bg-inset)', borderRadius: 6, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', color: 'var(--text-faint)', fontSize: 9, fontFamily: 'var(--font-data)', letterSpacing: '0.08em' }}>
         {icon}
         {label.toUpperCase()}
       </div>
-      <div style={{ fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>
+      <div style={{ fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
         {value}
       </div>
     </div>
@@ -677,10 +677,10 @@ function PlaceholderImagen({ mensaje }) {
       height: 300, background: 'var(--bg-inset)', borderRadius: 8,
       border: '1px solid var(--border)',
       display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'center', gap: 10,
+      justifyContent: 'center', gap: 'var(--space-2-5)',
     }}>
       <AlertCircle size={32} strokeWidth={1.5} style={{ color: 'var(--text-faint)' }} />
-      <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>{mensaje}</div>
+      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>{mensaje}</div>
     </div>
   );
 }

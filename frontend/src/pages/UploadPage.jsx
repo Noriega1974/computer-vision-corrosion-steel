@@ -62,7 +62,7 @@ function MapPicker({ lat, lng, onChange }) {
         height: 220, borderRadius: 8, border: '1px solid var(--border)',
         overflow: 'hidden',
       }} />
-      <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>
+      <div style={{ marginTop: 6, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>
         {lat && lng
           ? `📍 ${lat}, ${lng} — Haz clic para mover`
           : 'Haz clic en el mapa para marcar la ubicación'}
@@ -85,13 +85,13 @@ function ResultadoAnalisis({ result, onReset, onDashboard }) {
         background: `${color}10`, border: `1px solid ${color}40`,
         borderRadius: 12, marginBottom: 20,
       }}>
-        <div style={{ fontSize: 40, marginBottom: 8 }}>
+        <div style={{ fontSize: 40, marginBottom: 'var(--space-2)' }}>
           {nivel === 0 ? '✅' : nivel === 1 ? '⚠️' : nivel === 2 ? '🔶' : '🚨'}
         </div>
-        <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 22, color, marginBottom: 4 }}>
+        <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 'var(--text-xl)', color, marginBottom: 'var(--space-1)' }}>
           {nivelLabel(nivel)}
         </div>
-        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
           Análisis completado — {punto.sede ?? result.id_punto} · {punto.ciudad ?? ''}
         </div>
       </div>
@@ -101,12 +101,12 @@ function ResultadoAnalisis({ result, onReset, onDashboard }) {
         <img
           src={result.url_imagen}
           alt="Resultado"
-          style={{ width: '100%', borderRadius: 10, marginBottom: 16, border: `2px solid ${color}40`, maxHeight: 280, objectFit: 'cover' }}
+          style={{ width: '100%', borderRadius: 10, marginBottom: 'var(--space-4)', border: `2px solid ${color}40`, maxHeight: 280, objectFit: 'cover' }}
         />
       )}
 
       {/* Métricas */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--space-2-5)', marginBottom: 20 }}>
         {[
           { label: 'Área corroída', value: `${(result.area_corroida_pct ?? 0).toFixed(1)}%`, color },
           { label: 'Confianza IA', value: result.confianza_promedio ? `${(result.confianza_promedio * 100).toFixed(0)}%` : '—', color: 'var(--accent-blue)' },
@@ -116,15 +116,15 @@ function ResultadoAnalisis({ result, onReset, onDashboard }) {
             background: 'var(--bg-inset)', border: '1px solid var(--border)',
             borderRadius: 8, padding: '12px 14px', textAlign: 'center',
           }}>
-            <div style={{ fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 22, color: c }}>{value}</div>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3, letterSpacing: '0.06em' }}>{label.toUpperCase()}</div>
+            <div style={{ fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 'var(--text-xl)', color: c }}>{value}</div>
+            <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)', marginTop: 3, letterSpacing: '0.06em' }}>{label.toUpperCase()}</div>
           </div>
         ))}
       </div>
 
       {/* Info del punto */}
       <div style={{ background: 'var(--bg-inset)', borderRadius: 8, padding: '12px 16px', marginBottom: 20, border: '1px solid var(--border)' }}>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 8, letterSpacing: '0.08em' }}>PUNTO DE MEDICIÓN</div>
+        <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)', marginBottom: 'var(--space-2)', letterSpacing: '0.08em' }}>PUNTO DE MEDICIÓN</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
           {[
             ['Sede', punto.sede ?? '—'],
@@ -132,14 +132,14 @@ function ResultadoAnalisis({ result, onReset, onDashboard }) {
             ['ID', result.id_punto ?? '—'],
           ].map(([l, v]) => (
             <div key={l}>
-              <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>{l}: </span>
-              <span style={{ fontSize: 11, color: 'var(--text-primary)', fontWeight: 500 }}>{v}</span>
+              <span style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)' }}>{l}: </span>
+              <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-primary)', fontWeight: 500 }}>{v}</span>
             </div>
           ))}
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 10 }}>
+      <div style={{ display: 'flex', gap: 'var(--space-2-5)' }}>
         <button onClick={onReset} style={btnSecondaryStyle}>
           Subir otra imagen
         </button>
@@ -153,18 +153,18 @@ function ResultadoAnalisis({ result, onReset, onDashboard }) {
 
 // ─── Estilos reutilizables ────────────────────────────────────────────────────
 const btnPrimaryStyle = {
-  flex: 1, padding: '12px', background: 'var(--accent-amber)', border: 'none',
+  flex: 1, padding: 'var(--space-3)', background: 'var(--accent-amber)', border: 'none',
   borderRadius: 8, color: 'white', fontFamily: 'var(--font-ui)',
   fontWeight: 600, fontSize: 14, cursor: 'pointer',
 };
 const btnSecondaryStyle = {
-  flex: 1, padding: '12px', background: 'var(--bg-inset)',
+  flex: 1, padding: 'var(--space-3)', background: 'var(--bg-inset)',
   border: '1px solid var(--border)', borderRadius: 8,
   color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)',
   fontWeight: 500, fontSize: 14, cursor: 'pointer',
 };
 const labelStyle = {
-  display: 'block', fontFamily: 'var(--font-data)', fontSize: 11,
+  display: 'block', fontFamily: 'var(--font-data)', fontSize: 'var(--text-2xs)',
   fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.1em',
   textTransform: 'uppercase', marginBottom: 6,
 };
@@ -332,7 +332,7 @@ export default function UploadPage() {
       <div style={{ maxWidth: 620, margin: '0 auto' }}>
 
         {/* Header de página */}
-        <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ marginBottom: 'var(--space-5)', display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
           <button
             onClick={() => navigate('/dashboard')}
             style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 20, padding: 0 }}
@@ -341,7 +341,7 @@ export default function UploadPage() {
             <h2 style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 20, color: 'var(--text-primary)', margin: 0 }}>
               Nueva Medición
             </h2>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0', fontFamily: 'var(--font-ui)' }}>
+            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: '2px 0 0', fontFamily: 'var(--font-ui)' }}>
               Sube una foto y el modelo de IA detectará el nivel de corrosión
             </p>
           </div>
@@ -377,11 +377,11 @@ export default function UploadPage() {
                   }
                 }}
               >
-                <div style={{ fontSize: 36, marginBottom: 10 }} aria-hidden="true">📸</div>
-                <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                <div style={{ fontSize: 36, marginBottom: 'var(--space-2-5)' }} aria-hidden="true">📸</div>
+                <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 'var(--space-1)' }}>
                   Arrastra una imagen aquí o haz clic para seleccionar
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>JPG o PNG · Máximo 10 MB</div>
+                <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>JPG o PNG · Máximo 10 MB</div>
                 <input
                   id="file-input" name="imagen" type="file"
                   accept="image/jpeg,image/png" tabIndex={-1}
@@ -392,13 +392,13 @@ export default function UploadPage() {
               <div>
                 <img src={preview} alt="Preview" style={{
                   width: '100%', maxHeight: 280, objectFit: 'cover',
-                  borderRadius: 8, border: '1px solid var(--border)', marginBottom: 10,
+                  borderRadius: 8, border: '1px solid var(--border)', marginBottom: 'var(--space-2-5)',
                 }} />
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
                   <button
                     type="button"
                     onClick={() => { setImagen(null); setPreview(null); setExifGps(null); }}
-                    style={{ ...btnSecondaryStyle, flex: 'none', padding: '8px 16px', fontSize: 12 }}
+                    style={{ ...btnSecondaryStyle, flex: 'none', padding: '8px 16px', fontSize: 'var(--text-xs)' }}
                   >
                     Cambiar imagen
                   </button>
@@ -406,7 +406,7 @@ export default function UploadPage() {
                     <div style={{
                       flex: 1, padding: '8px 12px', background: 'rgba(22,163,74,0.08)',
                       border: '1px solid rgba(22,163,74,0.3)', borderRadius: 7,
-                      fontSize: 11, color: 'var(--accent-green)', display: 'flex', alignItems: 'center', gap: 6,
+                      fontSize: 'var(--text-2xs)', color: 'var(--accent-green)', display: 'flex', alignItems: 'center', gap: 6,
                     }}>
                       <span>📍</span>
                       <span>GPS detectado en la foto: {exifGps.latitude.toFixed(5)}, {exifGps.longitude.toFixed(5)}</span>
@@ -420,7 +420,7 @@ export default function UploadPage() {
           {/* ─── SECCIÓN 2: Ubicación ─── */}
           <Section title="2. Ubicación" accent="var(--accent-blue)">
             {/* Tabs de modo */}
-            <div style={{ display: 'flex', gap: 4, marginBottom: 18 }}>
+            <div style={{ display: 'flex', gap: 'var(--space-1)', marginBottom: 18 }}>
               {[
                 { key: 'planta_existente', label: 'Planta existente' },
                 { key: 'planta_nueva', label: 'Planta nueva' },
@@ -434,7 +434,7 @@ export default function UploadPage() {
                     border: `1px solid ${modo === key ? 'var(--accent-amber)' : 'var(--border)'}`,
                     background: modo === key ? 'rgba(156,54,16,0.1)' : 'var(--bg-inset)',
                     color: modo === key ? 'var(--accent-amber)' : 'var(--text-muted)',
-                    fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 12, cursor: 'pointer',
+                    fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)', cursor: 'pointer',
                   }}
                 >
                   {label}
@@ -470,23 +470,23 @@ export default function UploadPage() {
                         onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card-hover)'}
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                       >
-                        <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{p.sede}</span>
-                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.ciudad}</span>
+                        <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>{p.sede}</span>
+                        <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>{p.ciudad}</span>
                       </div>
                     ))}
                   </div>
                 )}
                 {puntoSeleccionado && (
                   <div style={{
-                    marginTop: 10, padding: '10px 14px',
+                    marginTop: 'var(--space-2-5)', padding: '10px 14px',
                     background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.3)',
-                    borderRadius: 7, fontSize: 12, color: 'var(--accent-green)',
+                    borderRadius: 7, fontSize: 'var(--text-xs)', color: 'var(--accent-green)',
                   }}>
                     ✓ Planta seleccionada: <strong>{puntoSeleccionado.sede}</strong> — {puntoSeleccionado.ciudad}
                   </div>
                 )}
                 {puntos.length === 0 && (
-                  <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+                  <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>
                     No hay plantas registradas aún. Usa "Planta nueva" para crear la primera.
                   </div>
                 )}
@@ -495,8 +495,8 @@ export default function UploadPage() {
 
             {/* Planta nueva */}
             {modo === 'planta_nueva' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2-5)' }}>
                   <div>
                     <label htmlFor="upload-sede" style={labelStyle}>Sede / Nombre</label>
                     <input id="upload-sede" name="sede" style={inputStyle} value={sede} onChange={e => setSede(e.target.value)} placeholder="Planta Principal" required />
@@ -536,7 +536,7 @@ export default function UploadPage() {
 
             {/* Coordenadas libres */}
             {modo === 'coordenadas_libres' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
                 <div>
                   <label htmlFor="upload-descripcion-libre" style={labelStyle}>Descripción del lugar</label>
                   <input
@@ -556,10 +556,10 @@ export default function UploadPage() {
 
           {/* ─── SECCIÓN 3: Fecha de la medición ─── */}
           <Section title="3. Fecha de la medición" accent="var(--accent-blue)">
-            <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)' }}>
+            <p style={{ margin: '0 0 14px', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)' }}>
               ¿Es una medición tomada en el pasado?
             </p>
-            <div style={{ display: 'flex', gap: 10, marginBottom: esMedicionPasada ? 16 : 0 }}>
+            <div style={{ display: 'flex', gap: 'var(--space-2-5)', marginBottom: esMedicionPasada ? 16 : 0 }}>
               {[
                 { val: false, label: 'No' },
                 { val: true,  label: 'Sí' },
@@ -573,7 +573,7 @@ export default function UploadPage() {
                     border: `1px solid ${esMedicionPasada === val ? 'var(--accent-amber)' : 'var(--border)'}`,
                     background: esMedicionPasada === val ? 'rgba(156,54,16,0.1)' : 'var(--bg-inset)',
                     color: esMedicionPasada === val ? 'var(--accent-amber)' : 'var(--text-muted)',
-                    fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 13, cursor: 'pointer',
+                    fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)', cursor: 'pointer',
                     transition: 'color 0.13s, background-color 0.13s, border-color 0.13s',
                   }}
                 >
@@ -611,7 +611,7 @@ export default function UploadPage() {
             </div>
             {exifGps && (
               <div style={{
-                marginTop: 10, padding: '10px 12px', fontSize: 11,
+                marginTop: 'var(--space-2-5)', padding: '10px 12px', fontSize: 'var(--text-2xs)',
                 background: 'var(--bg-inset)', borderRadius: 7, border: '1px solid var(--border)',
                 color: 'var(--text-muted)',
               }}>
@@ -624,10 +624,10 @@ export default function UploadPage() {
           {/* Error de upload */}
           {uploadError && (
             <div style={{
-              padding: '12px 16px', marginBottom: 16,
+              padding: '12px 16px', marginBottom: 'var(--space-4)',
               background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.3)',
               borderLeft: '3px solid var(--accent-red)', borderRadius: '0 8px 8px 0',
-              fontSize: 13, color: 'var(--accent-red)',
+              fontSize: 'var(--text-sm)', color: 'var(--accent-red)',
             }}>
               {uploadError}
             </div>
@@ -641,7 +641,7 @@ export default function UploadPage() {
               ...btnPrimaryStyle,
               width: '100%', opacity: uploading || !imagen ? 0.7 : 1,
               cursor: uploading || !imagen ? 'not-allowed' : 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-2-5)',
             }}
           >
             {uploading ? (
@@ -668,13 +668,13 @@ function Section({ title, accent, children }) {
   return (
     <div style={{
       background: 'var(--bg-card)', border: '1px solid var(--border)',
-      borderRadius: 10, padding: '20px', marginBottom: 16,
+      borderRadius: 10, padding: '20px', marginBottom: 'var(--space-4)',
       borderTop: `3px solid ${accent}`,
     }}>
       <div style={{
-        fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 12,
+        fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 'var(--text-xs)',
         color: 'var(--text-muted)', letterSpacing: '0.12em', textTransform: 'uppercase',
-        marginBottom: 16,
+        marginBottom: 'var(--space-4)',
       }}>{title}</div>
       {children}
     </div>

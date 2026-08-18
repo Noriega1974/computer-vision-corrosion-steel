@@ -31,7 +31,7 @@ function RolBadge({ rol }) {
   return (
     <span style={{
       display: 'inline-block', padding: '2px 8px', borderRadius: 5,
-      background: s.bg, color: s.color, fontSize: 11, fontWeight: 600,
+      background: s.bg, color: s.color, fontSize: 'var(--text-2xs)', fontWeight: 600,
       fontFamily: 'var(--font-data)',
     }}>
       {s.label}
@@ -47,7 +47,7 @@ function SortableHeader({ label, col, sortCol, sortDir, onSort }) {
       onClick={() => onSort(col)}
       style={{
         padding: '9px 14px', textAlign: 'left',
-        fontFamily: 'var(--font-data)', fontSize: 10, fontWeight: 600,
+        fontFamily: 'var(--font-data)', fontSize: 'var(--text-3xs)', fontWeight: 600,
         textTransform: 'uppercase', letterSpacing: '0.1em',
         color: active ? 'var(--accent-amber)' : 'var(--text-faint)',
         borderBottom: '1px solid var(--border)',
@@ -68,7 +68,7 @@ function Modal({ title, onClose, children }) {
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 400,
-      background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-4)',
     }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{
         background: 'var(--bg-card)', border: '1px solid var(--border)',
@@ -77,7 +77,7 @@ function Modal({ title, onClose, children }) {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
           <span style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{title}</span>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: 4, borderRadius: 6 }}>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: 'var(--space-1)', borderRadius: 6 }}>
             <X size={16} />
           </button>
         </div>
@@ -92,14 +92,14 @@ function Modal({ title, onClose, children }) {
 const inputStyle = {
   width: '100%', padding: '8px 12px', borderRadius: 8,
   border: '1px solid var(--border)', background: 'var(--bg-page)',
-  color: 'var(--text-primary)', fontFamily: 'var(--font-ui)', fontSize: 13,
+  color: 'var(--text-primary)', fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)',
   boxSizing: 'border-box',
 };
 
 // El mismo objeto estaba repetido literal en los siete labels de las dos
 // formas de esta pagina. Una sola definicion evita que se desincronicen.
 const labelStyle = {
-  display: 'block', fontFamily: 'var(--font-data)', fontSize: 10,
+  display: 'block', fontFamily: 'var(--font-data)', fontSize: 'var(--text-3xs)',
   fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em',
   color: 'var(--text-faint)', marginBottom: 5,
 };
@@ -122,7 +122,7 @@ function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error }) {
 
   return (
     <form onSubmit={handleSubmit}>
-      <div style={{ marginBottom: 14 }}>
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
         <label htmlFor="usuario-email" style={labelStyle}>
           Correo electrónico *
         </label>
@@ -133,7 +133,7 @@ function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error }) {
           disabled={isEdit} style={{ ...inputStyle, opacity: isEdit ? 0.6 : 1, cursor: isEdit ? 'not-allowed' : 'text' }}
         />
       </div>
-      <div style={{ marginBottom: 14 }}>
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
         <label htmlFor="usuario-nombre" style={labelStyle}>
           Nombre completo
         </label>
@@ -142,7 +142,7 @@ function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error }) {
           value={form.nombre} onChange={set('nombre')} style={inputStyle}
         />
       </div>
-      <div style={{ marginBottom: 14 }}>
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
         <label htmlFor="usuario-rol" style={labelStyle}>
           Rol *
         </label>
@@ -153,7 +153,7 @@ function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error }) {
         </select>
       </div>
       {error && (
-        <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, color: '#dc2626', fontSize: 12, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, color: '#dc2626', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3-5)', display: 'flex', alignItems: 'center', gap: 6 }}>
           <AlertCircle size={13} /> {error}
         </div>
       )}
@@ -161,7 +161,7 @@ function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error }) {
         <button type="submit" disabled={saving} style={{
           padding: '8px 20px', background: 'var(--accent-amber)', border: 'none',
           borderRadius: 8, cursor: saving ? 'not-allowed' : 'pointer',
-          fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 13, color: 'white',
+          fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'white',
           opacity: saving ? 0.6 : 1,
         }}>
           {saving ? 'Guardando…' : isEdit ? 'Guardar cambios' : 'Crear usuario'}
@@ -176,7 +176,7 @@ function ConfirmDialog({ message, onConfirm, onCancel, loading, confirmLabel = '
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 500,
-      background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-4)',
     }}>
       <div style={{
         background: 'var(--bg-card)', border: '1px solid var(--border)',
@@ -185,17 +185,17 @@ function ConfirmDialog({ message, onConfirm, onCancel, loading, confirmLabel = '
         <div style={{ fontSize: 14, color: 'var(--text-primary)', fontFamily: 'var(--font-ui)', marginBottom: 20, lineHeight: 1.6 }}>
           {message}
         </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2-5)' }}>
           <button onClick={onCancel} disabled={loading} style={{
             padding: '7px 16px', background: 'transparent', border: '1px solid var(--border)',
-            borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--text-muted)',
+            borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)', color: 'var(--text-muted)',
           }}>
             Cancelar
           </button>
           <button onClick={onConfirm} disabled={loading} style={{
             padding: '7px 16px', background: danger ? '#dc2626' : 'var(--accent-amber)', border: 'none',
             borderRadius: 8, cursor: loading ? 'not-allowed' : 'pointer',
-            fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 13, color: 'white',
+            fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'white',
             opacity: loading ? 0.6 : 1,
           }}>
             {loading ? 'Procesando…' : confirmLabel}
@@ -216,12 +216,12 @@ function Toast({ message, onDismiss }) {
   return (
     <div style={{
       position: 'fixed', bottom: 24, right: 24, zIndex: 600,
-      display: 'flex', alignItems: 'center', gap: 8,
+      display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
       padding: '10px 16px',
       background: 'var(--bg-card)', border: '1px solid var(--border)',
       borderLeft: '3px solid #16a34a', borderRadius: 8,
       boxShadow: 'var(--shadow-lg)',
-      fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--text-primary)',
+      fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)', color: 'var(--text-primary)',
     }}>
       <Check size={14} color="#16a34a" />
       {message}
@@ -251,10 +251,10 @@ function ColaboradorForm({ onSubmit, saving, error }) {
 
   return (
     <form onSubmit={(e) => { e.preventDefault(); onSubmit({ ...form, dias: Number(form.dias) }); }}>
-      <div style={{ padding: '10px 14px', background: 'rgba(156,54,16,0.08)', border: '1px solid rgba(156,54,16,0.2)', borderRadius: 8, marginBottom: 18, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+      <div style={{ padding: '10px 14px', background: 'rgba(156,54,16,0.08)', border: '1px solid rgba(156,54,16,0.2)', borderRadius: 8, marginBottom: 18, fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
         El acceso del colaborador se revoca automáticamente al vencer el plazo.
       </div>
-      <div style={{ marginBottom: 14 }}>
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
         <label htmlFor="colaborador-nickname" style={labelStyle}>
           Nickname *
         </label>
@@ -265,7 +265,7 @@ function ColaboradorForm({ onSubmit, saving, error }) {
           placeholder="ej: CorpAcero-tecnico" style={inputStyle}
         />
       </div>
-      <div style={{ marginBottom: 14 }}>
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
         <label htmlFor="colaborador-rol" style={labelStyle}>
           Rol *
         </label>
@@ -275,7 +275,7 @@ function ColaboradorForm({ onSubmit, saving, error }) {
           <option value="cliente">Cliente</option>
         </select>
       </div>
-      <div style={{ marginBottom: 14 }}>
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
         <label htmlFor="colaborador-password" style={labelStyle}>
           Contraseña *
         </label>
@@ -287,7 +287,7 @@ function ColaboradorForm({ onSubmit, saving, error }) {
           required type="password" value={form.password} onChange={set('password')}
           placeholder="ej: Admin1507!" style={inputStyle}
         />
-        <div id="colaborador-password-requisitos" style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 4 }}>
+        <div id="colaborador-password-requisitos" style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-faint)', marginTop: 'var(--space-1)' }}>
           Debe tener mayúscula, minúscula, número y símbolo (ej: <code>Admin1507!</code>)
         </div>
       </div>
@@ -300,12 +300,12 @@ function ColaboradorForm({ onSubmit, saving, error }) {
           type="range" min={1} max={30} value={form.dias} onChange={set('dias')}
           style={{ width: '100%', accentColor: 'var(--accent-amber)' }}
         />
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-faint)', marginTop: 3 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', marginTop: 3 }}>
           <span>1 día</span><span>30 días</span>
         </div>
       </div>
       {error && (
-        <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, color: '#dc2626', fontSize: 12, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, color: '#dc2626', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3-5)', display: 'flex', alignItems: 'center', gap: 6 }}>
           <AlertCircle size={13} /> {error}
         </div>
       )}
@@ -313,7 +313,7 @@ function ColaboradorForm({ onSubmit, saving, error }) {
         <button type="submit" disabled={saving} style={{
           padding: '8px 20px', background: 'var(--accent-amber)', border: 'none',
           borderRadius: 8, cursor: saving ? 'not-allowed' : 'pointer',
-          fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 13, color: 'white',
+          fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'white',
           opacity: saving ? 0.6 : 1,
         }}>
           {saving ? 'Creando…' : 'Crear colaborador'}
@@ -445,7 +445,7 @@ export default function UsersPage() {
   };
 
   // Columnas con y sin ordenamiento
-  const thBase = { padding: '9px 14px', textAlign: 'left', fontFamily: 'var(--font-data)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-faint)', borderBottom: '1px solid var(--border)' };
+  const thBase = { padding: '9px 14px', textAlign: 'left', fontFamily: 'var(--font-data)', fontSize: 'var(--text-3xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-faint)', borderBottom: '1px solid var(--border)' };
   // Número de columnas para el colspan del mensaje vacío
   const colCount = isAdmin ? 5 : 4;
 
@@ -455,22 +455,22 @@ export default function UsersPage() {
         @keyframes shimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
       `}</style>
 
-      <div style={{ padding: 24 }}>
+      <div style={{ padding: 'var(--space-5)' }}>
         {/* Encabezado */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 'var(--space-3)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2-5)' }}>
             <span style={{ background: 'var(--accent-amber)', width: 3, height: 20, borderRadius: 2, display: 'inline-block' }} />
-            <span style={{ fontFamily: 'var(--font-data)', fontSize: 13, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-primary)' }}>
+            <span style={{ fontFamily: 'var(--font-data)', fontSize: 'var(--text-sm)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-primary)' }}>
               Gestión de usuarios
             </span>
           </div>
           {isAdmin && (
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
               <button onClick={() => { setShowColaborador(true); setFormError(null); }} style={{
                 display: 'inline-flex', alignItems: 'center', gap: 7,
                 padding: '8px 14px', background: 'transparent',
                 border: '1px solid var(--accent-amber)', borderRadius: 8,
-                cursor: 'pointer', fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 12,
+                cursor: 'pointer', fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
                 color: 'var(--accent-amber)',
               }}>
                 <Clock size={14} /> Añadir colaborador
@@ -478,7 +478,7 @@ export default function UsersPage() {
               <button onClick={() => { setShowCreate(true); setFormError(null); }} style={{
                 display: 'inline-flex', alignItems: 'center', gap: 7,
                 padding: '8px 14px', background: 'var(--accent-amber)', border: 'none',
-                borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 12, color: 'white',
+                borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)', color: 'white',
               }}>
                 <Plus size={14} /> Nuevo usuario
               </button>
@@ -487,7 +487,7 @@ export default function UsersPage() {
         </div>
 
         {/* Buscador */}
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 'var(--space-4)' }}>
           <input
             type="search"
             name="buscar-usuario"
@@ -499,7 +499,7 @@ export default function UsersPage() {
             style={{
               padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)',
               background: 'var(--bg-card)', color: 'var(--text-primary)',
-              fontFamily: 'var(--font-ui)', fontSize: 13, width: '100%',
+              fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)', width: '100%',
               maxWidth: 340, boxSizing: 'border-box',
             }}
           />
@@ -507,7 +507,7 @@ export default function UsersPage() {
 
         {/* Error de mutación */}
         {mutError && (
-          <div style={{ padding: '8px 14px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 8, color: '#dc2626', fontSize: 12, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ padding: '8px 14px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 8, color: '#dc2626', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3-5)', display: 'flex', alignItems: 'center', gap: 6 }}>
             <AlertCircle size={13} /> {mutError}
           </div>
         )}
@@ -515,7 +515,7 @@ export default function UsersPage() {
         {/* Tabla */}
         <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, fontFamily: 'var(--font-ui)' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-ui)' }}>
               <thead>
                 <tr style={{ background: 'var(--bg-page)' }}>
                   <SortableHeader label="Usuario"  col="nombre" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
@@ -543,14 +543,14 @@ export default function UsersPage() {
                               {esColab ? u.nickname : (u.nombre ?? u.name ?? '—')}
                             </div>
                             {esColab && (
-                              <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2, fontFamily: 'var(--font-data)' }}>
+                              <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', marginTop: 2, fontFamily: 'var(--font-data)' }}>
                                 COLABORADOR TEMPORAL
                               </div>
                             )}
                           </td>
                           <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>
                             {esColab
-                              ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: diasRestantes === 0 ? '#dc2626' : diasRestantes <= 3 ? '#d97706' : 'var(--text-muted)' }}>
+                              ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)', fontSize: 'var(--text-2xs)', color: diasRestantes === 0 ? '#dc2626' : diasRestantes <= 3 ? '#d97706' : 'var(--text-muted)' }}>
                                   <Clock size={11} />
                                   {diasRestantes === 0 ? 'Vencido' : `${diasRestantes}d restantes`}
                                 </span>
@@ -560,8 +560,8 @@ export default function UsersPage() {
                           <td style={{ padding: '10px 14px' }}><RolBadge rol={rolKey} /></td>
                           <td style={{ padding: '10px 14px' }}>
                             <span style={{
-                              display: 'inline-flex', alignItems: 'center', gap: 4,
-                              padding: '2px 8px', borderRadius: 5, fontSize: 11, fontWeight: 600,
+                              display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)',
+                              padding: '2px 8px', borderRadius: 5, fontSize: 'var(--text-2xs)', fontWeight: 600,
                               background: activo ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)',
                               color: activo ? '#16a34a' : '#dc2626',
                             }}>
@@ -606,7 +606,7 @@ export default function UsersPage() {
                     })
                 }
                 {!loading && displayList.length === 0 && (
-                  <tr><td colSpan={colCount} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-faint)', fontSize: 13 }}>
+                  <tr><td colSpan={colCount} style={{ padding: 'var(--space-6)', textAlign: 'center', color: 'var(--text-faint)', fontSize: 'var(--text-sm)' }}>
                     {search ? 'Sin resultados para la búsqueda' : 'No hay usuarios registrados'}
                   </td></tr>
                 )}
@@ -641,25 +641,25 @@ export default function UsersPage() {
       {colaboradorResult && (
         <Modal title="Colaborador creado" onClose={() => setColaboradorResult(null)}>
           <div style={{ textAlign: 'center', padding: '8px 0 16px' }}>
-            <div style={{ fontSize: 36, marginBottom: 12 }}>✅</div>
+            <div style={{ fontSize: 36, marginBottom: 'var(--space-3)' }}>✅</div>
             <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 16, color: 'var(--text-primary)', marginBottom: 6 }}>
               {colaboradorResult.nickname}
             </div>
-            <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 20 }}>
+            <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', marginBottom: 20 }}>
               Vence el {new Date(colaboradorResult.vence_en).toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' })}
             </div>
-            <div style={{ background: 'var(--bg-inset)', borderRadius: 8, padding: '14px 20px', textAlign: 'left', marginBottom: 16 }}>
-              <div style={{ fontSize: 10, color: 'var(--text-faint)', fontFamily: 'var(--font-data)', letterSpacing: '0.1em', marginBottom: 8 }}>CREDENCIALES DE ACCESO</div>
+            <div style={{ background: 'var(--bg-inset)', borderRadius: 8, padding: '14px 20px', textAlign: 'left', marginBottom: 'var(--space-4)' }}>
+              <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', fontFamily: 'var(--font-data)', letterSpacing: '0.1em', marginBottom: 'var(--space-2)' }}>CREDENCIALES DE ACCESO</div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Usuario</span>
-                <code style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-amber)' }}>{colaboradorResult.nickname}</code>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Usuario</span>
+                <code style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--accent-amber)' }}>{colaboradorResult.nickname}</code>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Contraseña</span>
-                <code style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-amber)' }}>{colaboradorResult.password}</code>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Contraseña</span>
+                <code style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--accent-amber)' }}>{colaboradorResult.password}</code>
               </div>
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-faint)', fontFamily: 'var(--font-ui)' }}>
+            <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-faint)', fontFamily: 'var(--font-ui)' }}>
               Compartí estas credenciales de forma segura. El acceso se revoca automáticamente al vencer.
             </div>
           </div>
@@ -689,11 +689,11 @@ export default function UsersPage() {
             <>
               <span>¿Eliminar permanentemente a <strong>{confirmEliminar.usuario.email}</strong>?</span>
               <br /><br />
-              <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+              <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
                 Esta acción no se puede deshacer. El usuario perderá acceso inmediatamente y todos sus datos serán eliminados.
               </span>
               {eliminarError && (
-                <div style={{ marginTop: 12, padding: '8px 12px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, color: '#dc2626', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ marginTop: 'var(--space-3)', padding: '8px 12px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, color: '#dc2626', fontSize: 'var(--text-xs)', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <AlertCircle size={13} /> {eliminarError}
                 </div>
               )}

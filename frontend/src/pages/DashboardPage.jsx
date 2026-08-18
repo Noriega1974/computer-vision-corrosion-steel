@@ -280,7 +280,7 @@ export default function DashboardPage() {
                 alignItems: 'center',
                 justifyContent: 'space-between',
 
-                gap: 10,
+                gap: 'var(--space-2-5)',
 
                 flexShrink: 0,
               }}
@@ -443,7 +443,7 @@ export default function DashboardPage() {
               display: 'flex',
               alignItems: 'center',
 
-              gap: 10,
+              gap: 'var(--space-2-5)',
 
               marginBottom: 'var(--space-4)',
             }}
@@ -501,7 +501,7 @@ export default function DashboardPage() {
             padding:
               '12px 6px 4px',
 
-            fontSize: 10,
+            fontSize: 'var(--text-3xs)',
 
             color:
               'var(--text-faint)',

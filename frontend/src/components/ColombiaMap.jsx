@@ -300,7 +300,7 @@ export default function ColombiaMap({
             style={{
               fontFamily: 'var(--font-ui)',
               fontWeight: 700,
-              fontSize: 13,
+              fontSize: 'var(--text-sm)',
               letterSpacing: '0.1em',
               color: 'var(--text-primary)',
             }}
@@ -310,7 +310,7 @@ export default function ColombiaMap({
 
           <div
             style={{
-              fontSize: 10,
+              fontSize: 'var(--text-3xs)',
               color: 'var(--text-muted)',
               letterSpacing: '0.1em',
               marginTop: 2
@@ -327,7 +327,7 @@ export default function ColombiaMap({
         <div
           style={{
             display: 'flex',
-            gap: 8
+            gap: 'var(--space-2)'
           }}
         >
 
@@ -343,7 +343,7 @@ export default function ColombiaMap({
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 4,
+                gap: 'var(--space-1)',
                 fontSize: 9,
                 color,
                 letterSpacing: '0.1em'
@@ -397,7 +397,7 @@ export default function ColombiaMap({
               alignItems: 'center',
               justifyContent: 'center',
               background: 'var(--bg-inset)',
-              gap: 10,
+              gap: 'var(--space-2-5)',
               zIndex: 500,
             }}
           >
@@ -419,7 +419,7 @@ export default function ColombiaMap({
             <div
               style={{
                 fontFamily: 'var(--font-data)',
-                fontSize: 11,
+                fontSize: 'var(--text-2xs)',
                 color: 'var(--text-muted)',
                 letterSpacing: '0.1em',
                 textAlign: 'center'

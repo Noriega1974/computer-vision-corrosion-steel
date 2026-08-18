@@ -19,7 +19,7 @@ export default function RouteFallback() {
         alignItems: 'center',
         justifyContent: 'center',
         flexDirection: 'column',
-        gap: 14,
+        gap: 'var(--space-3-5)',
       }}
     >
       <div
@@ -36,7 +36,7 @@ export default function RouteFallback() {
       <span
         style={{
           fontFamily: 'var(--font-data)',
-          fontSize: 12,
+          fontSize: 'var(--text-xs)',
           color: 'var(--text-muted)',
           letterSpacing: '0.08em',
         }}

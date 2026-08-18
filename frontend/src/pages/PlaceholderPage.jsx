@@ -10,7 +10,7 @@ export default function PlaceholderPage({ titulo = 'Sección', descripcion }) {
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 16,
+      gap: 'var(--space-4)',
       padding: 40,
     }}>
       <div style={{
@@ -27,13 +27,13 @@ export default function PlaceholderPage({ titulo = 'Sección', descripcion }) {
 
       <div style={{ textAlign: 'center' }}>
         <div style={{
-          fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 18,
-          color: 'var(--text-primary)', marginBottom: 8,
+          fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 'var(--text-lg)',
+          color: 'var(--text-primary)', marginBottom: 'var(--space-2)',
         }}>
           {titulo}
         </div>
         <div style={{
-          fontFamily: 'var(--font-ui)', fontSize: 13,
+          fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)',
           color: 'var(--text-muted)', maxWidth: 380,
           lineHeight: 1.6,
         }}>
@@ -47,7 +47,7 @@ export default function PlaceholderPage({ titulo = 'Sección', descripcion }) {
         border: '1px solid var(--border)',
         borderRadius: 20,
         fontFamily: 'var(--font-data)',
-        fontSize: 10,
+        fontSize: 'var(--text-3xs)',
         color: 'var(--text-faint)',
         letterSpacing: '0.1em',
         textTransform: 'uppercase',

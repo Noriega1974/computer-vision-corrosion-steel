@@ -126,7 +126,16 @@
 
      Los tamanos sueltos que quedan en JSX se van migrando a estos tokens
      pantalla por pantalla; migrarlos todos de golpe cambia la densidad de seis
-     paginas sin poder revisarlas una por una. */
+     paginas sin poder revisarlas una por una. La migracion es de COINCIDENCIA
+     EXACTA solamente -- nunca redondear un valor cercano al token mas
+     proximo, eso cambia la densidad en silencio.
+
+     text-3xs se agrego despues de medir: 10px aparecia 42 veces como
+     fontSize en todo el proyecto, mas que casi cualquier otro tamano, y
+     quedaba por debajo del piso de la escala (no habia token menor a 11px).
+     No es lo mismo que el problema original -- ese era demasiados pasos
+     amontonados sin separacion; este es un escalon real que faltaba abajo. */
+  --text-3xs: 10px;   /* la mas chica: contadores, badges diminutos */
   --text-2xs: 11px;   /* etiquetas en mayusculas, texto mono chico */
   --text-xs:  12px;   /* secundario, pies de dato */
   --text-sm:  13px;   /* cuerpo por defecto */
@@ -138,13 +147,25 @@
   /* Escala de espaciado.
 
      Habia 10 valores de gap distintos, varios fuera de toda grilla (5, 7, 9,
-     14). Multiplos de 4 salvo el primer paso. */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
+     14). Multiplos de 4 salvo el primer paso.
+
+     space-2-5 y space-3-5 se agregaron despues de medir el proyecto entero,
+     no solo el archivo que se estaba migrando: 10px aparecia 51 veces como
+     gap/padding/margin y 14px otras 36 -- ninguno de los dos es ruido, son
+     patrones reales que la escala original no cubria (10 cae justo entre
+     space-2 y space-3; 14 entre space-3 y space-4, el salto mas grande de
+     toda la escala, 12->16). El resto de los valores sueltos (18, 20, 22, 5,
+     6, 7, 9px) aparecen con mucha menos frecuencia y mas dispersos -- no
+     alcanzan el mismo criterio, quedan como excepcion literal en vez de
+     token. */
+  --space-1:   4px;
+  --space-2:   8px;
+  --space-2-5: 10px;
+  --space-3:   12px;
+  --space-3-5: 14px;
+  --space-4:   16px;
+  --space-5:   24px;
+  --space-6:   32px;
 
 
   /* ─────────────────────────────────────────────────────────────

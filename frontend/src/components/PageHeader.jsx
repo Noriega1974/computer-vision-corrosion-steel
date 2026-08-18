@@ -55,7 +55,7 @@ export default function PageHeader({ onMenuToggle, isMobile, darkMode, onToggleD
       zIndex: 50,
     }}>
       {/* Izquierda: hamburguesa (móvil) + breadcrumb */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
         {isMobile && (
           <button
             onClick={onMenuToggle}
@@ -63,19 +63,19 @@ export default function PageHeader({ onMenuToggle, isMobile, darkMode, onToggleD
             style={{
               background: 'transparent', border: 'none', cursor: 'pointer',
               color: 'var(--text-secondary)', display: 'flex', alignItems: 'center',
-              padding: 4,
+              padding: 'var(--space-1)',
             }}
           >
             <Menu size={20} aria-hidden="true" />
           </button>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
           {/* El h1 de cada pagina vive aca. El header se monta una vez por
               ruta y ya conoce el titulo, asi que ponerlo aca garantiza
               exactamente un h1 por vista sin repetirlo en cada pagina. Los
               titulos dentro del contenido son h2 en adelante. */}
           <h1 style={{
-            fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 15,
+            fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-md)',
             color: 'var(--text-primary)', margin: 0, lineHeight: 1.2,
           }}>
             {title}
@@ -84,7 +84,7 @@ export default function PageHeader({ onMenuToggle, isMobile, darkMode, onToggleD
             <>
               <span style={{ color: 'var(--border-strong)', fontSize: 14 }}>·</span>
               <span style={{
-                fontFamily: 'var(--font-data)', fontSize: 12,
+                fontFamily: 'var(--font-data)', fontSize: 'var(--text-xs)',
                 color: 'var(--text-muted)', letterSpacing: '0.03em',
               }}>
                 {sub}

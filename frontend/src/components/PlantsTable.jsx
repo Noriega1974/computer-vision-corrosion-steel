@@ -12,38 +12,38 @@ export default function PlantsTable({ puntos, loading, error, selectedPunto, onS
       {/* Header */}
       <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         <div style={{
-          fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 13,
+          fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 'var(--text-sm)',
           letterSpacing: '0.1em', color: 'var(--text-primary)',
         }}>
           PLANTAS REGISTRADAS
         </div>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginTop: 2 }}>
+        <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)', letterSpacing: '0.1em', marginTop: 2 }}>
           {loading ? 'Cargando…' : `${puntos.length} PLANTAS`}
         </div>
       </div>
 
       {/* Lista */}
-      <div style={{ flex: 1, overflow: 'auto', padding: 8 }}>
+      <div style={{ flex: 1, overflow: 'auto', padding: 'var(--space-2)' }}>
         {loading && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 80 }}>
-            <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>Cargando…</span>
+            <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>Cargando…</span>
           </div>
         )}
         {!loading && error && (
-          <div style={{ padding: 12, fontSize: 11, color: 'var(--accent-red)' }}>Error: {error}</div>
+          <div style={{ padding: 'var(--space-3)', fontSize: 'var(--text-2xs)', color: 'var(--accent-red)' }}>Error: {error}</div>
         )}
         {!loading && !error && puntos.length === 0 && (
           <div style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center',
-            justifyContent: 'center', height: '100%', color: 'var(--text-muted)', gap: 8, padding: 20,
+            justifyContent: 'center', height: '100%', color: 'var(--text-muted)', gap: 'var(--space-2)', padding: 20,
           }}>
             <Factory size={22} opacity={0.4} />
-            <div style={{ fontSize: 11, letterSpacing: '0.12em', textAlign: 'center' }}>
+            <div style={{ fontSize: 'var(--text-2xs)', letterSpacing: '0.12em', textAlign: 'center' }}>
               Sin plantas registradas.
             </div>
           </div>
         )}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
           {puntos.map((p, i) => (
             <PlantRow
               key={p.id_punto}
@@ -91,7 +91,7 @@ function PlantRow({ punto, index, selected, onClick }) {
       <div
         title={nombre}
         style={{
-          fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 3,
+          fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 3,
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}
       >
@@ -100,7 +100,7 @@ function PlantRow({ punto, index, selected, onClick }) {
       <div
         title={`${punto.ciudad ?? '—'}${punto.departamento ? ` · ${punto.departamento}` : ''}`}
         style={{
-          fontSize: 10, color: 'var(--text-muted)',
+          fontSize: 'var(--text-3xs)', color: 'var(--text-muted)',
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}
       >

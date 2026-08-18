@@ -27,7 +27,7 @@ const inputStyle = {
 const labelStyle = {
   display: 'block',
   fontFamily: 'var(--font-data)',
-  fontSize: 11,
+  fontSize: 'var(--text-2xs)',
   fontWeight: 600,
   color: 'var(--text-muted)',
   letterSpacing: '0.1em',
@@ -117,20 +117,20 @@ export default function LoginPage() {
       <div style={{ padding: '36px 36px 40px' }}>
 
         {/* Título */}
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+        <div style={{ textAlign: 'center', marginBottom: 'var(--space-6)' }}>
           <div style={{
             fontFamily: 'var(--font-ui)',
             fontWeight: 700,
             fontSize: 20,
             color: 'var(--text-primary)',
-            marginBottom: 14,
+            marginBottom: 'var(--space-3-5)',
           }}>
             Sistema de Detección de Corrosión
           </div>
           <div style={{
             fontFamily: 'var(--font-ui)',
             fontWeight: 500,
-            fontSize: 13,
+            fontSize: 'var(--text-sm)',
             color: 'var(--accent-amber)',
             marginTop: 2,
           }}>
@@ -138,7 +138,7 @@ export default function LoginPage() {
           </div>
           <div style={{
             fontFamily: 'var(--font-data)',
-            fontSize: 10,
+            fontSize: 'var(--text-3xs)',
             color: 'var(--text-faint)',
             marginTop: 6,
             letterSpacing: '0.08em',
@@ -161,7 +161,7 @@ export default function LoginPage() {
                   key={mode} type="button"
                   onClick={() => { setLoginMode(mode); setEmail(''); setError(''); }}
                   style={{
-                    flex: 1, padding: '8px 0', fontSize: 12,
+                    flex: 1, padding: '8px 0', fontSize: 'var(--text-xs)',
                     fontFamily: 'var(--font-data)', fontWeight: 600, letterSpacing: '0.04em',
                     cursor: 'pointer', border: 'none',
                     background: loginMode === mode ? 'var(--accent-amber)' : 'var(--bg-inset)',
@@ -196,7 +196,7 @@ export default function LoginPage() {
               />
             </div>
 
-            <div style={{ marginBottom: 24 }}>
+            <div style={{ marginBottom: 'var(--space-5)' }}>
               <label htmlFor="login-password" style={labelStyle}>Contraseña</label>
               <input
                 id="login-password"
@@ -222,7 +222,7 @@ export default function LoginPage() {
         {/* ── Paso 2: establecer nueva contraseña ── */}
         {step === 'nueva-contrasena' && (
           <>
-            <div style={{ marginBottom: 24 }}>
+            <div style={{ marginBottom: 'var(--space-5)' }}>
               <div style={{
                 fontFamily: 'var(--font-ui)',
                 fontWeight: 700,
@@ -234,7 +234,7 @@ export default function LoginPage() {
               </div>
               <div style={{
                 fontFamily: 'var(--font-ui)',
-                fontSize: 13,
+                fontSize: 'var(--text-sm)',
                 color: 'var(--text-muted)',
                 lineHeight: 1.5,
               }}>
@@ -261,7 +261,7 @@ export default function LoginPage() {
                 />
               </div>
 
-              <div style={{ marginBottom: 24 }}>
+              <div style={{ marginBottom: 'var(--space-5)' }}>
                 <label htmlFor="confirmar-password" style={labelStyle}>Confirmar nueva contraseña</label>
                 <input
                   id="confirmar-password"
@@ -286,7 +286,7 @@ export default function LoginPage() {
                 borderRadius: 7,
                 marginBottom: 18,
                 fontFamily: 'var(--font-data)',
-                fontSize: 11,
+                fontSize: 'var(--text-2xs)',
                 color: 'var(--text-faint)',
                 lineHeight: 1.7,
               }}>
@@ -305,7 +305,7 @@ export default function LoginPage() {
           marginTop: 20,
           textAlign: 'center',
           fontFamily: 'var(--font-data)',
-          fontSize: 10,
+          fontSize: 'var(--text-3xs)',
           color: 'var(--text-faint)',
           letterSpacing: '0.06em',
         }}>
@@ -342,7 +342,7 @@ function ErrorBanner({ message }) {
       borderRadius: '0 6px 6px 0',
       marginBottom: 18,
       fontFamily: 'var(--font-ui)',
-      fontSize: 13,
+      fontSize: 'var(--text-sm)',
       color: 'var(--accent-red)',
       lineHeight: 1.5,
     }}>
@@ -358,7 +358,7 @@ function SubmitButton({ submitting, label }) {
       disabled={submitting}
       style={{
         width: '100%',
-        padding: '12px',
+        padding: 'var(--space-3)',
         background: submitting ? 'var(--bg-inset)' : 'var(--accent-amber)',
         border: 'none',
         borderRadius: 8,
@@ -372,7 +372,7 @@ function SubmitButton({ submitting, label }) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 8,
+        gap: 'var(--space-2)',
       }}
     >
       {submitting ? (

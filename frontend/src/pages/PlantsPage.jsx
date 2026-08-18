@@ -64,7 +64,7 @@ function Modal({ title, onClose, children }) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 16,
+        padding: 'var(--space-4)',
       }}
       onClick={e => {
         if (e.target === e.currentTarget) onClose();
@@ -112,7 +112,7 @@ function Modal({ title, onClose, children }) {
               cursor: 'pointer',
               color: 'var(--text-muted)',
               display: 'flex',
-              padding: 4,
+              padding: 'var(--space-1)',
               borderRadius: 6
             }}
           >
@@ -149,7 +149,7 @@ function TabBar({ tabs, active, onChange }) {
             background: 'transparent',
             cursor: 'pointer',
             fontFamily: 'var(--font-ui)',
-            fontSize: 12,
+            fontSize: 'var(--text-xs)',
             fontWeight: active === t.key ? 700 : 400,
             color: active === t.key
               ? 'var(--accent-amber)'
@@ -176,14 +176,14 @@ const inputStyle = {
   background: 'var(--bg-page)',
   color: 'var(--text-primary)',
   fontFamily: 'var(--font-ui)',
-  fontSize: 13,
+  fontSize: 'var(--text-sm)',
   boxSizing: 'border-box',
 };
 
 const LABEL_STYLE = {
   display: 'block',
   fontFamily: 'var(--font-data)',
-  fontSize: 10,
+  fontSize: 'var(--text-3xs)',
   fontWeight: 600,
   textTransform: 'uppercase',
   letterSpacing: '0.1em',
@@ -299,7 +299,7 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
       onSubmit={handleSubmit}
       style={{ padding: '20px' }}
     >
-      <div style={{ marginBottom: 14 }}>
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
         <label htmlFor="punto-nombre" style={LABEL_STYLE}>
           Nombre del punto *
         </label>
@@ -315,7 +315,7 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
       </div>
 
       {/* Departamento */}
-      <div style={{ marginBottom: 14 }}>
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
         <label htmlFor="punto-departamento" style={LABEL_STYLE}>
           Departamento *
         </label>
@@ -340,7 +340,7 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
       </div>
 
       {/* Ciudad */}
-      <div style={{ marginBottom: 14 }}>
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
         <label htmlFor="punto-ciudad" style={LABEL_STYLE}>
           Ciudad *
         </label>
@@ -360,7 +360,7 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
         />
       </div>
 
-      <div style={{ marginBottom: 14 }}>
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
         <label htmlFor="punto-descripcion" style={LABEL_STYLE}>
           Descripción
         </label>
@@ -375,7 +375,7 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
       </div>
 
       {/* Ubicación */}
-      <div style={{ marginBottom: 14 }}>
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
         {/* No es <label>: no etiqueta un control, encabeza el bloque entero de
             ubicacion (deteccion automatica + latitud/longitud manuales). */}
         <span style={{ ...LABEL_STYLE, display: 'block' }}>
@@ -390,7 +390,7 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
               background: 'rgba(156,54,16,0.05)',
               border: '1px solid rgba(156,54,16,0.15)',
               borderRadius: 7,
-              fontSize: 11,
+              fontSize: 'var(--text-2xs)',
               color: 'var(--text-muted)',
               fontFamily: 'var(--font-data)'
             }}
@@ -406,7 +406,7 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
               background: 'rgba(156,54,16,0.05)',
               border: '1px solid rgba(156,54,16,0.15)',
               borderRadius: 7,
-              fontSize: 11,
+              fontSize: 'var(--text-2xs)',
               color: 'var(--text-muted)',
               fontFamily: 'var(--font-data)'
             }}
@@ -422,7 +422,7 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
               background: 'rgba(220,38,38,0.05)',
               border: '1px solid rgba(220,38,38,0.2)',
               borderRadius: 7,
-              fontSize: 11,
+              fontSize: 'var(--text-2xs)',
               color: '#dc2626',
               display: 'flex',
               alignItems: 'center',
@@ -441,11 +441,11 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
             setShowManual(v => !v)
           }
           style={{
-            marginTop: 8,
+            marginTop: 'var(--space-2)',
             background: 'none',
             border: 'none',
             padding: 0,
-            fontSize: 11,
+            fontSize: 'var(--text-2xs)',
             color: 'var(--accent-amber)',
             cursor: 'pointer',
             fontFamily: 'var(--font-data)',
@@ -465,8 +465,8 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
             style={{
               display: 'grid',
               gridTemplateColumns: '1fr 1fr',
-              gap: 12,
-              marginTop: 10
+              gap: 'var(--space-3)',
+              marginTop: 'var(--space-2-5)'
             }}
           >
             {[
@@ -507,8 +507,8 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
             border: '1px solid rgba(220,38,38,0.2)',
             borderRadius: 7,
             color: '#dc2626',
-            fontSize: 12,
-            marginBottom: 14,
+            fontSize: 'var(--text-xs)',
+            marginBottom: 'var(--space-3-5)',
             display: 'flex',
             alignItems: 'center',
             gap: 6
@@ -523,7 +523,7 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
         style={{
           display: 'flex',
           justifyContent: 'flex-end',
-          gap: 10
+          gap: 'var(--space-2-5)'
         }}
       >
         <button
@@ -539,7 +539,7 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
               : 'pointer',
             fontFamily: 'var(--font-ui)',
             fontWeight: 600,
-            fontSize: 13,
+            fontSize: 'var(--text-sm)',
             color: 'white',
             opacity: saving ? 0.6 : 1,
           }}
@@ -593,7 +593,7 @@ function PuntoDetail({ punto, onEdit, isAdmin }) {
               style={{
                 display: 'grid',
                 gridTemplateColumns: '1fr 1fr',
-                gap: 16,
+                gap: 'var(--space-4)',
                 marginBottom: 20
               }}
             >
@@ -615,7 +615,7 @@ function PuntoDetail({ punto, onEdit, isAdmin }) {
                 <div key={label}>
                   <div
                     style={{
-                      fontSize: 10,
+                      fontSize: 'var(--text-3xs)',
                       fontFamily: 'var(--font-data)',
                       fontWeight: 600,
                       textTransform: 'uppercase',
@@ -629,7 +629,7 @@ function PuntoDetail({ punto, onEdit, isAdmin }) {
 
                   <div
                     style={{
-                      fontSize: 13,
+                      fontSize: 'var(--text-sm)',
                       color: 'var(--text-primary)',
                       fontFamily: 'var(--font-ui)'
                     }}
@@ -647,7 +647,7 @@ function PuntoDetail({ punto, onEdit, isAdmin }) {
                 >
                   <div
                     style={{
-                      fontSize: 10,
+                      fontSize: 'var(--text-3xs)',
                       fontFamily: 'var(--font-data)',
                       fontWeight: 600,
                       textTransform: 'uppercase',
@@ -661,7 +661,7 @@ function PuntoDetail({ punto, onEdit, isAdmin }) {
 
                   <div
                     style={{
-                      fontSize: 13,
+                      fontSize: 'var(--text-sm)',
                       color: 'var(--text-primary)',
                       fontFamily: 'var(--font-ui)'
                     }}
@@ -686,7 +686,7 @@ function PuntoDetail({ punto, onEdit, isAdmin }) {
                   cursor: 'pointer',
                   fontFamily: 'var(--font-ui)',
                   fontWeight: 500,
-                  fontSize: 12,
+                  fontSize: 'var(--text-xs)',
                   color: 'var(--text-muted)',
                 }}
               >
@@ -706,7 +706,7 @@ function PuntoDetail({ punto, onEdit, isAdmin }) {
                   textAlign: 'center',
                   padding: '40px 0',
                   color: 'var(--text-faint)',
-                  fontSize: 13
+                  fontSize: 'var(--text-sm)'
                 }}
               >
                 Sin historial de cambios
@@ -715,7 +715,7 @@ function PuntoDetail({ punto, onEdit, isAdmin }) {
               <div
                 style={{
                   position: 'relative',
-                  paddingLeft: 24
+                  paddingLeft: 'var(--space-5)'
                 }}
               >
                 <div
@@ -735,7 +735,7 @@ function PuntoDetail({ punto, onEdit, isAdmin }) {
                     style={{
                       position: 'relative',
                       marginBottom: 18,
-                      paddingLeft: 16
+                      paddingLeft: 'var(--space-4)'
                     }}
                   >
                     <div
@@ -753,7 +753,7 @@ function PuntoDetail({ punto, onEdit, isAdmin }) {
 
                     <div
                       style={{
-                        fontSize: 11,
+                        fontSize: 'var(--text-2xs)',
                         color: 'var(--text-faint)',
                         fontFamily: 'var(--font-data)',
                         marginBottom: 3
@@ -765,7 +765,7 @@ function PuntoDetail({ punto, onEdit, isAdmin }) {
 
                     <div
                       style={{
-                        fontSize: 13,
+                        fontSize: 'var(--text-sm)',
                         color: 'var(--text-primary)',
                         fontFamily: 'var(--font-ui)'
                       }}
@@ -791,7 +791,7 @@ function PuntoDetail({ punto, onEdit, isAdmin }) {
                     height: 40,
                     borderRadius: 6,
                     background: 'var(--border)',
-                    marginBottom: 8,
+                    marginBottom: 'var(--space-2)',
                     animation: 'shimmer 1.5s infinite'
                   }}
                 />
@@ -802,7 +802,7 @@ function PuntoDetail({ punto, onEdit, isAdmin }) {
                   textAlign: 'center',
                   padding: '40px 0',
                   color: 'var(--text-faint)',
-                  fontSize: 13
+                  fontSize: 'var(--text-sm)'
                 }}
               >
                 Sin mediciones registradas
@@ -825,7 +825,7 @@ function PuntoDetail({ punto, onEdit, isAdmin }) {
                   >
                     <div
                       style={{
-                        fontSize: 12,
+                        fontSize: 'var(--text-xs)',
                         color: 'var(--text-primary)',
                         fontFamily: 'var(--font-ui)'
                       }}
@@ -844,7 +844,7 @@ function PuntoDetail({ punto, onEdit, isAdmin }) {
                         color: nivelColor(
                           m.nivel_corrosion ?? 0
                         ),
-                        fontSize: 11,
+                        fontSize: 'var(--text-2xs)',
                         fontWeight: 600,
                       }}
                     >
@@ -855,7 +855,7 @@ function PuntoDetail({ punto, onEdit, isAdmin }) {
 
                     <div
                       style={{
-                        fontSize: 12,
+                        fontSize: 'var(--text-xs)',
                         color: 'var(--text-muted)',
                         fontFamily: 'var(--font-data)'
                       }}
@@ -956,7 +956,7 @@ export default function PlantsPage() {
         }
       `}</style>
 
-      <div style={{ padding: 24 }}>
+      <div style={{ padding: 'var(--space-5)' }}>
 
         {/* Encabezado */}
         <div
@@ -966,14 +966,14 @@ export default function PlantsPage() {
             justifyContent: 'space-between',
             marginBottom: 20,
             flexWrap: 'wrap',
-            gap: 12
+            gap: 'var(--space-3)'
           }}
         >
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 10
+              gap: 'var(--space-2-5)'
             }}
           >
             <span
@@ -989,7 +989,7 @@ export default function PlantsPage() {
             <span
               style={{
                 fontFamily: 'var(--font-data)',
-                fontSize: 13,
+                fontSize: 'var(--text-sm)',
                 fontWeight: 700,
                 letterSpacing: '0.1em',
                 textTransform: 'uppercase',
@@ -1017,7 +1017,7 @@ export default function PlantsPage() {
                 cursor: 'pointer',
                 fontFamily: 'var(--font-ui)',
                 fontWeight: 600,
-                fontSize: 12,
+                fontSize: 'var(--text-xs)',
                 color: 'white',
               }}
             >
@@ -1028,7 +1028,7 @@ export default function PlantsPage() {
         </div>
 
         {/* Buscador */}
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 'var(--space-4)' }}>
           <input
             value={search}
             onChange={e =>
@@ -1042,7 +1042,7 @@ export default function PlantsPage() {
               background: 'var(--bg-card)',
               color: 'var(--text-primary)',
               fontFamily: 'var(--font-ui)',
-              fontSize: 13,
+              fontSize: 'var(--text-sm)',
               width: '100%',
               maxWidth: 380,
               boxSizing: 'border-box',
@@ -1064,7 +1064,7 @@ export default function PlantsPage() {
               style={{
                 width: '100%',
                 borderCollapse: 'collapse',
-                fontSize: 13,
+                fontSize: 'var(--text-sm)',
                 fontFamily: 'var(--font-ui)'
               }}
             >
@@ -1087,7 +1087,7 @@ export default function PlantsPage() {
                         padding: '9px 14px',
                         textAlign: 'left',
                         fontFamily: 'var(--font-data)',
-                        fontSize: 10,
+                        fontSize: 'var(--text-3xs)',
                         fontWeight: 600,
                         textTransform: 'uppercase',
                         letterSpacing: '0.1em',
@@ -1141,7 +1141,7 @@ export default function PlantsPage() {
 
                           <div
                             style={{
-                              fontSize: 10,
+                              fontSize: 'var(--text-3xs)',
                               color: 'var(--text-faint)',
                               marginTop: 2
                             }}
@@ -1173,7 +1173,7 @@ export default function PlantsPage() {
                             padding: '10px 14px',
                             color: 'var(--text-muted)',
                             fontFamily: 'var(--font-data)',
-                            fontSize: 11
+                            fontSize: 'var(--text-2xs)'
                           }}
                         >
                           {p.latitud != null &&
@@ -1201,7 +1201,7 @@ export default function PlantsPage() {
                               borderRadius: 7,
                               cursor: 'pointer',
                               fontFamily: 'var(--font-ui)',
-                              fontSize: 11,
+                              fontSize: 'var(--text-2xs)',
                               color: 'var(--text-muted)'
                             }}
                           >
@@ -1218,10 +1218,10 @@ export default function PlantsPage() {
                       <td
                         colSpan={5}
                         style={{
-                          padding: '32px',
+                          padding: 'var(--space-6)',
                           textAlign: 'center',
                           color: 'var(--text-faint)',
-                          fontSize: 13
+                          fontSize: 'var(--text-sm)'
                         }}
                       >
                         {search

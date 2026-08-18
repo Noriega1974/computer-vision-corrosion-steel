@@ -165,10 +165,10 @@ export default function PrivacidadPage() {
       <section
         style={{
           borderLeft: '2px solid var(--accent-orange)',
-          paddingLeft: 16,
+          paddingLeft: 'var(--space-4)',
           display: 'flex',
           flexDirection: 'column',
-          gap: 8,
+          gap: 'var(--space-2)',
         }}
       >
         <h3

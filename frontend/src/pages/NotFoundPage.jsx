@@ -21,7 +21,7 @@ export default function NotFoundPage() {
         flexDirection: 'column',
         alignItems: 'flex-start',
         justifyContent: 'center',
-        gap: 16,
+        gap: 'var(--space-4)',
         padding: '48px 20px',
         maxWidth: 560,
       }}
@@ -29,7 +29,7 @@ export default function NotFoundPage() {
       <span
         style={{
           fontFamily: 'var(--font-data)',
-          fontSize: 12,
+          fontSize: 'var(--text-xs)',
           fontWeight: 600,
           letterSpacing: '0.14em',
           color: 'var(--text-faint)',
@@ -66,7 +66,7 @@ export default function NotFoundPage() {
         <code
           style={{
             fontFamily: 'var(--font-data)',
-            fontSize: 13,
+            fontSize: 'var(--text-sm)',
             background: 'var(--bg-inset)',
             padding: '2px 6px',
             borderRadius: 4,
@@ -81,7 +81,7 @@ export default function NotFoundPage() {
       <Link
         to="/dashboard"
         style={{
-          marginTop: 8,
+          marginTop: 'var(--space-2)',
           padding: '10px 18px',
           borderRadius: 8,
           background: 'var(--accent-blue)',

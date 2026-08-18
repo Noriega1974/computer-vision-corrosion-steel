@@ -32,15 +32,15 @@ const CustomTooltip = ({ active, payload, label }) => {
         padding: '8px 12px',
         borderRadius: 6,
         fontFamily: 'var(--font-ui)',
-        fontSize: 12,
+        fontSize: 'var(--text-xs)',
         boxShadow: 'var(--shadow-md)',
       }}
     >
       <div
         style={{
           color: 'var(--text-muted)',
-          marginBottom: 4,
-          fontSize: 11,
+          marginBottom: 'var(--space-1)',
+          fontSize: 'var(--text-2xs)',
         }}
       >
         {label}
@@ -84,7 +84,7 @@ function EmptyChart({ message }) {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 8,
+        gap: 'var(--space-2)',
       }}
     >
       <div
@@ -98,7 +98,7 @@ function EmptyChart({ message }) {
 
       <div
         style={{
-          fontSize: 11,
+          fontSize: 'var(--text-2xs)',
           color: 'var(--text-muted)',
           textAlign: 'center',
           letterSpacing: '0.06em',
@@ -184,7 +184,7 @@ export default function ChartsRow() {
       style={{
         display: 'grid',
         gridTemplateColumns: '1fr 240px 1fr',
-        gap: 16,
+        gap: 'var(--space-4)',
       }}
     >
 
@@ -222,7 +222,7 @@ export default function ChartsRow() {
                 dataKey="fecha"
                 tick={{
                   fill: 'var(--text-muted)',
-                  fontSize: 10,
+                  fontSize: 'var(--text-3xs)',
                 }}
                 tickLine={false}
                 axisLine={false}
@@ -232,7 +232,7 @@ export default function ChartsRow() {
               <YAxis
                 tick={{
                   fill: 'var(--text-faint)',
-                  fontSize: 10,
+                  fontSize: 'var(--text-3xs)',
                 }}
                 tickLine={false}
                 axisLine={false}
@@ -328,7 +328,7 @@ export default function ChartsRow() {
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 4,
+                    gap: 'var(--space-1)',
                     fontSize: 9,
                   }}
                 >
@@ -379,12 +379,12 @@ export default function ChartsRow() {
             >
               <XAxis
                 dataKey="name"
-                tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
+                tick={{ fill: 'var(--text-muted)', fontSize: 'var(--text-2xs)' }}
                 tickLine={false}
                 axisLine={false}
               />
               <YAxis
-                tick={{ fill: 'var(--text-faint)', fontSize: 10 }}
+                tick={{ fill: 'var(--text-faint)', fontSize: 'var(--text-3xs)' }}
                 tickLine={false}
                 axisLine={false}
               />
@@ -417,7 +417,7 @@ function ChartCard({
     >
       <div
         style={{
-          fontSize: 13,
+          fontSize: 'var(--text-sm)',
           fontWeight: 600,
           color: 'var(--text-primary)',
           fontFamily: 'var(--font-ui)',
@@ -429,10 +429,10 @@ function ChartCard({
 
       <div
         style={{
-          fontSize: 11,
+          fontSize: 'var(--text-2xs)',
           color: 'var(--text-muted)',
           fontFamily: 'var(--font-ui)',
-          marginBottom: 12,
+          marginBottom: 'var(--space-3)',
         }}
       >
         {subtitle}

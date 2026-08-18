@@ -60,7 +60,7 @@ export default function DeteccionIAPage() {
   const color = nivel !== null ? NIVEL_COLORS[nivel] : 'var(--accent-amber)';
 
   return (
-    <div style={{ padding: '24px', maxWidth: 900, margin: '0 auto' }}>
+    <div style={{ padding: 'var(--space-5)', maxWidth: 900, margin: '0 auto' }}>
 
       {/* Drop zone / preview */}
       {!result && (
@@ -104,11 +104,11 @@ export default function DeteccionIAPage() {
             />
           ) : (
             <>
-              <span style={{ fontSize: 48, marginBottom: 12 }} aria-hidden="true">📷</span>
-              <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: 15 }}>
+              <span style={{ fontSize: 48, marginBottom: 'var(--space-3)' }} aria-hidden="true">📷</span>
+              <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: 'var(--text-md)' }}>
                 Arrastrá una imagen o hacé click para seleccionar
               </p>
-              <p style={{ color: 'var(--text-muted)', margin: '4px 0 0', fontSize: 13 }}>
+              <p style={{ color: 'var(--text-muted)', margin: '4px 0 0', fontSize: 'var(--text-sm)' }}>
                 JPG · PNG · WEBP
               </p>
             </>
@@ -127,7 +127,7 @@ export default function DeteccionIAPage() {
 
       {/* Botones */}
       {!result && (
-        <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+        <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-4)' }}>
           <button
             onClick={analizar}
             disabled={!archivo || loading}
@@ -140,7 +140,7 @@ export default function DeteccionIAPage() {
               color: archivo && !loading ? '#fff' : 'var(--text-muted)',
               fontFamily: 'var(--font-ui)',
               fontWeight: 600,
-              fontSize: 15,
+              fontSize: 'var(--text-md)',
               cursor: archivo && !loading ? 'pointer' : 'not-allowed',
               transition: 'background 0.2s',
             }}
@@ -168,7 +168,7 @@ export default function DeteccionIAPage() {
 
       {error && (
         <div style={{
-          marginTop: 16, padding: '12px 16px', borderRadius: 8,
+          marginTop: 'var(--space-4)', padding: '12px 16px', borderRadius: 8,
           background: 'var(--bg-inset)', border: '1px solid var(--accent-red)',
           color: 'var(--accent-red)', fontSize: 14,
         }}>
@@ -183,22 +183,22 @@ export default function DeteccionIAPage() {
           <div style={{
             padding: '16px 20px', borderRadius: 10, marginBottom: 20,
             background: 'var(--bg-card)', borderLeft: `4px solid ${color}`,
-            display: 'flex', alignItems: 'center', gap: 12,
+            display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
           }}>
             <span style={{ fontSize: 32 }}>{NIVEL_EMOJIS[nivel]}</span>
             <div>
-              <div style={{ fontWeight: 700, fontSize: 18, color }}>
+              <div style={{ fontWeight: 700, fontSize: 'var(--text-lg)', color }}>
                 {NIVEL_LABELS[nivel]}
               </div>
-              <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 2 }}>
+              <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', marginTop: 2 }}>
                 {result.detecciones?.length ?? 0} región(es) detectada(s)
               </div>
             </div>
           </div>
 
           {/* Imagen con segmentación */}
-          <div style={{ background: 'var(--bg-card)', borderRadius: 10, padding: 12, marginBottom: 16 }}>
-            <div style={{ color: 'var(--text-secondary)', fontSize: 12, marginBottom: 8, fontWeight: 600, letterSpacing: '0.05em' }}>
+          <div style={{ background: 'var(--bg-card)', borderRadius: 10, padding: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
+            <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-2)', fontWeight: 600, letterSpacing: '0.05em' }}>
               ZONAS DETECTADAS
             </div>
             <SegmentationOverlay
@@ -208,7 +208,7 @@ export default function DeteccionIAPage() {
           </div>
 
           {/* Métricas */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--space-3)', marginBottom: 20 }}>
             {[
               { label: 'Área corroída', value: `${result.area_corroida_pct?.toFixed(1)}%`, color: 'var(--accent-orange)' },
               { label: 'Confianza promedio', value: `${((result.confianza_promedio ?? 0) * 100).toFixed(0)}%`, color: 'var(--accent-blue)' },
@@ -218,8 +218,8 @@ export default function DeteccionIAPage() {
                 background: 'var(--bg-card)', borderRadius: 8, padding: '14px 16px',
                 borderTop: `3px solid ${m.color}`,
               }}>
-                <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 4 }}>{m.label}</div>
-                <div style={{ fontFamily: 'var(--font-data)', fontSize: 22, fontWeight: 700, color: m.color }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-1)' }}>{m.label}</div>
+                <div style={{ fontFamily: 'var(--font-data)', fontSize: 'var(--text-xl)', fontWeight: 700, color: m.color }}>
                   {m.value}
                 </div>
               </div>

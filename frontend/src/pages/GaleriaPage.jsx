@@ -62,10 +62,10 @@ function MedicionCard({ medicion, puntoInfo, to, state }) {
           <div style={{
             width: '100%', height: '100%',
             display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center', gap: 8,
+            alignItems: 'center', justifyContent: 'center', gap: 'var(--space-2)',
           }}>
             <AlertCircle size={28} strokeWidth={1.5} style={{ color: 'var(--text-faint)' }} />
-            <span style={{ fontSize: 10, color: 'var(--text-faint)', fontFamily: 'var(--font-data)' }}>
+            <span style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', fontFamily: 'var(--font-data)' }}>
               Sin imagen
             </span>
           </div>
@@ -77,7 +77,7 @@ function MedicionCard({ medicion, puntoInfo, to, state }) {
           padding: '3px 8px', borderRadius: 20,
           background: `${color}ee`,
           fontFamily: 'var(--font-data)', fontWeight: 700,
-          fontSize: 10, color: 'white',
+          fontSize: 'var(--text-3xs)', color: 'white',
           letterSpacing: '0.06em',
           boxShadow: `0 2px 8px ${color}50`,
         }}>
@@ -105,13 +105,13 @@ function MedicionCard({ medicion, puntoInfo, to, state }) {
       {/* Metadata */}
       <div style={{ padding: '12px 14px' }}>
         <div style={{
-          fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 13,
+          fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)',
           color: 'var(--text-primary)', marginBottom: 2,
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
           {sede}
         </div>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
+        <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>
           {ciudad || medicion.id_punto}
         </div>
 
@@ -123,12 +123,12 @@ function MedicionCard({ medicion, puntoInfo, to, state }) {
               width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0,
             }} />
             <span style={{
-              fontFamily: 'var(--font-data)', fontSize: 11, color,
+              fontFamily: 'var(--font-data)', fontSize: 'var(--text-2xs)', color,
             }}>
               {(medicion.area_corroida_pct ?? 0).toFixed(1)}%
             </span>
           </div>
-          <span style={{ fontSize: 10, color: 'var(--text-faint)', fontFamily: 'var(--font-data)' }}>
+          <span style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', fontFamily: 'var(--font-data)' }}>
             {tiempoRelativo(medicion.timestamp)}
           </span>
         </div>
@@ -197,13 +197,13 @@ export default function GaleriaPage() {
     padding: '7px 12px', background: 'var(--bg-inset)',
     border: '1px solid var(--border)', borderRadius: 7,
     color: 'var(--text-primary)', fontFamily: 'var(--font-ui)',
-    fontSize: 12,
+    fontSize: 'var(--text-xs)',
   };
 
   // Mismo aspecto que tenian los <div> que reemplazo, ahora sobre un <label>
   // real. `display: block` conserva el salto de linea que daba el div.
   const FILTRO_LABEL_STYLE = {
-    display: 'block', fontSize: 10, color: 'var(--text-faint)',
+    display: 'block', fontSize: 'var(--text-3xs)', color: 'var(--text-faint)',
     marginBottom: 5, fontFamily: 'var(--font-data)', letterSpacing: '0.1em',
   };
 
@@ -213,16 +213,16 @@ export default function GaleriaPage() {
       {/* ── Título + CTA ── */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        marginBottom: 20, flexWrap: 'wrap', gap: 12,
+        marginBottom: 20, flexWrap: 'wrap', gap: 'var(--space-3)',
       }}>
         <div>
           <h2 style={{
-            fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 18,
+            fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 'var(--text-lg)',
             color: 'var(--text-primary)', margin: 0,
           }}>
             Galería de mediciones
           </h2>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '3px 0 0', fontFamily: 'var(--font-ui)' }}>
+          <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: '3px 0 0', fontFamily: 'var(--font-ui)' }}>
             {loading ? 'Cargando…' : `${filtered.length} mediciones${filtered.length !== mediciones.length ? ` de ${mediciones.length}` : ''}`}
           </p>
         </div>
@@ -232,7 +232,7 @@ export default function GaleriaPage() {
             display: 'flex', alignItems: 'center', gap: 7,
             padding: '9px 16px', background: 'var(--accent-amber)',
             border: 'none', borderRadius: 8, cursor: 'pointer',
-            fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 13, color: 'white',
+            fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'white',
             boxShadow: '0 2px 8px rgba(156,54,16,0.3)',
           }}
         >
@@ -245,12 +245,12 @@ export default function GaleriaPage() {
       <div style={{
         background: 'var(--bg-card)', border: '1px solid var(--border)',
         borderRadius: 10, padding: '14px 16px', marginBottom: 20,
-        display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end',
+        display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', alignItems: 'flex-end',
       }}>
         {/* Chips de nivel */}
         <div>
-          <div style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 5, fontFamily: 'var(--font-data)', letterSpacing: '0.1em' }}>NIVEL</div>
-          <div style={{ display: 'flex', gap: 4 }}>
+          <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', marginBottom: 5, fontFamily: 'var(--font-data)', letterSpacing: '0.1em' }}>NIVEL</div>
+          <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
             {[
               { key: 'all', label: 'Todos', color: 'var(--text-muted)' },
               { key: '0', label: 'Sin corrosión', color: '#16a34a' },
@@ -266,7 +266,7 @@ export default function GaleriaPage() {
                   border: `1px solid ${nivelFilter === key ? color : 'var(--border)'}`,
                   background: nivelFilter === key ? `${color}18` : 'transparent',
                   color: nivelFilter === key ? color : 'var(--text-muted)',
-                  fontFamily: 'var(--font-ui)', fontSize: 11, cursor: 'pointer',
+                  fontFamily: 'var(--font-ui)', fontSize: 'var(--text-2xs)', cursor: 'pointer',
                   // Explicito y no `all`: solo cambian estas tres al filtrar.
                   transition: 'color 0.12s, background-color 0.12s, border-color 0.12s',
                 }}
@@ -287,7 +287,7 @@ export default function GaleriaPage() {
             name="filtro-planta"
             value={puntoFilter}
             onChange={e => setPuntoFilter(e.target.value)}
-            style={{ ...inputStyle, appearance: 'none', paddingRight: 24 }}
+            style={{ ...inputStyle, appearance: 'none', paddingRight: 'var(--space-5)' }}
           >
             <option value="">Todas las plantas</option>
             {puntosEnMediciones.map(p => (
@@ -328,7 +328,7 @@ export default function GaleriaPage() {
               padding: '7px 12px', background: 'transparent',
               border: '1px solid var(--border)', borderRadius: 7,
               cursor: 'pointer', color: 'var(--text-muted)',
-              fontFamily: 'var(--font-ui)', fontSize: 12,
+              fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)',
             }}
           >
             Limpiar filtros
@@ -342,7 +342,7 @@ export default function GaleriaPage() {
         <div style={{
           display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center',
-          gap: 16, padding: '60px 20px',
+          gap: 'var(--space-4)', padding: '60px 20px',
           background: 'var(--bg-card)', border: '1px solid var(--border)',
           borderRadius: 12,
         }}>
@@ -357,7 +357,7 @@ export default function GaleriaPage() {
             <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 16, color: 'var(--text-primary)', marginBottom: 6 }}>
               Sin mediciones todavía
             </div>
-            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+            <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: 'var(--space-4)' }}>
               Sube tu primera imagen para comenzar el monitoreo de corrosión.
             </div>
             <button
@@ -366,7 +366,7 @@ export default function GaleriaPage() {
                 display: 'inline-flex', alignItems: 'center', gap: 7,
                 padding: '10px 18px', background: 'var(--accent-amber)',
                 border: 'none', borderRadius: 8, cursor: 'pointer',
-                fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 13, color: 'white',
+                fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'white',
               }}
             >
               <Upload size={15} />
@@ -380,7 +380,7 @@ export default function GaleriaPage() {
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-            gap: 16,
+            gap: 'var(--space-4)',
           }}>
             {filtered.map(m => (
               <MedicionCard
@@ -404,9 +404,9 @@ export default function GaleriaPage() {
           )}
 
           {/* Sentinel para infinite scroll */}
-          <div ref={sentinelRef} style={{ height: 40, marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div ref={sentinelRef} style={{ height: 40, marginTop: 'var(--space-4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {loading && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontFamily: 'var(--font-data)', fontSize: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)', fontSize: 'var(--text-xs)' }}>
                 <div style={{
                   width: 14, height: 14, border: '2px solid var(--border)',
                   borderTopColor: 'var(--accent-amber)', borderRadius: '50%',

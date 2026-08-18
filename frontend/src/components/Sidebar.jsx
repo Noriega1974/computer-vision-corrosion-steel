@@ -148,7 +148,7 @@ function NavItem({ item, collapsed }) {
             ? '11px 0'
             : '10px 13px',
 
-          marginBottom: 4,
+          marginBottom: 'var(--space-1)',
 
           minHeight: 40,
 
@@ -207,7 +207,7 @@ function NavItem({ item, collapsed }) {
             style={{
               fontFamily: 'var(--font-ui)',
               fontWeight: isActive ? 600 : 450,
-              fontSize: 13,
+              fontSize: 'var(--text-sm)',
 
               letterSpacing: '0.01em',
 
@@ -555,7 +555,7 @@ export default function Sidebar({
 
                 fontWeight: 700,
 
-                fontSize: 15,
+                fontSize: 'var(--text-md)',
 
                 letterSpacing:
                   '-0.01em',
@@ -710,7 +710,7 @@ export default function Sidebar({
 
                 alignItems: 'center',
 
-                gap: 10,
+                gap: 'var(--space-2-5)',
 
                 padding: '8px 7px',
 
@@ -765,7 +765,7 @@ export default function Sidebar({
 
                   fontWeight: 700,
 
-                  fontSize: 12,
+                  fontSize: 'var(--text-xs)',
 
                   color: 'white',
 
@@ -797,7 +797,7 @@ export default function Sidebar({
 
                     fontWeight: 600,
 
-                    fontSize: 12,
+                    fontSize: 'var(--text-xs)',
 
                     color:
                       'var(--text-primary)',
@@ -876,7 +876,7 @@ export default function Sidebar({
 
                 fontWeight: 700,
 
-                fontSize: 12,
+                fontSize: 'var(--text-xs)',
 
                 color: 'white',
 
@@ -952,7 +952,7 @@ export default function Sidebar({
 
             fontWeight: 500,
 
-            fontSize: 12,
+            fontSize: 'var(--text-xs)',
 
             transition:
               'all 0.18s ease',

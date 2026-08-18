@@ -4,7 +4,7 @@ import { ChevronDown } from 'lucide-react';
 const inputStyle = {
   width: '100%', padding: '8px 12px', borderRadius: 8,
   border: '1px solid var(--border)', background: 'var(--bg-page)',
-  color: 'var(--text-primary)', fontFamily: 'var(--font-ui)', fontSize: 13,
+  color: 'var(--text-primary)', fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)',
   boxSizing: 'border-box',
 };
 
@@ -132,7 +132,7 @@ export default function SearchableSelect({
           }}
         >
           {filtered.length === 0 ? (
-            <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-faint)' }}>{emptyMessage}</div>
+            <div style={{ padding: '10px 12px', fontSize: 'var(--text-xs)', color: 'var(--text-faint)' }}>{emptyMessage}</div>
           ) : (
             filtered.map((opt, i) => (
               // El teclado se maneja en el input via aria-activedescendant, asi que
@@ -145,7 +145,7 @@ export default function SearchableSelect({
                 onMouseDown={(e) => { e.preventDefault(); selectOption(opt); }}
                 onMouseEnter={() => setHighlight(i)}
                 style={{
-                  padding: '8px 12px', fontSize: 13, cursor: 'pointer',
+                  padding: '8px 12px', fontSize: 'var(--text-sm)', cursor: 'pointer',
                   fontFamily: 'var(--font-ui)', color: 'var(--text-primary)',
                   background: i === highlight ? 'var(--bg-page)' : 'transparent',
                 }}

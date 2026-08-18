@@ -27,14 +27,14 @@ const sectionStyle = {
 const sectionHeaderStyle = {
   display: 'flex',
   alignItems: 'center',
-  gap: 10,
+  gap: 'var(--space-2-5)',
   padding: '14px 18px',
   borderBottom: '1px solid var(--border)',
 };
 
 const labelStyle = {
   fontFamily: 'var(--font-data)',
-  fontSize: 10,
+  fontSize: 'var(--text-3xs)',
   fontWeight: 600,
   textTransform: 'uppercase',
   letterSpacing: '0.1em',
@@ -44,7 +44,7 @@ const labelStyle = {
 
 const descriptionStyle = {
   fontFamily: 'var(--font-ui)',
-  fontSize: 11,
+  fontSize: 'var(--text-2xs)',
   color: 'var(--text-muted)',
   lineHeight: 1.5,
 };
@@ -112,7 +112,7 @@ function SettingRow({ title, description, children, last = false }) {
         <div
           style={{
             fontFamily: 'var(--font-ui)',
-            fontSize: 13,
+            fontSize: 'var(--text-sm)',
             fontWeight: 600,
             color: 'var(--text-primary)',
             marginBottom: 3,
@@ -163,7 +163,7 @@ function SectionHeader({ icon: Icon, title, description }) {
           style={{
             fontFamily: 'var(--font-ui)',
             fontWeight: 700,
-            fontSize: 13,
+            fontSize: 'var(--text-sm)',
             color: 'var(--text-primary)',
           }}
         >
@@ -174,7 +174,7 @@ function SectionHeader({ icon: Icon, title, description }) {
           <div
             style={{
               fontFamily: 'var(--font-ui)',
-              fontSize: 10,
+              fontSize: 'var(--text-3xs)',
               color: 'var(--text-muted)',
               marginTop: 2,
             }}
@@ -237,7 +237,7 @@ export default function ConfiguracionPage() {
         }
       `}</style>
 
-      <div style={{ padding: 24, maxWidth: 1000, margin: '0 auto' }}>
+      <div style={{ padding: 'var(--space-5)', maxWidth: 1000, margin: '0 auto' }}>
 
         {/* ── Encabezado ── */}
         <div
@@ -247,7 +247,7 @@ export default function ConfiguracionPage() {
             justifyContent: 'space-between',
             marginBottom: 22,
             flexWrap: 'wrap',
-            gap: 12,
+            gap: 'var(--space-3)',
           }}
         >
           <div>
@@ -255,7 +255,7 @@ export default function ConfiguracionPage() {
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 10,
+                gap: 'var(--space-2-5)',
                 marginBottom: 5,
               }}
             >
@@ -272,7 +272,7 @@ export default function ConfiguracionPage() {
               <span
                 style={{
                   fontFamily: 'var(--font-data)',
-                  fontSize: 13,
+                  fontSize: 'var(--text-sm)',
                   fontWeight: 700,
                   letterSpacing: '0.1em',
                   textTransform: 'uppercase',
@@ -286,7 +286,7 @@ export default function ConfiguracionPage() {
             <div
               style={{
                 fontFamily: 'var(--font-ui)',
-                fontSize: 12,
+                fontSize: 'var(--text-xs)',
                 color: 'var(--text-muted)',
                 paddingLeft: 13,
               }}
@@ -310,7 +310,7 @@ export default function ConfiguracionPage() {
               cursor: 'pointer',
               fontFamily: 'var(--font-ui)',
               fontWeight: 600,
-              fontSize: 12,
+              fontSize: 'var(--text-xs)',
               color: 'white',
               transition: 'background 0.15s ease',
             }}
@@ -354,7 +354,7 @@ export default function ConfiguracionPage() {
                 background: 'var(--bg-page)',
                 color: 'var(--text-primary)',
                 fontFamily: 'var(--font-ui)',
-                fontSize: 12,
+                fontSize: 'var(--text-xs)',
                 cursor: 'pointer',
               }}
             >
@@ -389,7 +389,7 @@ export default function ConfiguracionPage() {
                 background: 'var(--bg-page)',
                 color: 'var(--text-primary)',
                 fontFamily: 'var(--font-ui)',
-                fontSize: 12,
+                fontSize: 'var(--text-xs)',
                 cursor: 'pointer',
               }}
             >
@@ -458,7 +458,7 @@ export default function ConfiguracionPage() {
               style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: 14,
+                gap: 'var(--space-3-5)',
               }}
             >
 
@@ -498,7 +498,7 @@ export default function ConfiguracionPage() {
                       background: 'var(--bg-page)',
                       color: 'var(--text-primary)',
                       fontFamily: 'var(--font-data)',
-                      fontSize: 12,
+                      fontSize: 'var(--text-xs)',
                       boxSizing: 'border-box',
                     }}
                   />
@@ -506,7 +506,7 @@ export default function ConfiguracionPage() {
                   <span
                     style={{
                       fontFamily: 'var(--font-data)',
-                      fontSize: 12,
+                      fontSize: 'var(--text-xs)',
                       color: 'var(--text-muted)',
                     }}
                   >
@@ -556,7 +556,7 @@ export default function ConfiguracionPage() {
                       background: 'var(--bg-page)',
                       color: 'var(--text-primary)',
                       fontFamily: 'var(--font-data)',
-                      fontSize: 12,
+                      fontSize: 'var(--text-xs)',
                       boxSizing: 'border-box',
                     }}
                   />
@@ -564,7 +564,7 @@ export default function ConfiguracionPage() {
                   <span
                     style={{
                       fontFamily: 'var(--font-data)',
-                      fontSize: 12,
+                      fontSize: 'var(--text-xs)',
                       color: 'var(--text-muted)',
                     }}
                   >
@@ -614,7 +614,7 @@ export default function ConfiguracionPage() {
                       background: 'var(--bg-page)',
                       color: 'var(--text-primary)',
                       fontFamily: 'var(--font-data)',
-                      fontSize: 12,
+                      fontSize: 'var(--text-xs)',
                       boxSizing: 'border-box',
                     }}
                   />
@@ -622,7 +622,7 @@ export default function ConfiguracionPage() {
                   <span
                     style={{
                       fontFamily: 'var(--font-data)',
-                      fontSize: 12,
+                      fontSize: 'var(--text-xs)',
                       color: 'var(--text-muted)',
                     }}
                   >
@@ -640,14 +640,14 @@ export default function ConfiguracionPage() {
             {/* Nota */}
             <div
               style={{
-                marginTop: 16,
+                marginTop: 'var(--space-4)',
                 padding: '10px 12px',
                 background: 'rgba(156,54,16,0.05)',
                 border: '1px solid rgba(156,54,16,0.12)',
                 borderRadius: 7,
                 display: 'flex',
                 alignItems: 'flex-start',
-                gap: 8,
+                gap: 'var(--space-2)',
               }}
             >
               <Activity
@@ -662,7 +662,7 @@ export default function ConfiguracionPage() {
               <div
                 style={{
                   fontFamily: 'var(--font-ui)',
-                  fontSize: 11,
+                  fontSize: 'var(--text-2xs)',
                   lineHeight: 1.5,
                   color: 'var(--text-muted)',
                 }}
@@ -707,7 +707,7 @@ export default function ConfiguracionPage() {
                   alignItems: 'center',
                   gap: 7,
                   fontFamily: 'var(--font-ui)',
-                  fontSize: 13,
+                  fontSize: 'var(--text-sm)',
                   fontWeight: 600,
                   color: 'var(--text-primary)',
                 }}
@@ -737,7 +737,7 @@ export default function ConfiguracionPage() {
               <div
                 style={{
                   fontFamily: 'var(--font-data)',
-                  fontSize: 13,
+                  fontSize: 'var(--text-sm)',
                   color: 'var(--text-primary)',
                 }}
               >
@@ -760,7 +760,7 @@ export default function ConfiguracionPage() {
                   alignItems: 'center',
                   gap: 7,
                   fontFamily: 'var(--font-ui)',
-                  fontSize: 13,
+                  fontSize: 'var(--text-sm)',
                   color: 'var(--text-primary)',
                 }}
               >
@@ -786,7 +786,7 @@ export default function ConfiguracionPage() {
                   alignItems: 'center',
                   gap: 7,
                   fontFamily: 'var(--font-ui)',
-                  fontSize: 13,
+                  fontSize: 'var(--text-sm)',
                   color: 'var(--text-primary)',
                 }}
               >

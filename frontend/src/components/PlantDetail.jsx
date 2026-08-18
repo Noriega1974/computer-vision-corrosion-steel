@@ -10,9 +10,9 @@ const CustomTooltip = ({ active, payload, label }) => {
   return (
     <div style={{
       background: 'var(--bg-section)', border: '1px solid var(--border)',
-      padding: '8px 12px', fontFamily: 'var(--font-data)', fontSize: 11,
+      padding: '8px 12px', fontFamily: 'var(--font-data)', fontSize: 'var(--text-2xs)',
     }}>
-      <div style={{ color: 'var(--text-muted)', marginBottom: 4 }}>{label}</div>
+      <div style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-1)' }}>{label}</div>
       <div style={{ color: '#B83700' }}>
         Área: <strong>{payload[0]?.value?.toFixed(1)}%</strong>
       </div>
@@ -29,13 +29,13 @@ export default function PlantDetail({ punto }) {
         background: 'var(--bg-card)', border: '1px solid var(--border)',
         height: '100%', display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center',
-        color: 'var(--text-muted)', gap: 12,
+        color: 'var(--text-muted)', gap: 'var(--space-3)',
       }}>
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" opacity="0.3">
           <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="#7a9ab5" strokeWidth="1.5"/>
           <circle cx="12" cy="9" r="2.5" stroke="#7a9ab5" strokeWidth="1.5"/>
         </svg>
-        <div style={{ fontSize: 11, letterSpacing: '0.15em', textTransform: 'uppercase', textAlign: 'center', padding: '0 16px' }}>
+        <div style={{ fontSize: 'var(--text-2xs)', letterSpacing: '0.15em', textTransform: 'uppercase', textAlign: 'center', padding: '0 16px' }}>
           Selecciona una planta en el mapa
         </div>
       </div>
@@ -75,7 +75,7 @@ export default function PlantDetail({ punto }) {
             }}>
               {(punto.sede ?? punto.id_punto).toUpperCase()}
             </div>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4, letterSpacing: '0.08em' }}>
+            <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)', marginTop: 'var(--space-1)', letterSpacing: '0.08em' }}>
               {punto.ciudad} · {punto.departamento}
             </div>
           </div>
@@ -84,7 +84,7 @@ export default function PlantDetail({ punto }) {
               padding: '4px 10px',
               background: `${color}15`,
               border: `1px solid ${color}50`,
-              fontSize: 10, fontWeight: 700, color,
+              fontSize: 'var(--text-3xs)', fontWeight: 700, color,
               letterSpacing: '0.1em',
               animation: nivel === 3 ? 'blink 1.2s ease-in-out infinite' : 'none',
             }}>
@@ -94,7 +94,7 @@ export default function PlantDetail({ punto }) {
         </div>
 
         {/* Meta info */}
-        <div style={{ display: 'flex', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-2)', flexWrap: 'wrap' }}>
           {[
             { l: 'Mediciones', v: mediciones.length },
           ].map(({ l, v }) => (
@@ -107,7 +107,7 @@ export default function PlantDetail({ punto }) {
 
         {/* Clima de la última medición */}
         {ultimaMedicion?.clima && (
-          <div style={{ display: 'flex', gap: 14, marginTop: 10, flexWrap: 'wrap', paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', gap: 'var(--space-3-5)', marginTop: 'var(--space-2-5)', flexWrap: 'wrap', paddingTop: 'var(--space-2)', borderTop: '1px solid var(--border)' }}>
             {[
               { icon: '🌡', label: 'Temp.', v: ultimaMedicion.clima.temperatura_c != null ? `${ultimaMedicion.clima.temperatura_c}°C` : null },
               { icon: '💧', label: 'Humedad', v: ultimaMedicion.clima.humedad_pct != null ? `${ultimaMedicion.clima.humedad_pct}%` : null },
@@ -115,8 +115,8 @@ export default function PlantDetail({ punto }) {
               { icon: '💨', label: 'Viento', v: ultimaMedicion.clima.velocidad_viento_kmh != null ? `${ultimaMedicion.clima.velocidad_viento_kmh} km/h` : null },
             ].filter(x => x.v).map(({ icon, label, v }) => (
               <div key={label} style={{ textAlign: 'center', minWidth: 44 }}>
-                <div style={{ fontSize: 12, lineHeight: 1 }}>{icon}</div>
-                <div style={{ fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 11, color: 'var(--text-primary)', marginTop: 2 }}>{v}</div>
+                <div style={{ fontSize: 'var(--text-xs)', lineHeight: 1 }}>{icon}</div>
+                <div style={{ fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 'var(--text-2xs)', color: 'var(--text-primary)', marginTop: 2 }}>{v}</div>
                 <div style={{ fontSize: 8, color: 'var(--text-muted)', letterSpacing: '0.08em' }}>{label.toUpperCase()}</div>
               </div>
             ))}
@@ -130,7 +130,7 @@ export default function PlantDetail({ punto }) {
       {/* Gráfica de tendencia */}
       {trendData.length > 1 && (
         <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.12em', marginBottom: 8 }}>
+          <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)', letterSpacing: '0.12em', marginBottom: 'var(--space-2)' }}>
             TENDENCIA — ÁREA CORROÍDA (%)
           </div>
           <ResponsiveContainer width="100%" height={70}>
@@ -151,21 +151,21 @@ export default function PlantDetail({ punto }) {
       )}
 
       {/* Historial de mediciones */}
-      <div style={{ flex: 1, overflow: 'auto', padding: 8 }}>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.12em', padding: '4px 8px 8px' }}>
+      <div style={{ flex: 1, overflow: 'auto', padding: 'var(--space-2)' }}>
+        <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)', letterSpacing: '0.12em', padding: '4px 8px 8px' }}>
           HISTORIAL DE MEDICIONES
         </div>
 
         {loading && (
-          <div style={{ textAlign: 'center', padding: 20, fontSize: 11, color: 'var(--text-muted)' }}>
+          <div style={{ textAlign: 'center', padding: 20, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>
             Cargando…
           </div>
         )}
         {!loading && error && (
-          <div style={{ padding: 12, fontSize: 11, color: 'var(--accent-red)' }}>Error: {error}</div>
+          <div style={{ padding: 'var(--space-3)', fontSize: 'var(--text-2xs)', color: 'var(--accent-red)' }}>Error: {error}</div>
         )}
         {!loading && !error && mediciones.length === 0 && (
-          <div style={{ textAlign: 'center', padding: 20, fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
+          <div style={{ textAlign: 'center', padding: 20, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
             Sin mediciones registradas para esta planta.
           </div>
         )}
@@ -181,7 +181,7 @@ export default function PlantDetail({ punto }) {
             alto de nada mas alrededor. */}
         <div
           style={{
-            display: 'flex', flexDirection: 'column', gap: 4,
+            display: 'flex', flexDirection: 'column', gap: 'var(--space-1)',
             maxHeight: 280, overflowY: 'auto', overscrollBehavior: 'contain',
             paddingRight: 2,
           }}
@@ -207,7 +207,7 @@ function MedicionRow({ medicion }) {
       padding: '8px 10px',
       background: 'var(--bg-section)',
       border: '1px solid var(--border)',
-      display: 'flex', alignItems: 'center', gap: 8,
+      display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
       borderLeft: `3px solid ${color}`,
     }}>
       {/* Miniatura */}
@@ -231,7 +231,7 @@ function MedicionRow({ medicion }) {
 
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-          <span style={{ fontSize: 10, fontWeight: 600, color, fontFamily: 'var(--font-data)' }}>
+          <span style={{ fontSize: 'var(--text-3xs)', fontWeight: 600, color, fontFamily: 'var(--font-data)' }}>
             {nivelLabel(nivel)}
           </span>
           <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>{fecha}</span>
