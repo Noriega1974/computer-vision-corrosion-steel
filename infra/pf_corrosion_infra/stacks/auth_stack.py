@@ -2,9 +2,9 @@
 CorriaAuthStack — Cognito User Pool.
 
 Mirrors the source system exactly (same shape): email as the username
-attribute, password policy, and three groups (admin, tecnico, cliente).
-No changes vs. the source were required here — the users/auth system stays
-as-is per project decision.
+attribute, password policy, and four groups (admin, superadmin, tecnico,
+cliente). Added `custom:organization_id` to support multi-tenant
+scoping — see PF-corrosion adaptation notes.
 """
 from aws_cdk import (
     Stack,
@@ -27,6 +27,11 @@ class CorriaAuthStack(Stack):
             sign_in_aliases=cognito.SignInAliases(email=True, username=False),
             sign_in_case_sensitive=False,
             auto_verify=cognito.AutoVerifiedAttrs(email=True),
+            custom_attributes={
+                "organization_id": cognito.StringAttribute(
+                    min_len=1, max_len=100, mutable=True
+                ),
+            },
             password_policy=cognito.PasswordPolicy(
                 min_length=8,
                 require_lowercase=True,
@@ -40,20 +45,39 @@ class CorriaAuthStack(Stack):
             removal_policy=RemovalPolicy.RETAIN,
         )
 
+        # read_attributes/write_attributes deben declarar explícitamente el
+        # custom attribute, o no se propaga al ID token pese a existir en el pool.
+        client_read_write_attrs = (
+            cognito.ClientAttributes()
+            .with_standard_attributes(email=True)
+            .with_custom_attributes("organization_id")
+        )
+
         self.user_pool_client = self.user_pool.add_client(
             "CorriaWebClient",
             user_pool_client_name="pf-corrosion-web-client",
             auth_flows=cognito.AuthFlow(user_password=True, user_srp=True),
             generate_secret=False,
+            read_attributes=client_read_write_attrs,
+            write_attributes=client_read_write_attrs,
         )
 
-        # Groups mirror the source system's RBAC model: admin, tecnico, cliente.
+        # Groups mirror the source system's RBAC model, plus `superadmin`
+        # for cross-tenant access (see PF-corrosion adaptation notes).
+        cognito.CfnUserPoolGroup(
+            self,
+            "SuperadminGroup",
+            user_pool_id=self.user_pool.user_pool_id,
+            group_name="superadmin",
+            description="Acceso total a todas las organizaciones",
+            precedence=0,
+        )
         cognito.CfnUserPoolGroup(
             self,
             "AdminGroup",
             user_pool_id=self.user_pool.user_pool_id,
             group_name="admin",
-            description="Administradores con acceso total",
+            description="Administradores con acceso total a su propia organización",
             precedence=1,
         )
         cognito.CfnUserPoolGroup(
