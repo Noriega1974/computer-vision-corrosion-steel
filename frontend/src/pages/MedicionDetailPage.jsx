@@ -138,7 +138,9 @@ export default function MedicionDetailPage() {
   const [eliminando, setEliminando] = useState(false);
   const [errorEliminar, setErrorEliminar] = useState('');
 
-  const isAdmin = user?.groups?.includes('admin');
+  const isAdmin =
+    user?.groups?.includes('super_admin') ||
+    user?.groups?.includes('admin');
 
   // Volver a galería preservando filtros si vienen del state de navegación
   function handleBack() {
