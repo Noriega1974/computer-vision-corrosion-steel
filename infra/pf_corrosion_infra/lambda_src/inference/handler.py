@@ -9,10 +9,18 @@ Almacenamiento: tabla fusionada puntos+mediciones (ver CorriaStorageStack).
 El registro del punto usa sort key constante "METADATA"; la medición usa
 "MED#{timestamp}".
 
-Seguridad: esta función solo tiene permisos sobre la tabla fusionada y el
-bucket S3 de imágenes — NO tiene acceso a la tabla de usuarios ni a Cognito,
-porque el código de este handler nunca los toca (a diferencia del sistema
-original, que le otorgaba permisos de más).
+Seguridad: esta función tiene permisos sobre la tabla fusionada y el bucket
+S3 de imágenes, más un grant de SOLO LECTURA sobre la tabla de usuarios
+(RBAC multi-empresa: necesita resolver el rol/empresa_id de quien sube la
+medición) — sigue sin tener ningún permiso de Cognito ni de escritura sobre
+`usuarios` (a diferencia del sistema original, que le otorgaba permisos de
+más).
+
+RBAC multi-empresa: `empresa_id` de cada punto/medición se resuelve SIEMPRE
+del usuario autenticado (`_usuario_actual`, replicado de
+api_usuarios/handler.py — no hay módulo compartido entre lambdas), nunca de
+un campo del body. El rol `cliente` no puede subir mediciones (403) — solo
+super_admin/admin/tecnico.
 """
 import base64
 import io
@@ -38,6 +46,7 @@ logger.setLevel(logging.INFO)
 BUCKET_NAME = os.environ["BUCKET_NAME"]
 TABLA_PUNTOS = os.environ["TABLA_PUNTOS"]
 TABLA_MEDICIONES = os.environ["TABLA_MEDICIONES"]
+TABLA_USUARIOS = os.environ["TABLA_USUARIOS"]
 REGION = os.environ["REGION"]
 
 RUTA_MODELO = Path(__file__).parent / "model" / "yolov8n-seg.onnx"
@@ -54,6 +63,7 @@ s3 = boto3.client("s3", region_name=REGION)
 dynamodb = boto3.resource("dynamodb", region_name=REGION)
 tabla_puntos = dynamodb.Table(TABLA_PUNTOS)
 tabla_mediciones = dynamodb.Table(TABLA_MEDICIONES)
+tabla_usuarios = dynamodb.Table(TABLA_USUARIOS)
 
 
 # ── Helpers de tipo ─────────────────────────────────────────────────────────
@@ -91,6 +101,23 @@ def _claims(event: dict) -> dict:
     return event.get("requestContext", {}).get("authorizer", {}).get("claims", {})
 
 
+def _usuario_actual(event: dict) -> dict | None:
+    """Resuelve el ítem completo (rol, empresa_id, id_usuario, ...) del
+    usuario autenticado a partir de `sub` (claim del JWT), vía el GSI
+    cognito-sub-index de la tabla `usuarios`. Replicado igual en
+    api_usuarios/handler.py — no hay módulo compartido entre lambdas."""
+    sub = _claims(event).get("sub", "")
+    if not sub:
+        return None
+    resp = tabla_usuarios.query(
+        IndexName="cognito-sub-index",
+        KeyConditionExpression=Key("cognito_sub").eq(sub),
+        Limit=1,
+    )
+    items = resp.get("Items", [])
+    return items[0] if items else None
+
+
 # ── Resolución de punto ──────────────────────────────────────────────────────
 
 def _buscar_por_clave_logica(clave_logica: str) -> dict | None:
@@ -110,7 +137,10 @@ def _crear_punto(datos: dict) -> dict:
     return datos
 
 
-def _resolver_punto(ubicacion: dict, ts: str, tomado_por_id: str) -> tuple[str, dict]:
+def _resolver_punto(
+    ubicacion: dict, ts: str, tomado_por_id: str, empresa_id: str | None,
+    es_super_admin: bool = False, tomado_por_nombre: str = "",
+) -> tuple[str, dict]:
     modo = ubicacion.get("modo")
 
     if modo == "planta_existente":
@@ -120,6 +150,10 @@ def _resolver_punto(ubicacion: dict, ts: str, tomado_por_id: str) -> tuple[str, 
         resp = tabla_puntos.get_item(Key={"id_punto": id_punto, "sk": SK_METADATA})
         punto = resp.get("Item")
         if not punto:
+            raise LookupError(f"Punto {id_punto} no encontrado")
+        # Ver/usar datos de otra empresa es exclusivo de super_admin — un
+        # 404 (no un 403) para no revelar que el punto existe.
+        if not es_super_admin and punto.get("empresa_id") != empresa_id:
             raise LookupError(f"Punto {id_punto} no encontrado")
         return id_punto, punto
 
@@ -157,6 +191,12 @@ def _resolver_punto(ubicacion: dict, ts: str, tomado_por_id: str) -> tuple[str, 
         if tomado_por_id:
             nuevo["creado_por_id"] = tomado_por_id
             nuevo["usuario_id"] = tomado_por_id
+            if tomado_por_nombre:
+                nuevo["creado_por_nombre"] = tomado_por_nombre
+        # empresa_id del recurso SIEMPRE se resuelve del creador autenticado
+        # (ver lambda_handler), nunca de un campo del body/ubicacion.
+        if empresa_id:
+            nuevo["empresa_id"] = empresa_id
         _crear_punto(nuevo)
         return nuevo["id_punto"], nuevo
 
@@ -188,6 +228,10 @@ def _resolver_punto(ubicacion: dict, ts: str, tomado_por_id: str) -> tuple[str, 
         if tomado_por_id:
             nuevo["creado_por_id"] = tomado_por_id
             nuevo["usuario_id"] = tomado_por_id
+            if tomado_por_nombre:
+                nuevo["creado_por_nombre"] = tomado_por_nombre
+        if empresa_id:
+            nuevo["empresa_id"] = empresa_id
         _crear_punto(nuevo)
         return nuevo["id_punto"], nuevo
 
@@ -491,6 +535,14 @@ def _obtener_clima(lat: float, lng: float, fecha: str | None = None) -> dict | N
 
 def lambda_handler(event: dict, context) -> dict:
     try:
+        creador = _usuario_actual(event)
+        if creador and creador.get("rol") == "cliente":
+            # Subir medición: solo super_admin/admin/tecnico (ver matriz de
+            # permisos) — cliente es de solo lectura.
+            return _respuesta(403, {"error": "Tu rol no puede subir mediciones"})
+        es_super_admin = bool(creador) and creador.get("rol") == "super_admin"
+        empresa_id_creador = creador.get("empresa_id") if creador else None
+
         body = json.loads(event.get("body", "{}"))
 
         imagen_b64       = body.get("imagen_base64")
@@ -516,9 +568,17 @@ def lambda_handler(event: dict, context) -> dict:
             ts = datetime.now(timezone.utc).isoformat()
 
         tomado_por_id = _claims(event).get("sub", "")
+        # Foto fija del nombre al momento de tomar la medición -- sigue
+        # siendo legible en el histórico aunque la cuenta se borre después
+        # (a diferencia de tomado_por_id/usuario_id, que dejan de resolverse
+        # a nadie si esa cuenta ya no existe).
+        tomado_por_nombre = creador.get("nombre", "") if creador else ""
 
         try:
-            id_punto, info_punto = _resolver_punto(ubicacion, ts, tomado_por_id)
+            id_punto, info_punto = _resolver_punto(
+                ubicacion, ts, tomado_por_id, empresa_id_creador, es_super_admin,
+                tomado_por_nombre=tomado_por_nombre,
+            )
         except LookupError as e:
             return _respuesta(404, {"error": str(e)})
         except ValueError as e:
@@ -629,6 +689,8 @@ def lambda_handler(event: dict, context) -> dict:
                 # "usuario_id" solo se agrega cuando hay un usuario real.
                 item_db["tomado_por_id"] = tomado_por_id
                 item_db["usuario_id"] = tomado_por_id
+                if tomado_por_nombre:
+                    item_db["creado_por_nombre"] = tomado_por_nombre
             if latitud_real is not None:
                 item_db["latitud_real"] = Decimal(str(latitud_real))
             if longitud_real is not None:
@@ -638,6 +700,12 @@ def lambda_handler(event: dict, context) -> dict:
             # Denormalize punto info for display without extra lookup
             item_db["sede"]    = info_punto.get("sede", "")
             item_db["ciudad"]  = info_punto.get("ciudad", "")
+            # empresa_id de la medición: la del punto al que pertenece (no
+            # la del uploader — relevante si un super_admin sube a nombre de
+            # una empresa ajena) — denormalizado para que api_mediciones/
+            # api_alertas puedan filtrar sin un lookup extra al punto.
+            if info_punto.get("empresa_id"):
+                item_db["empresa_id"] = info_punto.get("empresa_id")
 
             tabla_mediciones.put_item(Item=item_db)
         except Exception as e:

@@ -4,7 +4,34 @@ import {
   RefreshCw, UserX, Trash2, ChevronUp, ChevronDown, Clock,
 } from 'lucide-react';
 import { useGestionUsuarios } from '../hooks/useUsuarios';
+import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
+
+// ─── RBAC multi-empresa ────────────────────────────────────────────────────
+// Jerarquía de creación de usuarios, espejo de CREATABLE_ROLES en
+// api_usuarios/handler.py — super_admin es la única excepción que puede
+// crear su propio rango.
+const CREATABLE_ROLES = {
+  super_admin: ['super_admin', 'admin', 'tecnico', 'cliente'],
+  admin: ['tecnico', 'cliente'],
+  tecnico: ['cliente'],
+  cliente: [],
+};
+
+const TODOS_ROLES = [
+  { value: 'super_admin', label: 'Super Admin' },
+  { value: 'admin', label: 'Administrador' },
+  { value: 'tecnico', label: 'Técnico' },
+  { value: 'cliente', label: 'Cliente' },
+];
+
+function getRol(groups = []) {
+  if (groups.includes('super_admin')) return 'super_admin';
+  if (groups.includes('admin')) return 'admin';
+  if (groups.includes('tecnico')) return 'tecnico';
+  if (groups.includes('cliente')) return 'cliente';
+  return null;
+}
 
 // ─── Skeleton ────────────────────────────────────────────────────────────────
 function SkeletonRow() {
@@ -21,6 +48,7 @@ function SkeletonRow() {
 
 // ─── Role badge ──────────────────────────────────────────────────────────────
 const ROL_STYLES = {
+  super_admin: { bg: 'rgba(124,58,237,0.12)', color: '#7c3aed', label: 'Super Admin' },
   admin:   { bg: 'rgba(37,99,235,0.12)',  color: '#2563eb',  label: 'Administrador' },
   tecnico: { bg: 'rgba(59,130,246,0.10)', color: '#3b82f6',  label: 'Técnico' },
   cliente: { bg: 'rgba(100,116,139,0.1)', color: '#64748b',  label: 'Cliente' },
@@ -105,11 +133,19 @@ const labelStyle = {
 };
 
 // ─── Formulario de usuario ────────────────────────────────────────────────────
-function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error }) {
+// `rolesPermitidos` limita el selector de rol al crear (según CREATABLE_ROLES
+// del usuario logueado) — defensa en profundidad, la validación real ya está
+// en el backend. Al editar se muestran los 4 roles sin restricción (fuera de
+// alcance de esta tarea: el backend tampoco valida CREATABLE_ROLES en PUT).
+function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error, rolesPermitidos }) {
+  const opcionesRol = isEdit
+    ? TODOS_ROLES
+    : TODOS_ROLES.filter(r => (rolesPermitidos ?? []).includes(r.value));
+
   const [form, setForm] = useState({
     email: initial.email ?? '',
     nombre: initial.nombre ?? initial.name ?? '',
-    rol: initial.rol ?? initial.role ?? 'tecnico',
+    rol: initial.rol ?? initial.role ?? opcionesRol[0]?.value ?? 'cliente',
   });
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
@@ -147,9 +183,9 @@ function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error }) {
           Rol *
         </label>
         <select id="usuario-rol" name="rol" value={form.rol} onChange={set('rol')} style={inputStyle}>
-          <option value="admin">Administrador</option>
-          <option value="tecnico">Técnico</option>
-          <option value="cliente">Cliente</option>
+          {opcionesRol.map(r => (
+            <option key={r.value} value={r.value}>{r.label}</option>
+          ))}
         </select>
       </div>
       {error && (
@@ -326,9 +362,19 @@ function ColaboradorForm({ onSubmit, saving, error }) {
 // ─── UsersPage ────────────────────────────────────────────────────────────────
 export default function UsersPage() {
   const { user: me } = useAuth();
-  const isAdmin = me?.groups?.includes('admin');
+  const miRol = getRol(me?.groups ?? []);
+  // "isAdmin" controla listar/editar/deshabilitar/eliminar — sigue siendo
+  // admin/super_admin únicamente (tecnico solo puede dar de alta cliente,
+  // no lista ni edita, según la matriz de permisos).
+  const isAdmin = miRol === 'admin' || miRol === 'super_admin';
+  const rolesCreables = CREATABLE_ROLES[miRol] ?? [];
+  const puedeCrear = rolesCreables.length > 0;
 
   const { usuarios, loading, mutating, mutError, crearUsuario, crearColaborador, editarUsuario, deshabilitarUsuario, habilitarUsuario, eliminarUsuario } = useGestionUsuarios();
+  // Perfil propio: única forma de conocer el empresa_id del usuario logueado
+  // en el frontend (no viaja en el JWT/user de useAuth) — se usa solo para
+  // el filtro cliente-side de abajo, defensa en profundidad.
+  const { perfil: miPerfil } = useUsuarioPerfil();
 
   const [search, setSearch] = useState('');
   const [editUsuario, setEditUsuario] = useState(null);
@@ -352,6 +398,12 @@ export default function UsersPage() {
       (u.email ?? '').toLowerCase().includes(q) ||
       (u.nombre ?? u.name ?? '').toLowerCase().includes(q)
     );
+
+    // Defensa en profundidad: filtrar por empresa_id igual que el backend
+    // (que ya devuelve la lista scopeada) — super_admin ve todas.
+    if (miRol !== 'super_admin' && miPerfil?.empresa_id) {
+      list = list.filter(u => u.empresa_id === miPerfil.empresa_id);
+    }
 
     if (sortCol && sortDir) {
       list = [...list].sort((a, b) => {
@@ -377,7 +429,7 @@ export default function UsersPage() {
     }
 
     return list;
-  }, [usuarios, search, sortCol, sortDir]);
+  }, [usuarios, search, sortCol, sortDir, miRol, miPerfil]);
 
   function handleSort(col) {
     const dir = nextDir(col, sortCol, sortDir);
@@ -464,28 +516,47 @@ export default function UsersPage() {
               Gestión de usuarios
             </span>
           </div>
-          {isAdmin && (
+          {(isAdmin || puedeCrear) && (
             <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-              <button onClick={() => { setShowColaborador(true); setFormError(null); }} style={{
-                display: 'inline-flex', alignItems: 'center', gap: 7,
-                padding: '8px 14px', background: 'transparent',
-                border: '1px solid var(--accent-amber)', borderRadius: 8,
-                cursor: 'pointer', fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
-                color: 'var(--accent-amber)',
-              }}>
-                <Clock size={14} /> Añadir colaborador
-              </button>
-              <button onClick={() => { setShowCreate(true); setFormError(null); }} style={{
-                display: 'inline-flex', alignItems: 'center', gap: 7,
-                padding: '8px 14px', background: 'var(--accent-amber)', border: 'none',
-                borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)', color: 'white',
-              }}>
-                <Plus size={14} /> Nuevo usuario
-              </button>
+              {/* Colaborador temporal: sigue siendo admin/super_admin
+                  únicamente (endpoint /colaborador sin cambios). */}
+              {isAdmin && (
+                <button onClick={() => { setShowColaborador(true); setFormError(null); }} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 7,
+                  padding: '8px 14px', background: 'transparent',
+                  border: '1px solid var(--accent-amber)', borderRadius: 8,
+                  cursor: 'pointer', fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
+                  color: 'var(--accent-amber)',
+                }}>
+                  <Clock size={14} /> Añadir colaborador
+                </button>
+              )}
+              {/* Nuevo usuario: super_admin/admin/tecnico (tecnico solo
+                  puede dar de alta cliente -- el selector de rol del form
+                  se limita a CREATABLE_ROLES[miRol]). */}
+              {puedeCrear && (
+                <button onClick={() => { setShowCreate(true); setFormError(null); }} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 7,
+                  padding: '8px 14px', background: 'var(--accent-amber)', border: 'none',
+                  borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)', color: 'white',
+                }}>
+                  <Plus size={14} /> Nuevo usuario
+                </button>
+              )}
             </div>
           )}
         </div>
 
+        {/* tecnico no lista usuarios (backend responde 403 a GET /usuarios) --
+            solo puede dar de alta un cliente con el botón de arriba. */}
+        {!isAdmin && (
+          <div style={{ padding: '10px 14px', background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>
+            Tu rol no tiene acceso al listado de usuarios.
+          </div>
+        )}
+
+        {isAdmin && (
+        <>
         {/* Buscador */}
         <div style={{ marginBottom: 'var(--space-4)' }}>
           <input
@@ -614,6 +685,8 @@ export default function UsersPage() {
             </table>
           </div>
         </div>
+        </>
+        )}
       </div>
 
       {/* ── Modal: Editar usuario ── */}
@@ -626,7 +699,7 @@ export default function UsersPage() {
       {/* ── Modal: Crear usuario ── */}
       {showCreate && (
         <Modal title="Nuevo usuario" onClose={() => setShowCreate(false)}>
-          <UsuarioForm onSubmit={handleCreate} saving={mutating} error={formError} />
+          <UsuarioForm onSubmit={handleCreate} saving={mutating} error={formError} rolesPermitidos={rolesCreables} />
         </Modal>
       )}
 

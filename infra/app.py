@@ -26,6 +26,7 @@ compute_stack = CorriaComputeStack(
     "CorriaComputeStack",
     env=env,
     usuarios_table=storage_stack.usuarios_table,
+    empresas_table=storage_stack.empresas_table,
     puntos_mediciones_table=storage_stack.puntos_mediciones_table,
     images_bucket=storage_stack.images_bucket,
     user_pool=auth_stack.user_pool,

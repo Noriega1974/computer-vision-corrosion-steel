@@ -6,10 +6,17 @@ medición usan sort key "MED#{timestamp}"; el registro del punto padre
 usa sort key constante "METADATA" (ver lambda_src/api_puntos).
 
 Rutas:
-  GET    /mediciones/{id_punto}    → historial de un punto (cualquier rol)
-  GET    /mediciones/recientes     → últimas N mediciones de todos los puntos (cualquier rol)
-  DELETE /mediciones/{id_punto}    → elimina una medición puntual (solo admin)
+  GET    /mediciones/{id_punto}    → historial de un punto, filtrado por empresa (cualquier rol)
+  GET    /mediciones/recientes     → últimas N mediciones, filtrado por empresa (cualquier rol)
+  DELETE /mediciones/{id_punto}    → elimina una medición puntual (admin/super_admin)
                                       requiere querystring ?id_medicion=MED-...
+
+RBAC multi-empresa: no hay POST acá (la creación de mediciones ocurre en
+lambda_src/inference, ver ese handler para el bloqueo de `cliente` y la
+resolución de empresa_id al crear). Esta lambda solo lee/borra, así que el
+único cambio es filtrar por el empresa_id del caller (`_usuario_actual`,
+replicado de api_usuarios/handler.py — no hay módulo compartido entre
+lambdas) salvo que sea super_admin, que ve todas las empresas.
 """
 import json
 import logging
@@ -17,12 +24,13 @@ import os
 from decimal import Decimal
 
 import boto3
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Attr, Key
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 TABLA_MEDICIONES = os.environ["TABLA_MEDICIONES"]
+TABLA_USUARIOS = os.environ["TABLA_USUARIOS"]
 BUCKET_NAME = os.environ["BUCKET_NAME"]
 REGION = os.environ["REGION"]
 
@@ -30,6 +38,7 @@ SK_MEDICION_PREFIJO = "MED#"
 
 dynamodb = boto3.resource("dynamodb", region_name=REGION)
 tabla = dynamodb.Table(TABLA_MEDICIONES)
+tabla_usuarios = dynamodb.Table(TABLA_USUARIOS)
 s3 = boto3.client("s3", region_name=REGION)
 
 
@@ -57,8 +66,25 @@ def _claims(event: dict) -> dict:
 
 
 def _es_admin(event: dict) -> bool:
-    grupos = _claims(event).get("cognito:groups", "") or ""
-    return "admin" in grupos.split(",")
+    grupos = set((_claims(event).get("cognito:groups", "") or "").split(","))
+    return bool(grupos & {"admin", "super_admin"})
+
+
+def _usuario_actual(event: dict) -> dict | None:
+    """Resuelve el ítem completo (rol, empresa_id, id_usuario, ...) del
+    usuario autenticado a partir de `sub` (claim del JWT), vía el GSI
+    cognito-sub-index de la tabla `usuarios`. Replicado igual en
+    api_usuarios/handler.py — no hay módulo compartido entre lambdas."""
+    sub = _claims(event).get("sub", "")
+    if not sub:
+        return None
+    resp = tabla_usuarios.query(
+        IndexName="cognito-sub-index",
+        KeyConditionExpression=Key("cognito_sub").eq(sub),
+        Limit=1,
+    )
+    items = resp.get("Items", [])
+    return items[0] if items else None
 
 
 def _agregar_url_imagen(items: list) -> list:
@@ -99,7 +125,8 @@ def _agregar_url_imagen(items: list) -> list:
 
 
 def _eliminar_medicion(event: dict, id_punto: str) -> dict:
-    if not _es_admin(event):
+    creador = _usuario_actual(event)
+    if not creador or creador.get("rol") not in ("admin", "super_admin"):
         return _respuesta(403, {"error": "Solo administradores pueden eliminar mediciones"})
 
     qp = event.get("queryStringParameters") or {}
@@ -112,6 +139,8 @@ def _eliminar_medicion(event: dict, id_punto: str) -> dict:
     )
     item = next((i for i in resp.get("Items", []) if i.get("id_medicion") == id_medicion), None)
     if not item:
+        return _respuesta(404, {"error": "Medición no encontrada"})
+    if creador.get("rol") != "super_admin" and item.get("empresa_id") != creador.get("empresa_id"):
         return _respuesta(404, {"error": "Medición no encontrada"})
 
     tabla.delete_item(Key={"id_punto": id_punto, "sk": item["sk"]})
@@ -142,14 +171,20 @@ def lambda_handler(event: dict, context) -> dict:
         if resource == "/mediciones/recientes":
             qp = event.get("queryStringParameters") or {}
             limite = min(int(qp.get("limit", 20)), 100)  # máximo 100
+            creador = _usuario_actual(event)
 
             # GSI tipo-timestamp-index: PK="medicion" constante, SK=timestamp DESC
-            resp = tabla.query(
+            kwargs = dict(
                 IndexName="tipo-timestamp-index",
                 KeyConditionExpression=Key("tipo_registro").eq("medicion"),
                 ScanIndexForward=False,   # más reciente primero
                 Limit=limite,
             )
+            if not creador or creador.get("rol") != "super_admin":
+                # Ver datos de otra empresa es exclusivo de super_admin.
+                empresa_id = creador.get("empresa_id") if creador else None
+                kwargs["FilterExpression"] = Attr("empresa_id").eq(empresa_id)
+            resp = tabla.query(**kwargs)
             items = _agregar_url_imagen(resp.get("Items", []))
             return _respuesta(200, {
                 "total": len(items),
@@ -160,12 +195,17 @@ def lambda_handler(event: dict, context) -> dict:
         elif id_punto:
             qp = event.get("queryStringParameters") or {}
             limite = min(int(qp.get("limite", 50)), 200)
+            creador = _usuario_actual(event)
 
-            resp = tabla.query(
+            kwargs = dict(
                 KeyConditionExpression=Key("id_punto").eq(id_punto) & Key("sk").begins_with(SK_MEDICION_PREFIJO),
                 ScanIndexForward=False,   # más reciente primero
                 Limit=limite,
             )
+            if not creador or creador.get("rol") != "super_admin":
+                empresa_id = creador.get("empresa_id") if creador else None
+                kwargs["FilterExpression"] = Attr("empresa_id").eq(empresa_id)
+            resp = tabla.query(**kwargs)
             items = _agregar_url_imagen(resp.get("Items", []))
             return _respuesta(200, {
                 "id_punto": id_punto,
