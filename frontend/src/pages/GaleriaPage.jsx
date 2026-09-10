@@ -3,6 +3,8 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Upload, AlertCircle } from 'lucide-react';
 import { useMediciones } from '../hooks/useMediciones';
 import { usePuntos } from '../hooks/usePuntos';
+import { useEmpresas } from '../hooks/useEmpresas';
+import { useAuth } from '../auth/AuthContext';
 import { nivelColor, nivelLabel, nivelToStatus } from '../lib/statusUtils';
 
 // ─── Helper: tiempo relativo ─────────────────────────────────────────────────
@@ -153,9 +155,17 @@ export default function GaleriaPage() {
   const sentinelRef = useRef(null);
   const isLoadingMore = useRef(false);
 
+  // Filtro de afiliación: solo tiene sentido para super_admin, que es el
+  // único que ve mediciones de más de una afiliación a la vez (el backend
+  // ya scopea a los demás roles a la suya propia).
+  const { user } = useAuth();
+  const esSuperAdmin = user?.groups?.includes('super_admin');
+  const { empresas } = useEmpresas(esSuperAdmin);
+
   // ─── Filtros ──────────────────────────────────────────────────────────────
   const [nivelFilter, setNivelFilter] = useState('all');
   const [puntoFilter, setPuntoFilter] = useState('');
+  const [empresaFilter, setEmpresaFilter] = useState('');
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
   const [notasQuery, setNotasQuery] = useState('');
@@ -186,6 +196,7 @@ export default function GaleriaPage() {
   const filtered = mediciones.filter(m => {
     if (nivelFilter !== 'all' && (m.nivel_corrosion ?? 0) !== Number(nivelFilter)) return false;
     if (puntoFilter && m.id_punto !== puntoFilter) return false;
+    if (empresaFilter && m.empresa_id !== empresaFilter) return false;
     if (fechaInicio && new Date(m.timestamp) < new Date(fechaInicio)) return false;
     if (fechaFin && new Date(m.timestamp) > new Date(fechaFin + 'T23:59:59')) return false;
     if (debouncedQuery && !(m.notas ?? '').toLowerCase().includes(debouncedQuery.toLowerCase())) return false;
@@ -300,6 +311,27 @@ export default function GaleriaPage() {
           </select>
         </div>
 
+        {/* Dropdown de afiliación -- exclusivo de super_admin, los demás
+            roles ya ven solo las mediciones de la suya (scopeado en el
+            backend), así que este filtro no les aportaría nada. */}
+        {esSuperAdmin && (
+          <div>
+            <label htmlFor="filtro-afiliacion" style={FILTRO_LABEL_STYLE}>AFILIACIÓN</label>
+            <select
+              id="filtro-afiliacion"
+              name="filtro-afiliacion"
+              value={empresaFilter}
+              onChange={e => setEmpresaFilter(e.target.value)}
+              style={{ ...inputStyle, appearance: 'none', paddingRight: 'var(--space-5)' }}
+            >
+              <option value="">Todas las afiliaciones</option>
+              {empresas.map(e => (
+                <option key={e.id_empresa} value={e.id_empresa}>{e.nombre}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Rango de fechas */}
         <div>
           <label htmlFor="filtro-desde" style={FILTRO_LABEL_STYLE}>DESDE</label>
@@ -322,10 +354,10 @@ export default function GaleriaPage() {
         </div>
 
         {/* Botón limpiar filtros */}
-        {(nivelFilter !== 'all' || puntoFilter || fechaInicio || fechaFin || notasQuery) && (
+        {(nivelFilter !== 'all' || puntoFilter || empresaFilter || fechaInicio || fechaFin || notasQuery) && (
           <button
             onClick={() => {
-              setNivelFilter('all'); setPuntoFilter('');
+              setNivelFilter('all'); setPuntoFilter(''); setEmpresaFilter('');
               setFechaInicio(''); setFechaFin(''); setNotasQuery('');
             }}
             style={{
