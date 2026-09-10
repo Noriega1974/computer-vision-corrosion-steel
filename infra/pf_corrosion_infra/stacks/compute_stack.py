@@ -81,6 +81,7 @@ class CorriaComputeStack(Stack):
                 **common_env,
                 "TABLA_USUARIOS": usuarios_table.table_name,
                 "TABLA_EMPRESAS": empresas_table.table_name,
+                "TABLA_PUNTOS_MEDICIONES": puntos_mediciones_table.table_name,
                 "USER_POOL_ID": user_pool.user_pool_id,
             },
         )
@@ -88,6 +89,10 @@ class CorriaComputeStack(Stack):
         # Solo necesita verificar que un empresa_id exista al crear un
         # usuario con empresa explícita (super_admin) — nunca escribe acá.
         empresas_table.grant_read_data(self.api_usuarios_fn)
+        # Solo necesita chequear (vía usuario-timestamp-index) si el usuario
+        # a eliminar permanentemente tiene puntos/mediciones asociados, para
+        # bloquear el borrado en vez de dejarlos huérfanos — nunca escribe acá.
+        puntos_mediciones_table.grant_read_data(self.api_usuarios_fn)
         # Narrow Cognito admin-* actions actually used by the handler
         # (create/delete/enable/disable users, set password, group
         # membership) — mirrors the scoping used in the source account,

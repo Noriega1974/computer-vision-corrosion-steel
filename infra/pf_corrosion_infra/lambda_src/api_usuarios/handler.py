@@ -7,7 +7,9 @@ Rutas API Gateway:
   GET    /usuarios/me                     → perfil propio (cualquier rol)
   PUT    /usuarios/me                     → actualizar perfil propio (cualquier rol)
   PUT    /usuarios/{id_usuario}           → actualizar usuario (admin/super_admin, con alcance de empresa)
-  DELETE /usuarios/{id_usuario}/eliminar  → eliminar usuario permanentemente (admin/super_admin, con alcance de empresa)
+  DELETE /usuarios/{id_usuario}/eliminar  → eliminar usuario permanentemente (admin/super_admin, con alcance de
+                                             empresa; bloqueado con 409 si el usuario tiene puntos/mediciones
+                                             asociados, para no dejarlos huérfanos — usar deshabilitar en ese caso)
   DELETE /usuarios/{id_usuario}           → deshabilitar usuario (admin/super_admin, con alcance de empresa)
   POST   /colaborador                     → crear colaborador temporal con nickname (admin/super_admin)
 
@@ -39,14 +41,16 @@ from boto3.dynamodb.conditions import Key, Attr
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-TABLA_USUARIOS = os.environ["TABLA_USUARIOS"]
-TABLA_EMPRESAS = os.environ["TABLA_EMPRESAS"]
-USER_POOL_ID   = os.environ["USER_POOL_ID"]
-REGION         = os.environ["REGION"]
+TABLA_USUARIOS           = os.environ["TABLA_USUARIOS"]
+TABLA_EMPRESAS           = os.environ["TABLA_EMPRESAS"]
+TABLA_PUNTOS_MEDICIONES  = os.environ["TABLA_PUNTOS_MEDICIONES"]
+USER_POOL_ID             = os.environ["USER_POOL_ID"]
+REGION                   = os.environ["REGION"]
 
 dynamodb = boto3.resource("dynamodb", region_name=REGION)
 tabla    = dynamodb.Table(TABLA_USUARIOS)
 tabla_empresas = dynamodb.Table(TABLA_EMPRESAS)
+tabla_puntos_mediciones = dynamodb.Table(TABLA_PUNTOS_MEDICIONES)
 cognito  = boto3.client("cognito-idp", region_name=REGION)
 
 ROLES_VALIDOS = {"super_admin", "admin", "tecnico", "cliente"}
@@ -122,6 +126,21 @@ def _fuera_de_alcance(creador: dict, usuario_objetivo: dict) -> bool:
     if creador.get("rol") == "super_admin":
         return False
     return usuario_objetivo.get("empresa_id") != creador.get("empresa_id")
+
+def _tiene_historial(cognito_sub: str) -> bool:
+    """True si el usuario (identificado por su cognito_sub, que es el valor
+    que puntos/mediciones guardan como `usuario_id`) creó al menos un punto
+    o medición. Mismo criterio que ya usa api_puntos para bloquear el
+    borrado de un punto con mediciones asociadas — nunca borrar en cascada
+    silenciosamente y dejar `usuario_id` apuntando a nadie."""
+    if not cognito_sub:
+        return False
+    resp = tabla_puntos_mediciones.query(
+        IndexName="usuario-timestamp-index",
+        KeyConditionExpression=Key("usuario_id").eq(cognito_sub),
+        Limit=1,
+    )
+    return bool(resp.get("Items"))
 
 def _crear_usuario_basico(email: str, claims: dict) -> dict:
     grupos = claims.get("cognito:groups", "") or ""
@@ -555,6 +574,13 @@ def lambda_handler(event: dict, context) -> dict:
                 return _respuesta(403, {"error": "No tenés permiso para eliminar usuarios de otra empresa"})
             if usuario.get("email") == email_propio:
                 return _respuesta(400, {"error": "No puedes eliminar tu propia cuenta"})
+            if _tiene_historial(usuario.get("cognito_sub", "")):
+                return _respuesta(
+                    409,
+                    {"error": "Este usuario tiene puntos o mediciones asociados — "
+                              "eliminarlo dejaría ese historial huérfano. "
+                              "Usá deshabilitar (DELETE /usuarios/{id_usuario}) en su lugar."},
+                )
             email_objetivo = usuario.get("email")
             cognito.admin_delete_user(UserPoolId=USER_POOL_ID, Username=email_objetivo)
             try:
