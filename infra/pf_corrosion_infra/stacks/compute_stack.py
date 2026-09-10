@@ -127,12 +127,16 @@ class CorriaComputeStack(Stack):
                 **common_env,
                 "TABLA_PUNTOS": puntos_mediciones_table.table_name,
                 "TABLA_USUARIOS": usuarios_table.table_name,
+                "TABLA_EMPRESAS": empresas_table.table_name,
             },
         )
         puntos_mediciones_table.grant_read_write_data(self.api_puntos_fn)
         # RBAC multi-empresa: solo lee (resolver empresa_id/rol del caller
         # por cognito-sub-index) — nunca escribe en `usuarios`.
         usuarios_table.grant_read_data(self.api_puntos_fn)
+        # Solo necesita validar que el empresa_id que manda super_admin al
+        # crear un punto exista -- nunca escribe acá.
+        empresas_table.grant_read_data(self.api_puntos_fn)
 
         # ── api-mediciones ───────────────────────────────────────────────
         self.api_mediciones_fn = _lambda.Function(

@@ -18,8 +18,11 @@ migración (ver README del proyecto).
 RBAC multi-empresa: `empresa_id` de un punto nuevo se resuelve SIEMPRE del
 usuario autenticado (`_usuario_actual`, replicado de api_usuarios/handler.py
 — no hay módulo compartido entre lambdas, ver README), nunca de un campo del
-body. GET /puntos filtra por el empresa_id del caller salvo que sea
-super_admin (ve todas). `cliente` no puede crear/editar/eliminar puntos.
+body, EXCEPTO para super_admin (que no tiene empresa_id propio): en ese caso
+`empresa_id` es obligatorio en el body y se valida contra la tabla
+`empresas` (mismo patrón que POST /usuarios). GET /puntos filtra por el
+empresa_id del caller salvo que sea super_admin (ve todas). `cliente` no
+puede crear/editar/eliminar puntos.
 """
 import json
 import logging
@@ -36,6 +39,7 @@ logger.setLevel(logging.INFO)
 
 TABLA_PUNTOS = os.environ["TABLA_PUNTOS"]
 TABLA_USUARIOS = os.environ["TABLA_USUARIOS"]
+TABLA_EMPRESAS = os.environ["TABLA_EMPRESAS"]
 REGION = os.environ["REGION"]
 
 SK_METADATA = "METADATA"
@@ -43,6 +47,7 @@ SK_METADATA = "METADATA"
 dynamodb = boto3.resource("dynamodb", region_name=REGION)
 tabla = dynamodb.Table(TABLA_PUNTOS)
 tabla_usuarios = dynamodb.Table(TABLA_USUARIOS)
+tabla_empresas = dynamodb.Table(TABLA_EMPRESAS)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -218,10 +223,19 @@ def lambda_handler(event: dict, context) -> dict:
             }
             if grosor is None:
                 del item["grosor_mm"]
-            # empresa_id del recurso SIEMPRE se resuelve del creador
-            # autenticado, nunca de un campo del body (evita que cualquier
-            # usuario escriba datos "de" otra empresa cambiando un parámetro).
-            if creador.get("empresa_id"):
+            # empresa_id del recurso se resuelve del creador autenticado,
+            # nunca de un campo del body (evita que cualquier usuario escriba
+            # datos "de" otra empresa cambiando un parámetro) -- salvo
+            # super_admin, que no tiene empresa_id propio y por eso es el
+            # único caso donde el body decide, validado contra la tabla real.
+            if creador.get("rol") == "super_admin":
+                empresa_id_body = body.get("empresa_id")
+                if not empresa_id_body:
+                    return _respuesta(400, {"error": "super_admin debe indicar empresa_id al crear un punto"})
+                if not tabla_empresas.get_item(Key={"id_empresa": empresa_id_body}).get("Item"):
+                    return _respuesta(404, {"error": f"Empresa {empresa_id_body} no encontrada"})
+                item["empresa_id"] = empresa_id_body
+            elif creador.get("empresa_id"):
                 item["empresa_id"] = creador.get("empresa_id")
             # GSI de búsqueda inversa por usuario (usuario_id/timestamp) — ver
             # CorriaStorageStack. DynamoDB rechaza strings vacíos como clave

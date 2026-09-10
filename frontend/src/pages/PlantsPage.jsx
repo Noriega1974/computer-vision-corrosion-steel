@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Factory, Plus, Edit2, MapPin, Clock, LayoutGrid, X, Check, AlertCircle } from 'lucide-react';
 import { useGestionPuntos } from '../hooks/usePunto';
 import { useMedicionesPunto } from '../hooks/useMedicionesPunto';
+import { useEmpresas } from '../hooks/useEmpresas';
 import { useAuth } from '../auth/AuthContext';
 import { nivelLabel, nivelColor, nivelBg } from '../lib/statusUtils';
 import SearchableSelect from '../components/SearchableSelect';
@@ -192,7 +193,12 @@ const LABEL_STYLE = {
 };
 
 // ─── Formulario de punto de monitoreo ───────────────────────────────────────
-function PuntoForm({ initial = {}, onSubmit, saving, error }) {
+// `empresasDisponibles`/`requiereEmpresa`: solo al CREAR y solo para
+// super_admin (que no tiene afiliación propia -- alguien tiene que elegir a
+// cuál pertenece el punto nuevo). El backend no permite cambiar la
+// afiliación de un punto ya creado (PUT /puntos excluye empresa_id a
+// propósito), así que este campo nunca aparece al editar.
+function PuntoForm({ initial = {}, onSubmit, saving, error, empresasDisponibles, requiereEmpresa }) {
   const [form, setForm] = useState({
     sede: initial.sede ?? '',
     ciudad: initial.ciudad ?? '',
@@ -200,6 +206,7 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
     descripcion: initial.descripcion ?? '',
     latitud: initial.coordenadas?.lat ?? initial.latitud ?? '',
     longitud: initial.coordenadas?.lng ?? initial.longitud ?? '',
+    empresa_id: initial.empresa_id ?? '',
   });
 
   const [geoLoading, setGeoLoading] = useState(false);
@@ -269,6 +276,13 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
       return;
     }
 
+    if (requiereEmpresa && !form.empresa_id) {
+      setValidationError(
+        'Selecciona a qué afiliación pertenece este punto.'
+      );
+      return;
+    }
+
     setValidationError(null);
 
     const payload = { ...form };
@@ -313,6 +327,28 @@ function PuntoForm({ initial = {}, onSubmit, saving, error }) {
           style={inputStyle}
         />
       </div>
+
+      {/* Afiliación -- solo super_admin, solo al crear */}
+      {requiereEmpresa && (
+        <div style={{ marginBottom: 'var(--space-3-5)' }}>
+          <label htmlFor="punto-empresa" style={LABEL_STYLE}>
+            Afiliación *
+          </label>
+          <select
+            id="punto-empresa"
+            name="empresa_id"
+            value={form.empresa_id}
+            onChange={set('empresa_id')}
+            required
+            style={inputStyle}
+          >
+            <option value="">Seleccioná una afiliación…</option>
+            {(empresasDisponibles ?? []).map(e => (
+              <option key={e.id_empresa} value={e.id_empresa}>{e.nombre}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Departamento */}
       <div style={{ marginBottom: 'var(--space-3-5)' }}>
@@ -891,6 +927,17 @@ export default function PlantsPage() {
     user?.groups?.includes('admin') ||
     user?.groups?.includes('tecnico');
 
+  // Solo super_admin ve/elige la afiliación -- los demás roles ya están
+  // atados a la suya propia por el backend, mostrarla en cada fila no
+  // aportaría nada (siempre sería la misma).
+  const esSuperAdmin = user?.groups?.includes('super_admin');
+  // `enabled=esSuperAdmin` evita el fetch (y el 403) para el resto de roles.
+  const { empresas } = useEmpresas(esSuperAdmin);
+  const empresaNombrePorId = useMemo(
+    () => Object.fromEntries(empresas.map(e => [e.id_empresa, e.nombre])),
+    [empresas]
+  );
+
   const {
     puntos,
     loading,
@@ -1085,6 +1132,7 @@ export default function PlantsPage() {
                     'Ciudad',
                     'Departamento',
                     'Coordenadas',
+                    ...(esSuperAdmin ? ['Afiliación'] : []),
                     'Ver'
                   ].map(h => (
                     <th
@@ -1188,6 +1236,17 @@ export default function PlantsPage() {
                             : '—'}
                         </td>
 
+                        {esSuperAdmin && (
+                          <td
+                            style={{
+                              padding: '10px 14px',
+                              color: 'var(--text-muted)'
+                            }}
+                          >
+                            {empresaNombrePorId[p.empresa_id] ?? '—'}
+                          </td>
+                        )}
+
                         <td
                           style={{
                             padding: '10px 14px'
@@ -1222,7 +1281,7 @@ export default function PlantsPage() {
                   filtered.length === 0 && (
                     <tr>
                       <td
-                        colSpan={5}
+                        colSpan={esSuperAdmin ? 6 : 5}
                         style={{
                           padding: 'var(--space-6)',
                           textAlign: 'center',
@@ -1286,6 +1345,8 @@ export default function PlantsPage() {
             onSubmit={handleCreate}
             saving={mutating}
             error={formError}
+            empresasDisponibles={empresas}
+            requiereEmpresa={esSuperAdmin}
           />
         </Modal>
       )}

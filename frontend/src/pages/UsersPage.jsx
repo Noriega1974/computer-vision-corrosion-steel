@@ -369,7 +369,7 @@ function EmpresaForm({ onSubmit, saving, error }) {
     <form onSubmit={(e) => { e.preventDefault(); onSubmit({ nombre }); }}>
       <div style={{ marginBottom: 'var(--space-3-5)' }}>
         <label htmlFor="empresa-nombre" style={labelStyle}>
-          Nombre de la empresa *
+          Nombre de la afiliación *
         </label>
         <input
           id="empresa-nombre" name="nombre" autoComplete="off"
@@ -389,7 +389,7 @@ function EmpresaForm({ onSubmit, saving, error }) {
           fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'white',
           opacity: saving ? 0.6 : 1,
         }}>
-          {saving ? 'Creando…' : 'Crear empresa'}
+          {saving ? 'Creando…' : 'Crear afiliación'}
         </button>
       </div>
     </form>
@@ -506,7 +506,7 @@ export default function UsersPage() {
     try {
       await crearEmpresa(payload);
       setShowCreateEmpresa(false);
-      setToast('Empresa creada correctamente.');
+      setToast('Afiliación creada correctamente.');
     } catch (err) {
       setEmpresaFormError(err.message);
     }
@@ -600,6 +600,16 @@ export default function UsersPage() {
             </div>
           )}
         </div>
+
+        {/* admin/tecnico no tienen tabla de afiliaciones (es exclusiva de
+            super_admin) -- esto es lo único que les muestra a cuál
+            pertenecen, resuelto por el backend en GET /usuarios/me. */}
+        {!esSuperAdmin && miPerfil?.empresa_nombre && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: '10px 14px', background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 'var(--space-3-5)', color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>
+            <Building2 size={14} />
+            Tu afiliación: <strong style={{ color: 'var(--text-primary)' }}>{miPerfil.empresa_nombre}</strong>
+          </div>
+        )}
 
         {/* tecnico no lista usuarios (backend responde 403 a GET /usuarios) --
             solo puede dar de alta un cliente con el botón de arriba. */}
@@ -750,7 +760,7 @@ export default function UsersPage() {
                 <span style={{ background: 'var(--accent-amber)', width: 3, height: 20, borderRadius: 2, display: 'inline-block' }} />
                 <Building2 size={16} color="var(--text-primary)" />
                 <span style={{ fontFamily: 'var(--font-data)', fontSize: 'var(--text-sm)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-primary)' }}>
-                  Empresas
+                  Afiliaciones
                 </span>
               </div>
               <button onClick={() => { setShowCreateEmpresa(true); setEmpresaFormError(null); }} style={{
@@ -758,7 +768,7 @@ export default function UsersPage() {
                 padding: '8px 14px', background: 'var(--accent-amber)', border: 'none',
                 borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)', color: 'white',
               }}>
-                <Plus size={14} /> Nueva empresa
+                <Plus size={14} /> Nueva afiliación
               </button>
             </div>
 
@@ -773,7 +783,7 @@ export default function UsersPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-ui)' }}>
                   <thead>
                     <tr style={{ background: 'var(--bg-page)' }}>
-                      <th style={thBase}>Empresa</th>
+                      <th style={thBase}>Afiliación</th>
                       <th style={thBase}>Creada</th>
                       <th style={thBase}>Estado</th>
                     </tr>
@@ -811,7 +821,7 @@ export default function UsersPage() {
                     }
                     {!loadingEmpresas && empresas.length === 0 && (
                       <tr><td colSpan={3} style={{ padding: 'var(--space-6)', textAlign: 'center', color: 'var(--text-faint)', fontSize: 'var(--text-sm)' }}>
-                        No hay empresas registradas
+                        No hay afiliaciones registradas
                       </td></tr>
                     )}
                   </tbody>
@@ -824,7 +834,7 @@ export default function UsersPage() {
 
       {/* ── Modal: Crear empresa ── */}
       {showCreateEmpresa && (
-        <Modal title="Nueva empresa" onClose={() => setShowCreateEmpresa(false)}>
+        <Modal title="Nueva afiliación" onClose={() => setShowCreateEmpresa(false)}>
           <EmpresaForm onSubmit={handleCrearEmpresa} saving={mutandoEmpresa} error={empresaFormError} />
         </Modal>
       )}

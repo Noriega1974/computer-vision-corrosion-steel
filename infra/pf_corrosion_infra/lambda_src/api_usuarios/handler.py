@@ -255,6 +255,13 @@ def lambda_handler(event: dict, context) -> dict:
             usuario = _buscar_por_email(email)
             if not usuario:
                 usuario = _crear_usuario_basico(email, _claims(event))
+            # Resolver el nombre legible de la afiliacion -- el frontend solo
+            # conoce empresa_id (un id opaco), y no puede resolverlo por su
+            # cuenta porque GET /empresas es exclusivo de super_admin. Cada
+            # usuario sí puede ver el nombre de SU PROPIA afiliación acá.
+            if usuario.get("empresa_id"):
+                empresa = tabla_empresas.get_item(Key={"id_empresa": usuario["empresa_id"]}).get("Item")
+                usuario = {**usuario, "empresa_nombre": empresa.get("nombre") if empresa else None}
             return _respuesta(200, usuario)
 
         # ── PUT /usuarios/me ─────────────────────────────────────────────────
