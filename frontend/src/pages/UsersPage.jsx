@@ -419,6 +419,20 @@ export default function UsersPage() {
   // el filtro cliente-side de abajo, defensa en profundidad.
   const { perfil: miPerfil } = useUsuarioPerfil();
 
+  // Nombre de afiliación por usuario en la tabla. super_admin resuelve
+  // contra la lista completa que ya trae `empresas`; admin ve solo usuarios
+  // de SU PROPIA empresa (scopeado por el backend), así que siempre es la
+  // misma que la suya -- no hace falta pedir /empresas para admin.
+  const empresaNombrePorId = useMemo(
+    () => Object.fromEntries(empresas.map(e => [e.id_empresa, e.nombre])),
+    [empresas]
+  );
+  const nombreAfiliacionDe = (u) => {
+    if (!u.empresa_id) return '—';
+    if (miRol === 'super_admin') return empresaNombrePorId[u.empresa_id] ?? u.empresa_id;
+    return miPerfil?.empresa_nombre ?? '—';
+  };
+
   const [search, setSearch] = useState('');
   const [editUsuario, setEditUsuario] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -553,7 +567,7 @@ export default function UsersPage() {
   // Columnas con y sin ordenamiento
   const thBase = { padding: '9px 14px', textAlign: 'left', fontFamily: 'var(--font-data)', fontSize: 'var(--text-3xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-faint)', borderBottom: '1px solid var(--border)' };
   // Número de columnas para el colspan del mensaje vacío
-  const colCount = isAdmin ? 5 : 4;
+  const colCount = isAdmin ? 6 : 4;
 
   return (
     <>
@@ -656,6 +670,7 @@ export default function UsersPage() {
                   <SortableHeader label="Usuario"  col="nombre" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
                   <SortableHeader label="Correo"   col="email"  sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
                   <SortableHeader label="Rol"      col="rol"    sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
+                  <th style={thBase}>Afiliación</th>
                   <SortableHeader label="Estado"   col="estado" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
                   {isAdmin && <th style={thBase}>Acciones</th>}
                 </tr>
@@ -693,6 +708,7 @@ export default function UsersPage() {
                             }
                           </td>
                           <td style={{ padding: '10px 14px' }}><RolBadge rol={rolKey} /></td>
+                          <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>{nombreAfiliacionDe(u)}</td>
                           <td style={{ padding: '10px 14px' }}>
                             <span style={{
                               display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)',
