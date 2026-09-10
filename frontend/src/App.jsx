@@ -51,16 +51,19 @@ export default function App() {
                 <Route path="/privacidad"          element={<PrivacidadPage />} />
 
                 <Route path="/upload" element={
-                  <RoleRoute roles={['admin', 'tecnico']}><UploadPage /></RoleRoute>
+                  <RoleRoute roles={['super_admin', 'admin', 'tecnico']}><UploadPage /></RoleRoute>
                 } />
                 <Route path="/plantas" element={
-                  <RoleRoute roles={['admin', 'tecnico']}><PlantsPage /></RoleRoute>
+                  <RoleRoute roles={['super_admin', 'admin', 'tecnico']}><PlantsPage /></RoleRoute>
                 } />
+                {/* tecnico entra para dar de alta un cliente (ver CREATABLE_ROLES) aunque
+                    no vea el listado -- eso ya lo devuelve 403 el backend en GET /usuarios */}
                 <Route path="/usuarios" element={
-                  <RoleRoute roles={['admin']}><UsersPage /></RoleRoute>
+                  <RoleRoute roles={['super_admin', 'admin', 'tecnico']}><UsersPage /></RoleRoute>
                 } />
+                {/* Configuracion de la cuenta propia -- los 4 roles la tienen */}
                 <Route path="/configuracion" element={
-                  <RoleRoute roles={['admin']}><ConfiguracionPage /></RoleRoute>
+                  <RoleRoute roles={['super_admin', 'admin', 'tecnico', 'cliente']}><ConfiguracionPage /></RoleRoute>
                 } />
 
                 {/* Una ruta desconocida muestra un 404 dentro del layout, con
