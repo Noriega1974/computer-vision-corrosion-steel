@@ -3,26 +3,33 @@ CorriaComputeStack — 5 Lambda functions (api-reportes was eliminated, not
 ported — see README).
 
 IAM is scoped per function to the minimum actually used by its handler code:
-  - pf-corrosion-api-usuarios:    read/write on `usuarios` table + narrow
+  - pf-corrosion-api-usuarios:    read/write on `usuarios` table, READ-ONLY
+                                   on the new `empresas` table (only needs to
+                                   check a given empresa_id exists), + narrow
                                    Cognito admin-* actions on the user pool.
-  - pf-corrosion-api-puntos:      read/write on the fused table only.
-  - pf-corrosion-api-mediciones:  read/write on the fused table only.
+  - pf-corrosion-api-puntos:      read/write on the fused table + READ-ONLY
+                                   on `usuarios` (multi-empresa RBAC: needs
+                                   to resolve the caller's empresa_id/rol via
+                                   `_usuario_actual`, see handler.py).
+  - pf-corrosion-api-mediciones:  read/write on the fused table + READ-ONLY
+                                   on `usuarios` (same RBAC need as above).
   - pf-corrosion-api-alertas:     READ-ONLY on the fused table (the handler
-                                   only calls `tabla.query` — no writes).
+                                   only calls `tabla.query` — no writes) +
+                                   READ-ONLY on `usuarios` (RBAC).
   - pf-corrosion-inference:       read/write on the fused table + S3
-                                   read/write on the images bucket.
-                                   CRITICAL SECURITY FIX vs. source: the
+                                   read/write on the images bucket + READ-ONLY
+                                   on `usuarios` (RBAC: resolve empresa_id/rol
+                                   of the caller uploading a medición, block
+                                   `cliente`). No Cognito admin-* actions and
+                                   no write access to `usuarios` — this
+                                   mirrors the original security fix (the
                                    source account's inference Lambda role had
-                                   full read/write on ALL THREE tables
-                                   (corria-puntos, corria-mediciones,
-                                   corria-usuarios) plus a leftover
-                                   USER_POOL_ID env var, even though its
-                                   handler code never touches usuarios or
-                                   Cognito at all (verified by inspecting the
-                                   deployed source function's env vars and by
-                                   grepping the ported handler). This stack
-                                   grants it ONLY the fused table + S3 —
-                                   nothing on usuarios, no USER_POOL_ID.
+                                   full read/write on ALL THREE tables plus a
+                                   leftover USER_POOL_ID env var that its
+                                   handler code never used); the only change
+                                   here is a *read-only* grant on `usuarios`,
+                                   strictly required to resolve empresa_id,
+                                   never a write path back into it.
 """
 import os
 
@@ -49,6 +56,7 @@ class CorriaComputeStack(Stack):
         construct_id: str,
         *,
         usuarios_table: dynamodb.Table,
+        empresas_table: dynamodb.Table,
         puntos_mediciones_table: dynamodb.Table,
         images_bucket: s3.Bucket,
         user_pool: cognito.UserPool,
@@ -72,10 +80,14 @@ class CorriaComputeStack(Stack):
             environment={
                 **common_env,
                 "TABLA_USUARIOS": usuarios_table.table_name,
+                "TABLA_EMPRESAS": empresas_table.table_name,
                 "USER_POOL_ID": user_pool.user_pool_id,
             },
         )
         usuarios_table.grant_read_write_data(self.api_usuarios_fn)
+        # Solo necesita verificar que un empresa_id exista al crear un
+        # usuario con empresa explícita (super_admin) — nunca escribe acá.
+        empresas_table.grant_read_data(self.api_usuarios_fn)
         # Narrow Cognito admin-* actions actually used by the handler
         # (create/delete/enable/disable users, set password, group
         # membership) — mirrors the scoping used in the source account,
@@ -108,9 +120,13 @@ class CorriaComputeStack(Stack):
             environment={
                 **common_env,
                 "TABLA_PUNTOS": puntos_mediciones_table.table_name,
+                "TABLA_USUARIOS": usuarios_table.table_name,
             },
         )
         puntos_mediciones_table.grant_read_write_data(self.api_puntos_fn)
+        # RBAC multi-empresa: solo lee (resolver empresa_id/rol del caller
+        # por cognito-sub-index) — nunca escribe en `usuarios`.
+        usuarios_table.grant_read_data(self.api_puntos_fn)
 
         # ── api-mediciones ───────────────────────────────────────────────
         self.api_mediciones_fn = _lambda.Function(
@@ -125,10 +141,13 @@ class CorriaComputeStack(Stack):
             environment={
                 **common_env,
                 "TABLA_MEDICIONES": puntos_mediciones_table.table_name,
+                "TABLA_USUARIOS": usuarios_table.table_name,
                 "BUCKET_NAME": images_bucket.bucket_name,
             },
         )
         puntos_mediciones_table.grant_read_write_data(self.api_mediciones_fn)
+        # RBAC multi-empresa: solo lee `usuarios` (resolver caller) — nunca escribe.
+        usuarios_table.grant_read_data(self.api_mediciones_fn)
         # Mínimo privilegio: el handler solo lee (generate_presigned_url para
         # GET) y borra objetos (DELETE /mediciones) — nunca escribe (PutObject)
         # a este bucket, así que no le damos grant_read_write.
@@ -148,9 +167,12 @@ class CorriaComputeStack(Stack):
             environment={
                 **common_env,
                 "TABLA_MEDICIONES": puntos_mediciones_table.table_name,
+                "TABLA_USUARIOS": usuarios_table.table_name,
             },
         )
         puntos_mediciones_table.grant_read_data(self.api_alertas_fn)
+        # RBAC multi-empresa: solo lee `usuarios` (resolver caller) — nunca escribe.
+        usuarios_table.grant_read_data(self.api_alertas_fn)
 
         # ── inference ────────────────────────────────────────────────────
         # Runtime deps (onnxruntime, numpy, Pillow) ship via a Lambda Layer
@@ -188,14 +210,18 @@ class CorriaComputeStack(Stack):
                 **common_env,
                 "TABLA_PUNTOS": puntos_mediciones_table.table_name,
                 "TABLA_MEDICIONES": puntos_mediciones_table.table_name,
+                "TABLA_USUARIOS": usuarios_table.table_name,
                 "BUCKET_NAME": images_bucket.bucket_name,
-                # Intentionally NO TABLA_USUARIOS, NO USER_POOL_ID — see
-                # security fix note in this module's docstring.
+                # Intentionally NO USER_POOL_ID / Cognito admin-* actions —
+                # see security fix note in this module's docstring. Only a
+                # READ-ONLY DynamoDB grant on `usuarios` was added (RBAC:
+                # resolve empresa_id/rol of the caller uploading a medición).
             },
         )
         puntos_mediciones_table.grant_read_write_data(self.inference_fn)
         images_bucket.grant_read_write(self.inference_fn)
-        # Intentionally NOT granted: usuarios_table access, Cognito actions.
+        usuarios_table.grant_read_data(self.inference_fn)
+        # Intentionally NOT granted: write access to usuarios_table, Cognito actions.
 
         # ── EventBridge cleanup rule (collaborator expiry) ──────────────────
         # Mirrors the source's corria-cleanup-colaboradores rule: invokes

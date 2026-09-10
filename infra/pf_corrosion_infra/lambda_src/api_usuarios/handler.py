@@ -2,17 +2,29 @@
 CorrIA - Lambda de gestión de usuarios y colaboradores.
 
 Rutas API Gateway:
-  POST   /usuarios                        → crear usuario (solo admin)
-  GET    /usuarios                        → listar usuarios (solo admin)
+  POST   /usuarios                        → crear usuario (según CREATABLE_ROLES del creador)
+  GET    /usuarios                        → listar usuarios (admin/super_admin; tecnico y cliente: 403)
   GET    /usuarios/me                     → perfil propio (cualquier rol)
   PUT    /usuarios/me                     → actualizar perfil propio (cualquier rol)
-  PUT    /usuarios/{id_usuario}           → actualizar usuario (solo admin)
-  DELETE /usuarios/{id_usuario}/eliminar  → eliminar usuario permanentemente (solo admin)
-  DELETE /usuarios/{id_usuario}           → deshabilitar usuario (solo admin)
-  POST   /colaborador                     → crear colaborador temporal con nickname (solo admin)
+  PUT    /usuarios/{id_usuario}           → actualizar usuario (admin/super_admin, con alcance de empresa)
+  DELETE /usuarios/{id_usuario}/eliminar  → eliminar usuario permanentemente (admin/super_admin, con alcance de empresa)
+  DELETE /usuarios/{id_usuario}           → deshabilitar usuario (admin/super_admin, con alcance de empresa)
+  POST   /colaborador                     → crear colaborador temporal con nickname (admin/super_admin)
 
 Evento directo (EventBridge cron diario):
   Sin httpMethod → ejecuta limpieza de colaboradores vencidos
+
+RBAC multi-empresa:
+  - 4 roles: super_admin (cross-empresa), admin, tecnico, cliente.
+  - CREATABLE_ROLES define, de forma explícita (no por nivel numérico), qué
+    roles puede crear cada rol — super_admin es la única excepción que puede
+    crear su propio rango.
+  - `empresa_id` de un usuario nuevo SIEMPRE se fuerza al `empresa_id` de
+    quien lo crea, salvo que el creador sea super_admin (único rol que puede
+    pasar un `empresa_id` explícito, validado contra la tabla `empresas`).
+  - `_usuario_actual` resuelve el ítem completo (rol, empresa_id, id_usuario)
+    del que llama a partir de su `sub` (JWT) vía el GSI `cognito-sub-index` —
+    necesario porque `id_usuario` (PK, `USR-<uuid>`) no es `cognito_sub`.
 """
 import json
 import logging
@@ -28,17 +40,28 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 TABLA_USUARIOS = os.environ["TABLA_USUARIOS"]
+TABLA_EMPRESAS = os.environ["TABLA_EMPRESAS"]
 USER_POOL_ID   = os.environ["USER_POOL_ID"]
 REGION         = os.environ["REGION"]
 
 dynamodb = boto3.resource("dynamodb", region_name=REGION)
 tabla    = dynamodb.Table(TABLA_USUARIOS)
+tabla_empresas = dynamodb.Table(TABLA_EMPRESAS)
 cognito  = boto3.client("cognito-idp", region_name=REGION)
 
-ROLES_VALIDOS = {"admin", "tecnico", "cliente"}
+ROLES_VALIDOS = {"super_admin", "admin", "tecnico", "cliente"}
 CAMPOS_PROTEGIDOS_ME    = {"email", "rol", "id_usuario", "cognito_sub", "fecha_creacion"}
 CAMPOS_PERMITIDOS_ME    = {"nombre", "telefono", "cargo", "avatar_color", "fecha_ultimo_login"}
 CAMPOS_PERMITIDOS_ADMIN = {"nombre", "rol", "telefono", "cargo"}
+
+# Jerarquía explícita de creación de usuarios (NO por nivel numérico —
+# super_admin es la única excepción que puede crear su propio rango).
+CREATABLE_ROLES = {
+    "super_admin": {"super_admin", "admin", "tecnico", "cliente"},
+    "admin": {"tecnico", "cliente"},
+    "tecnico": {"cliente"},
+    "cliente": set(),
+}
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -54,8 +77,12 @@ def _claims(event: dict) -> dict:
     return event.get("requestContext", {}).get("authorizer", {}).get("claims", {})
 
 def _es_admin(event: dict) -> bool:
-    grupos = _claims(event).get("cognito:groups", "") or ""
-    return "admin" in grupos.split(",")
+    """True si el llamante pertenece a admin o super_admin. Chequeo barato
+    (solo lee claims del JWT, sin ir a DynamoDB) — usar cuando no hace falta
+    conocer el empresa_id del llamante. Para rutas con alcance de empresa,
+    usar `_usuario_actual` en su lugar."""
+    grupos = set((_claims(event).get("cognito:groups", "") or "").split(","))
+    return bool(grupos & {"admin", "super_admin"})
 
 def _email_usuario(event: dict) -> str:
     return _claims(event).get("email", "")
@@ -68,6 +95,33 @@ def _buscar_por_email(email: str) -> dict | None:
     )
     items = resp.get("Items", [])
     return items[0] if items else None
+
+def _usuario_actual(event: dict) -> dict | None:
+    """Resuelve el ítem completo (rol, empresa_id, id_usuario, ...) del
+    usuario autenticado a partir de `sub` (claim del JWT), vía el GSI
+    cognito-sub-index. Necesario porque `id_usuario` (PK, `USR-<uuid>`
+    generado por la app) NO es el mismo valor que `cognito_sub`. Devuelve
+    None si no hay sub en el token o si no existe un ítem para ese sub
+    (p. ej. un usuario que nunca llamó a GET /usuarios/me para auto-
+    provisionarse)."""
+    sub = _claims(event).get("sub", "")
+    if not sub:
+        return None
+    resp = tabla.query(
+        IndexName="cognito-sub-index",
+        KeyConditionExpression=Key("cognito_sub").eq(sub),
+        Limit=1,
+    )
+    items = resp.get("Items", [])
+    return items[0] if items else None
+
+def _fuera_de_alcance(creador: dict, usuario_objetivo: dict) -> bool:
+    """True si `creador` (no super_admin) intenta operar sobre un usuario de
+    otra empresa. super_admin no tiene restricción de alcance — puede ver y
+    editar usuarios de cualquier empresa."""
+    if creador.get("rol") == "super_admin":
+        return False
+    return usuario_objetivo.get("empresa_id") != creador.get("empresa_id")
 
 def _crear_usuario_basico(email: str, claims: dict) -> dict:
     grupos = claims.get("cognito:groups", "") or ""
@@ -204,9 +258,20 @@ def lambda_handler(event: dict, context) -> dict:
 
         # ── GET /usuarios ─────────────────────────────────────────────────────
         elif metodo == "GET" and resource == "/usuarios":
-            if not _es_admin(event):
-                return _respuesta(403, {"error": "Solo administradores pueden listar usuarios"})
-            resp = tabla.scan()
+            creador = _usuario_actual(event)
+            if not creador or creador.get("rol") not in ("admin", "super_admin"):
+                # tecnico solo puede dar de alta cliente (no lista, no
+                # edita); cliente no tiene gestión de usuarios.
+                return _respuesta(403, {"error": "No tenés permiso para listar usuarios"})
+
+            if creador.get("rol") == "super_admin":
+                resp = tabla.scan()
+                return _respuesta(200, resp.get("Items", []))
+
+            resp = tabla.query(
+                IndexName="empresa-index",
+                KeyConditionExpression=Key("empresa_id").eq(creador.get("empresa_id")),
+            )
             return _respuesta(200, resp.get("Items", []))
 
         # ── POST /colaborador — crear colaborador temporal ────────────────────
@@ -302,8 +367,11 @@ def lambda_handler(event: dict, context) -> dict:
 
         # ── POST /usuarios ────────────────────────────────────────────────────
         elif metodo == "POST" and resource == "/usuarios":
-            if not _es_admin(event):
-                return _respuesta(403, {"error": "Solo administradores pueden crear usuarios"})
+            creador = _usuario_actual(event)
+            if not creador:
+                return _respuesta(403, {"error": "No se pudo verificar el usuario solicitante"})
+            rol_creador = creador.get("rol")
+
             body    = json.loads(event.get("body") or "{}")
             email   = body.get("email")
             nombre  = body.get("nombre", "")
@@ -313,6 +381,22 @@ def lambda_handler(event: dict, context) -> dict:
                 return _respuesta(400, {"error": "email es requerido"})
             if rol not in ROLES_VALIDOS:
                 return _respuesta(400, {"error": f"rol debe ser uno de: {ROLES_VALIDOS}"})
+            if rol not in CREATABLE_ROLES.get(rol_creador, set()):
+                return _respuesta(403, {"error": f"Tu rol ({rol_creador}) no puede crear usuarios con rol '{rol}'"})
+
+            # El empresa_id de un usuario nuevo SIEMPRE se fuerza al del
+            # creador — nunca se toma del body — salvo que el creador sea
+            # super_admin, el único rol que puede pasar un empresa_id
+            # explícito (y debe hacerlo, validado contra la tabla empresas).
+            if rol_creador == "super_admin":
+                empresa_id = body.get("empresa_id")
+                if not empresa_id:
+                    return _respuesta(400, {"error": "empresa_id es requerido"})
+                if not tabla_empresas.get_item(Key={"id_empresa": empresa_id}).get("Item"):
+                    return _respuesta(404, {"error": f"Empresa {empresa_id} no encontrada"})
+            else:
+                empresa_id = creador.get("empresa_id")
+
             resp_cognito = cognito.admin_create_user(
                 UserPoolId=USER_POOL_ID,
                 Username=email,
@@ -334,7 +418,7 @@ def lambda_handler(event: dict, context) -> dict:
                     UserPoolId=USER_POOL_ID, Username=email, GroupName=rol,
                 )
                 id_nuevo = f"USR-{uuid.uuid4()}"
-                tabla.put_item(Item={
+                item_nuevo = {
                     "id_usuario":    id_nuevo,
                     "email":         email,
                     "cognito_sub":   cognito_sub,
@@ -343,7 +427,10 @@ def lambda_handler(event: dict, context) -> dict:
                     "cargo":         cargo,
                     "fecha_creacion": datetime.now(timezone.utc).isoformat(),
                     "activo":        True,
-                })
+                }
+                if empresa_id:
+                    item_nuevo["empresa_id"] = empresa_id
+                tabla.put_item(Item=item_nuevo)
             except Exception as e:
                 _rollback_usuario_cognito(email, e)
                 raise
@@ -351,13 +438,16 @@ def lambda_handler(event: dict, context) -> dict:
 
         # ── PUT /usuarios/{id_usuario} ────────────────────────────────────────
         elif metodo == "PUT" and resource == "/usuarios/{id_usuario}" and id_usuario:
-            if not _es_admin(event):
+            creador = _usuario_actual(event)
+            if not creador or creador.get("rol") not in ("admin", "super_admin"):
                 return _respuesta(403, {"error": "Solo administradores pueden modificar usuarios"})
             body = json.loads(event.get("body") or "{}")
             resp = tabla.get_item(Key={"id_usuario": id_usuario})
             usuario = resp.get("Item")
             if not usuario:
                 return _respuesta(404, {"error": f"Usuario {id_usuario} no encontrado"})
+            if _fuera_de_alcance(creador, usuario):
+                return _respuesta(403, {"error": "No tenés permiso para modificar usuarios de otra empresa"})
 
             if body.get("reactivar") is True:
                 email_objetivo = usuario.get("email")
@@ -447,13 +537,16 @@ def lambda_handler(event: dict, context) -> dict:
 
         # ── DELETE /usuarios/{id_usuario}/eliminar ────────────────────────────
         elif metodo == "DELETE" and resource == "/usuarios/{id_usuario}/eliminar" and id_usuario:
-            if not _es_admin(event):
+            creador = _usuario_actual(event)
+            if not creador or creador.get("rol") not in ("admin", "super_admin"):
                 return _respuesta(403, {"error": "Solo administradores pueden eliminar usuarios"})
             email_propio = _email_usuario(event)
             resp    = tabla.get_item(Key={"id_usuario": id_usuario})
             usuario = resp.get("Item")
             if not usuario:
                 return _respuesta(404, {"error": f"Usuario {id_usuario} no encontrado"})
+            if _fuera_de_alcance(creador, usuario):
+                return _respuesta(403, {"error": "No tenés permiso para eliminar usuarios de otra empresa"})
             if usuario.get("email") == email_propio:
                 return _respuesta(400, {"error": "No puedes eliminar tu propia cuenta"})
             email_objetivo = usuario.get("email")
@@ -476,12 +569,15 @@ def lambda_handler(event: dict, context) -> dict:
 
         # ── DELETE /usuarios/{id_usuario} — deshabilitar ──────────────────────
         elif metodo == "DELETE" and resource == "/usuarios/{id_usuario}" and id_usuario:
-            if not _es_admin(event):
+            creador = _usuario_actual(event)
+            if not creador or creador.get("rol") not in ("admin", "super_admin"):
                 return _respuesta(403, {"error": "Solo administradores pueden deshabilitar usuarios"})
             resp    = tabla.get_item(Key={"id_usuario": id_usuario})
             usuario = resp.get("Item")
             if not usuario:
                 return _respuesta(404, {"error": f"Usuario {id_usuario} no encontrado"})
+            if _fuera_de_alcance(creador, usuario):
+                return _respuesta(403, {"error": "No tenés permiso para deshabilitar usuarios de otra empresa"})
             email_objetivo = usuario.get("email")
             cognito.admin_disable_user(UserPoolId=USER_POOL_ID, Username=email_objetivo)
             ahora = datetime.now(timezone.utc).isoformat()

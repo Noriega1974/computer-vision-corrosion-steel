@@ -6,11 +6,20 @@ usan sort key constante "METADATA"; las mediciones usan "MED#{timestamp}"
 (ver lambda_src/api_mediciones y lambda_src/inference).
 
 Rutas:
-  GET  /puntos                        → listar todos (cualquier rol, filtrable por ?organization_id=)
-  GET  /puntos/{id_punto}             → detalle con historial_cambios (cualquier rol)
-  POST /puntos                        → crear directamente (solo admin)
-  PUT  /puntos/{id_punto}             → actualizar con auditoría (solo admin)
-  DELETE /puntos/{id_punto}           → eliminar (solo admin)
+  GET  /puntos                    → listar, filtrado por empresa (excepto super_admin)
+  GET  /puntos/{id_punto}         → detalle con historial_cambios (cualquier rol)
+  POST /puntos                    → crear directamente (admin/super_admin; cliente y tecnico: 403)
+  PUT  /puntos/{id_punto}         → actualizar con auditoría (solo admin/super_admin)
+  DELETE /puntos/{id_punto}       → eliminar (solo admin/super_admin)
+
+Nota: la ruta GET /puntos/buscar del sistema original fue eliminada en esta
+migración (ver README del proyecto).
+
+RBAC multi-empresa: `empresa_id` de un punto nuevo se resuelve SIEMPRE del
+usuario autenticado (`_usuario_actual`, replicado de api_usuarios/handler.py
+— no hay módulo compartido entre lambdas, ver README), nunca de un campo del
+body. GET /puntos filtra por el empresa_id del caller salvo que sea
+super_admin (ve todas). `cliente` no puede crear/editar/eliminar puntos.
 """
 import json
 import logging
@@ -26,12 +35,14 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 TABLA_PUNTOS = os.environ["TABLA_PUNTOS"]
+TABLA_USUARIOS = os.environ["TABLA_USUARIOS"]
 REGION = os.environ["REGION"]
 
 SK_METADATA = "METADATA"
 
 dynamodb = boto3.resource("dynamodb", region_name=REGION)
 tabla = dynamodb.Table(TABLA_PUNTOS)
+tabla_usuarios = dynamodb.Table(TABLA_USUARIOS)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -78,12 +89,33 @@ def _grupos(event: dict) -> set[str]:
 
 
 def _es_admin(event: dict) -> bool:
-    return "admin" in _grupos(event)
+    return bool(_grupos(event) & {"admin", "super_admin"})
 
 
 def _email_usuario(event: dict) -> str:
     """Extrae el email del claim JWT del autorizador Cognito."""
     return _claims(event).get("email", "desconocido")
+
+
+def _usuario_actual(event: dict) -> dict | None:
+    """Resuelve el ítem completo (rol, empresa_id, id_usuario, ...) del
+    usuario autenticado a partir de `sub` (claim del JWT), vía el GSI
+    cognito-sub-index de la tabla `usuarios`. Necesario porque `id_usuario`
+    (PK, `USR-<uuid>` generado por la app) NO es el mismo valor que
+    `cognito_sub`. Replicado igual en api_usuarios/handler.py — no hay
+    módulo compartido entre lambdas en este proyecto (cada una es un asset
+    standalone para CDK), así que se duplica el helper en vez de extraer un
+    paquete compartido."""
+    sub = _claims(event).get("sub", "")
+    if not sub:
+        return None
+    resp = tabla_usuarios.query(
+        IndexName="cognito-sub-index",
+        KeyConditionExpression=Key("cognito_sub").eq(sub),
+        Limit=1,
+    )
+    items = resp.get("Items", [])
+    return items[0] if items else None
 
 
 def _construir_historial_cambio(item_actual: dict, campos_nuevos: dict, email: str) -> dict | None:
@@ -97,6 +129,7 @@ def _construir_historial_cambio(item_actual: dict, campos_nuevos: dict, email: s
         if k in campos_excluidos:
             continue
         v_actual = item_actual.get(k)
+        # Normalizar Decimal → float para comparación justa
         if isinstance(v_actual, Decimal):
             v_actual = float(v_actual)
         if isinstance(v_nuevo, Decimal):
@@ -122,15 +155,18 @@ def lambda_handler(event: dict, context) -> dict:
     id_punto = path_params.get("id_punto")
 
     try:
-        # ── GET /puntos — listar todos (filtrable por organization_id) ──────
+        # ── GET /puntos — listar todos, filtrado por empresa ─────────────────
         if metodo == "GET" and not id_punto:
-            query_params = event.get("queryStringParameters") or {}
-            org_id = query_params.get("organization_id")
-
+            creador = _usuario_actual(event)
+            # Scan filtrado a registros METADATA — la tabla también contiene
+            # mediciones (sk="MED#...") que no deben aparecer en este listado.
             f_expr = Attr("sk").eq(SK_METADATA)
-            if org_id:
-                f_expr = f_expr & Attr("organization_id").eq(org_id)
-
+            if not creador or creador.get("rol") != "super_admin":
+                # Ver datos de otra empresa es exclusivo de super_admin — si
+                # no se pudo resolver el usuario, se trata como sin empresa
+                # (empresa_id=None) para no filtrar por vacío por accidente.
+                empresa_id = creador.get("empresa_id") if creador else None
+                f_expr = f_expr & Attr("empresa_id").eq(empresa_id)
             resp = tabla.scan(FilterExpression=f_expr)
             return _respuesta(200, resp.get("Items", []))
 
@@ -140,19 +176,27 @@ def lambda_handler(event: dict, context) -> dict:
             item = resp.get("Item")
             if not item:
                 return _respuesta(404, {"error": f"Punto {id_punto} no encontrado"})
+            creador = _usuario_actual(event)
+            if (not creador or creador.get("rol") != "super_admin") and item.get("empresa_id") != (creador.get("empresa_id") if creador else None):
+                # Ver datos de otra empresa es exclusivo de super_admin — 404
+                # en vez de 403 para no revelar que el punto existe.
+                return _respuesta(404, {"error": f"Punto {id_punto} no encontrado"})
             return _respuesta(200, item)
 
-        # ── POST /puntos — crear (solo admin) ────────────────────────────────
+        # ── POST /puntos — crear (admin/super_admin) ──────────────────────────
         elif metodo == "POST":
-            if not _es_admin(event):
+            creador = _usuario_actual(event)
+            if not creador or creador.get("rol") not in ("admin", "super_admin"):
                 return _respuesta(403, {"error": "Solo administradores pueden crear puntos directamente. Use POST /medicion para el flujo normal."})
 
             body = json.loads(event.get("body") or "{}")
+            # El id_punto siempre lo genera el backend (mismo patrón que
+            # _resolver_punto en la Lambda de inferencia) — el cliente nunca
+            # debería tener que inventar un ID de recurso al crearlo.
             id_punto_nuevo = f"PT-{uuid.uuid4()}"
 
             sede = body.get("sede", "")
             ciudad = body.get("ciudad", "")
-            organization_id = body.get("organization_id", "default_org")
 
             creado_por_id = _claims(event).get("sub", "")
             ahora = datetime.now(timezone.utc).isoformat()
@@ -161,7 +205,6 @@ def lambda_handler(event: dict, context) -> dict:
             item = {
                 "id_punto": id_punto_nuevo,
                 "sk": SK_METADATA,
-                "organization_id": organization_id,
                 "clave_logica": f"{sede}-{ciudad}",
                 "coordenadas": body.get("coordenadas", {}),
                 "ciudad": ciudad,
@@ -175,26 +218,39 @@ def lambda_handler(event: dict, context) -> dict:
             }
             if grosor is None:
                 del item["grosor_mm"]
+            # empresa_id del recurso SIEMPRE se resuelve del creador
+            # autenticado, nunca de un campo del body (evita que cualquier
+            # usuario escriba datos "de" otra empresa cambiando un parámetro).
+            if creador.get("empresa_id"):
+                item["empresa_id"] = creador.get("empresa_id")
+            # GSI de búsqueda inversa por usuario (usuario_id/timestamp) — ver
+            # CorriaStorageStack. DynamoDB rechaza strings vacíos como clave
+            # de GSI, así que "usuario_id" solo se agrega cuando hay un
+            # usuario real (sparse index).
             if creado_por_id:
                 item["creado_por_id"] = creado_por_id
                 item["usuario_id"] = creado_por_id
-            
+            # lat/lng vienen como float desde el frontend — DynamoDB requiere Decimal
             item = floats_to_decimal(item)
             tabla.put_item(Item=item)
             return _respuesta(201, item)
 
-        # ── PUT /puntos/{id_punto} — actualizar con auditoría (solo admin) ─────
+        # ── PUT /puntos/{id_punto} — actualizar con auditoría (admin/super_admin) ──
         elif metodo == "PUT" and id_punto:
-            if not _es_admin(event):
+            creador = _usuario_actual(event)
+            if not creador or creador.get("rol") not in ("admin", "super_admin"):
                 return _respuesta(403, {"error": "Solo administradores pueden modificar puntos"})
 
             body = json.loads(event.get("body") or "{}")
-            campos = {k: v for k, v in body.items() if k not in ("id_punto", "sk")}
+            campos = {k: v for k, v in body.items() if k not in ("id_punto", "sk", "empresa_id")}
             if not campos:
                 return _respuesta(400, {"error": "No hay campos para actualizar"})
 
+            # Leer item actual para auditoría y recalcular clave_logica si aplica
             punto_actual = tabla.get_item(Key={"id_punto": id_punto, "sk": SK_METADATA}).get("Item")
             if not punto_actual:
+                return _respuesta(404, {"error": f"Punto {id_punto} no encontrado"})
+            if creador.get("rol") != "super_admin" and punto_actual.get("empresa_id") != creador.get("empresa_id"):
                 return _respuesta(404, {"error": f"Punto {id_punto} no encontrado"})
 
             if any(k in campos for k in ("sede", "ciudad")):
@@ -202,23 +258,28 @@ def lambda_handler(event: dict, context) -> dict:
                 ciudad = campos.get("ciudad", punto_actual.get("ciudad", ""))
                 campos["clave_logica"] = f"{sede}-{ciudad}"
 
+            # Construir entrada de auditoría con los campos que realmente cambiaron
             email = _email_usuario(event)
             entrada_cambio = _construir_historial_cambio(punto_actual, campos, email)
 
             expr_parts = [f"#{k} = :{k}" for k in campos]
             nombres = {f"#{k}": k for k in campos}
+            # floats en coordenadas u otros campos numéricos → Decimal
             valores = floats_to_decimal({f":{k}": v for k, v in campos.items()})
 
             if entrada_cambio:
+                # Serializar el cambio con Decimal para DynamoDB
                 entrada_decimal = floats_to_decimal(entrada_cambio)
                 historial_actual = punto_actual.get("historial_cambios", [])
 
                 if len(historial_actual) >= 50:
+                    # Mantener las 49 entradas más recientes + la nueva
                     historial_recortado = historial_actual[-(49):]
                     valores[":historial"] = floats_to_decimal(historial_recortado + [entrada_decimal])
                     expr_parts.append("#historial_cambios = :historial")
                     nombres["#historial_cambios"] = "historial_cambios"
                 else:
+                    # Agregar al final con list_append
                     valores[":nueva_entrada"] = [entrada_decimal]
                     valores[":lista_vacia"] = []
                     expr_parts.append(
@@ -234,11 +295,23 @@ def lambda_handler(event: dict, context) -> dict:
             )
             return _respuesta(200, {"mensaje": "Punto actualizado", "id_punto": id_punto})
 
-        # ── DELETE /puntos/{id_punto} — eliminar (solo admin) ────────────────
+        # ── DELETE /puntos/{id_punto} — eliminar (admin/super_admin) ─────────
         elif metodo == "DELETE" and id_punto:
-            if not _es_admin(event):
+            creador = _usuario_actual(event)
+            if not creador or creador.get("rol") not in ("admin", "super_admin"):
                 return _respuesta(403, {"error": "Solo administradores pueden eliminar puntos"})
 
+            punto_actual = tabla.get_item(Key={"id_punto": id_punto, "sk": SK_METADATA}).get("Item")
+            if not punto_actual:
+                return _respuesta(404, {"error": f"Punto {id_punto} no encontrado"})
+            if creador.get("rol") != "super_admin" and punto_actual.get("empresa_id") != creador.get("empresa_id"):
+                return _respuesta(404, {"error": f"Punto {id_punto} no encontrado"})
+
+            # Si el punto tiene mediciones asociadas, borrarlo las deja
+            # huérfanas (referencian un id_punto que ya no existe). Bloqueamos
+            # en vez de borrar en cascada silenciosamente — es la opción
+            # segura por defecto con datos de tesis: nunca perder mediciones
+            # sin que un admin lo decida explícitamente.
             tiene_mediciones = tabla.query(
                 KeyConditionExpression=Key("id_punto").eq(id_punto) & Key("sk").begins_with("MED#"),
                 Limit=1,

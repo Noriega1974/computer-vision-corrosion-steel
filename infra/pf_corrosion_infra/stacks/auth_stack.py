@@ -1,10 +1,19 @@
 """
 CorriaAuthStack — Cognito User Pool.
 
-Mirrors the source system exactly (same shape): email as the username
-attribute, password policy, and four groups (admin, superadmin, tecnico,
-cliente). Added `custom:organization_id` to support multi-tenant
-scoping — see PF-corrosion adaptation notes.
+Same shape as the source system (email as the username attribute, password
+policy) plus one addition for the multi-empresa RBAC model: a fourth group,
+`super_admin` (precedence 0, NUEVO), on top of the existing admin/tecnico/
+cliente groups.
+
+No Cognito custom attribute for `empresa_id`. DynamoDB (`usuarios` table) is
+the single source of truth for a user's empresa_id — every Lambda resolves
+it from `cognito_sub` via the `cognito-sub-index` GSI (see
+api_usuarios/handler.py `_usuario_actual`). Duplicating it into a Cognito
+custom attribute would create two sources of truth for the same value that
+can drift out of sync, and Cognito custom attributes are irreversible once
+created on a real User Pool — not worth the risk for a field DynamoDB
+already owns.
 """
 from aws_cdk import (
     Stack,
@@ -27,11 +36,6 @@ class CorriaAuthStack(Stack):
             sign_in_aliases=cognito.SignInAliases(email=True, username=False),
             sign_in_case_sensitive=False,
             auto_verify=cognito.AutoVerifiedAttrs(email=True),
-            custom_attributes={
-                "organization_id": cognito.StringAttribute(
-                    min_len=1, max_len=100, mutable=True
-                ),
-            },
             password_policy=cognito.PasswordPolicy(
                 min_length=8,
                 require_lowercase=True,
@@ -45,31 +49,22 @@ class CorriaAuthStack(Stack):
             removal_policy=RemovalPolicy.RETAIN,
         )
 
-        # read_attributes/write_attributes deben declarar explícitamente el
-        # custom attribute, o no se propaga al ID token pese a existir en el pool.
-        client_read_write_attrs = (
-            cognito.ClientAttributes()
-            .with_standard_attributes(email=True)
-            .with_custom_attributes("organization_id")
-        )
-
         self.user_pool_client = self.user_pool.add_client(
             "CorriaWebClient",
             user_pool_client_name="pf-corrosion-web-client",
             auth_flows=cognito.AuthFlow(user_password=True, user_srp=True),
             generate_secret=False,
-            read_attributes=client_read_write_attrs,
-            write_attributes=client_read_write_attrs,
         )
 
-        # Groups mirror the source system's RBAC model, plus `superadmin`
-        # for cross-tenant access (see PF-corrosion adaptation notes).
+        # Groups implement the multi-empresa RBAC model. `super_admin` is
+        # the only role that spans every empresa; precedence 0 means it wins
+        # over any other group a user might also carry.
         cognito.CfnUserPoolGroup(
             self,
-            "SuperadminGroup",
+            "SuperAdminGroup",
             user_pool_id=self.user_pool.user_pool_id,
-            group_name="superadmin",
-            description="Acceso total a todas las organizaciones",
+            group_name="super_admin",
+            description="Acceso total a todas las empresas",
             precedence=0,
         )
         cognito.CfnUserPoolGroup(
@@ -77,7 +72,7 @@ class CorriaAuthStack(Stack):
             "AdminGroup",
             user_pool_id=self.user_pool.user_pool_id,
             group_name="admin",
-            description="Administradores con acceso total a su propia organización",
+            description="Administradores con acceso total a su propia empresa",
             precedence=1,
         )
         cognito.CfnUserPoolGroup(

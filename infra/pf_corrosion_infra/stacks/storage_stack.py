@@ -1,13 +1,24 @@
 """
 CorriaStorageStack — DynamoDB tables and S3 bucket.
 
-Two structural changes vs. the source system:
+Structural changes vs. the source system:
 
 1. `usuarios` table: same shape as source, minus the `empresa` field (that
    field is dropped at the application layer — the table schema itself only
-   declares key/GSI attributes, so there is nothing to remove there).
+   declares key/GSI attributes, so there is nothing to remove there). Two
+   GSIs support the multi-empresa RBAC model added on top of this table:
+     - `empresa-index` (HASH empresa_id) — lets non-super_admin roles list
+       only the users of their own empresa without a table scan.
+     - `cognito-sub-index` (HASH cognito_sub) — `id_usuario` (PK, app-
+       generated `USR-<uuid>`) is NOT the same value as `cognito_sub` (the
+       JWT `sub` claim), so any Lambda that needs to resolve "who is calling"
+       from a JWT needs this index instead of a scan.
 
-2. `puntos` + `mediciones` are FUSED into a single table
+2. `empresas` table (NEW): PK `id_empresa`, same billing/removal policy as
+   the other tables here. Holds the multi-tenant company records; every
+   non-super_admin user's `empresa_id` must reference a row in this table.
+
+3. `puntos` + `mediciones` are FUSED into a single table
    (`fused_puntos_mediciones`). Partition key `id_punto`; sort key `sk`:
      - point (parent) records use sk = "METADATA"
      - medición (child) records use sk = "MED#{timestamp}"
@@ -52,6 +63,29 @@ class CorriaStorageStack(Stack):
             index_name="email-index",
             partition_key=dynamodb.Attribute(name="email", type=dynamodb.AttributeType.STRING),
             projection_type=dynamodb.ProjectionType.ALL,
+        )
+        # RBAC multi-empresa: lista de usuarios de una empresa sin escanear.
+        self.usuarios_table.add_global_secondary_index(
+            index_name="empresa-index",
+            partition_key=dynamodb.Attribute(name="empresa_id", type=dynamodb.AttributeType.STRING),
+            projection_type=dynamodb.ProjectionType.ALL,
+        )
+        # RBAC multi-empresa: resolver el ítem de usuario a partir del `sub`
+        # del JWT (id_usuario != cognito_sub, ver docstring del módulo).
+        self.usuarios_table.add_global_secondary_index(
+            index_name="cognito-sub-index",
+            partition_key=dynamodb.Attribute(name="cognito_sub", type=dynamodb.AttributeType.STRING),
+            projection_type=dynamodb.ProjectionType.ALL,
+        )
+
+        # ── empresas table (NEW) ─────────────────────────────────────────
+        self.empresas_table = dynamodb.Table(
+            self,
+            "EmpresasTable",
+            table_name="pf-corrosion-empresas",
+            partition_key=dynamodb.Attribute(name="id_empresa", type=dynamodb.AttributeType.STRING),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.RETAIN,
         )
 
         # ── fused puntos + mediciones table ─────────────────────────────
