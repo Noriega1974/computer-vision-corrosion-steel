@@ -73,7 +73,12 @@ function Modal({ title, onClose, children }) {
     >
       <div
         style={{
-          background: 'var(--bg-card)',
+          // --bg-card es 72% opaco a propósito -- pensado para ir sobre el
+          // desenfoque (backdrop-filter) del dashboard, no para un modal
+          // solo. Sin ese blur, el contenido de atrás se lee directamente
+          // a través de la tarjeta. --bg-card-solid es la variante opaca,
+          // para superficies como esta que no llevan blur propio.
+          background: 'var(--bg-card-solid)',
           border: '1px solid var(--border)',
           borderRadius: 12,
           width: '100%',

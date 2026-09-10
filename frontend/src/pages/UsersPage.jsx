@@ -101,7 +101,11 @@ function Modal({ title, onClose, children }) {
       background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-4)',
     }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{
-        background: 'var(--bg-card)', border: '1px solid var(--border)',
+        // Mismo motivo que en PlantsPage: --bg-card es 72% opaco, pensado
+        // para ir sobre el blur del dashboard. Sin blur propio, un modal
+        // con ese fondo deja leerse lo de atrás -- --bg-card-solid es la
+        // variante opaca para este caso.
+        background: 'var(--bg-card-solid)', border: '1px solid var(--border)',
         borderRadius: 12, width: '100%', maxWidth: 500,
         maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column',
       }}>

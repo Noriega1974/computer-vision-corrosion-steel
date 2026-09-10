@@ -1,6 +1,18 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ChevronDown } from 'lucide-react';
 
+// "atlantico" debe encontrar "Atlántico" sin que el usuario tenga que
+// escribir la tilde -- se compara sin mayúsculas ni diacríticos de los dos
+// lados. NFD separa cada letra acentuada en base + marca combinante
+// (á -> a + ´), y el regex saca esas marcas (rango Unicode de acentos).
+function normalizar(s) {
+  return s
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .trim()
+    .toLowerCase();
+}
+
 const inputStyle = {
   width: '100%', padding: '8px 12px', borderRadius: 8,
   border: '1px solid var(--border)', background: 'var(--bg-page)',
@@ -38,9 +50,9 @@ export default function SearchableSelect({
   }, [value]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = normalizar(query);
     if (!q) return options;
-    return options.filter(o => o.toLowerCase().includes(q));
+    return options.filter(o => normalizar(o).includes(q));
   }, [options, query]);
 
   // Cerrar al hacer clic afuera
