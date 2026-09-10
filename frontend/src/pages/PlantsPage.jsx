@@ -878,12 +878,18 @@ function PuntoDetail({ punto, onEdit, isAdmin }) {
 export default function PlantsPage() {
   const { user } = useAuth();
 
+  // Editar un punto es solo admin/super_admin (coincide con el backend --
+  // PUT /puntos exige exactamente eso, tecnico no).
   const isAdmin =
+    user?.groups?.includes('super_admin') ||
+    user?.groups?.includes('admin');
+
+  // Crear un punto es super_admin/admin/tecnico (cliente no) -- coincide
+  // con la matriz de permisos de ubicaciones.
+  const canCreate =
+    user?.groups?.includes('super_admin') ||
     user?.groups?.includes('admin') ||
     user?.groups?.includes('tecnico');
-
-  const canCreate =
-    user?.groups?.includes('admin');
 
   const {
     puntos,

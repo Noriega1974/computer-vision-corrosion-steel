@@ -4,8 +4,10 @@ import {
   RefreshCw, UserX, Trash2, ChevronUp, ChevronDown, Clock,
 } from 'lucide-react';
 import { useGestionUsuarios } from '../hooks/useUsuarios';
+import { useGestionEmpresas } from '../hooks/useEmpresas';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
+import { Building2 } from 'lucide-react';
 
 // ─── RBAC multi-empresa ────────────────────────────────────────────────────
 // Jerarquía de creación de usuarios, espejo de CREATABLE_ROLES en
@@ -359,6 +361,41 @@ function ColaboradorForm({ onSubmit, saving, error }) {
   );
 }
 
+// ─── Formulario de empresa (solo super_admin) ────────────────────────────────
+function EmpresaForm({ onSubmit, saving, error }) {
+  const [nombre, setNombre] = useState('');
+
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); onSubmit({ nombre }); }}>
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
+        <label htmlFor="empresa-nombre" style={labelStyle}>
+          Nombre de la empresa *
+        </label>
+        <input
+          id="empresa-nombre" name="nombre" autoComplete="off"
+          required value={nombre} onChange={e => setNombre(e.target.value)}
+          placeholder="ej: Universidad del Norte" style={inputStyle}
+        />
+      </div>
+      {error && (
+        <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, color: '#dc2626', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3-5)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <AlertCircle size={13} /> {error}
+        </div>
+      )}
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button type="submit" disabled={saving} style={{
+          padding: '8px 20px', background: 'var(--accent-amber)', border: 'none',
+          borderRadius: 8, cursor: saving ? 'not-allowed' : 'pointer',
+          fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'white',
+          opacity: saving ? 0.6 : 1,
+        }}>
+          {saving ? 'Creando…' : 'Crear empresa'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 // ─── UsersPage ────────────────────────────────────────────────────────────────
 export default function UsersPage() {
   const { user: me } = useAuth();
@@ -369,8 +406,14 @@ export default function UsersPage() {
   const isAdmin = miRol === 'admin' || miRol === 'super_admin';
   const rolesCreables = CREATABLE_ROLES[miRol] ?? [];
   const puedeCrear = rolesCreables.length > 0;
+  // Gestión de empresas es exclusiva de super_admin (POST/GET /empresas en
+  // el backend rechaza cualquier otro rol con 403).
+  const esSuperAdmin = miRol === 'super_admin';
 
   const { usuarios, loading, mutating, mutError, crearUsuario, crearColaborador, editarUsuario, deshabilitarUsuario, habilitarUsuario, eliminarUsuario } = useGestionUsuarios();
+  const { empresas, loading: loadingEmpresas, mutating: mutandoEmpresa, mutError: mutErrorEmpresa, crearEmpresa } = useGestionEmpresas(esSuperAdmin);
+  const [showCreateEmpresa, setShowCreateEmpresa] = useState(false);
+  const [empresaFormError, setEmpresaFormError] = useState(null);
   // Perfil propio: única forma de conocer el empresa_id del usuario logueado
   // en el frontend (no viaja en el JWT/user de useAuth) — se usa solo para
   // el filtro cliente-side de abajo, defensa en profundidad.
@@ -455,6 +498,17 @@ export default function UsersPage() {
       setShowCreate(false);
     } catch (err) {
       setFormError(err.message);
+    }
+  };
+
+  const handleCrearEmpresa = async (payload) => {
+    setEmpresaFormError(null);
+    try {
+      await crearEmpresa(payload);
+      setShowCreateEmpresa(false);
+      setToast('Empresa creada correctamente.');
+    } catch (err) {
+      setEmpresaFormError(err.message);
     }
   };
 
@@ -687,7 +741,93 @@ export default function UsersPage() {
         </div>
         </>
         )}
+
+        {/* ── Empresas: exclusivo de super_admin ── */}
+        {esSuperAdmin && (
+          <div style={{ marginTop: 'var(--space-6)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 'var(--space-3)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2-5)' }}>
+                <span style={{ background: 'var(--accent-amber)', width: 3, height: 20, borderRadius: 2, display: 'inline-block' }} />
+                <Building2 size={16} color="var(--text-primary)" />
+                <span style={{ fontFamily: 'var(--font-data)', fontSize: 'var(--text-sm)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-primary)' }}>
+                  Empresas
+                </span>
+              </div>
+              <button onClick={() => { setShowCreateEmpresa(true); setEmpresaFormError(null); }} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 7,
+                padding: '8px 14px', background: 'var(--accent-amber)', border: 'none',
+                borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)', color: 'white',
+              }}>
+                <Plus size={14} /> Nueva empresa
+              </button>
+            </div>
+
+            {mutErrorEmpresa && (
+              <div style={{ padding: '8px 14px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 8, color: '#dc2626', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3-5)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <AlertCircle size={13} /> {mutErrorEmpresa}
+              </div>
+            )}
+
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-ui)' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--bg-page)' }}>
+                      <th style={thBase}>Empresa</th>
+                      <th style={thBase}>Creada</th>
+                      <th style={thBase}>Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loadingEmpresas
+                      ? Array.from({ length: 2 }).map((_, i) => (
+                          <tr key={i}>
+                            {[70, 40, 30].map((w, j) => (
+                              <td key={j} style={{ padding: '10px 14px' }}>
+                                <div style={{ height: 13, borderRadius: 4, background: 'var(--border)', width: `${w}%`, animation: 'shimmer 1.5s infinite' }} />
+                              </td>
+                            ))}
+                          </tr>
+                        ))
+                      : empresas.map(e => (
+                          <tr key={e.id_empresa} style={{ borderBottom: '1px solid var(--border)' }}>
+                            <td style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--text-primary)' }}>{e.nombre}</td>
+                            <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>
+                              {e.fecha_creacion ? new Date(e.fecha_creacion).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                            </td>
+                            <td style={{ padding: '10px 14px' }}>
+                              <span style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)',
+                                padding: '2px 8px', borderRadius: 5, fontSize: 'var(--text-2xs)', fontWeight: 600,
+                                background: e.activa === false ? 'rgba(220,38,38,0.08)' : 'rgba(22,163,74,0.08)',
+                                color: e.activa === false ? '#dc2626' : '#16a34a',
+                              }}>
+                                {e.activa === false ? <X size={11} /> : <Check size={11} />}
+                                {e.activa === false ? 'Inactiva' : 'Activa'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                    }
+                    {!loadingEmpresas && empresas.length === 0 && (
+                      <tr><td colSpan={3} style={{ padding: 'var(--space-6)', textAlign: 'center', color: 'var(--text-faint)', fontSize: 'var(--text-sm)' }}>
+                        No hay empresas registradas
+                      </td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* ── Modal: Crear empresa ── */}
+      {showCreateEmpresa && (
+        <Modal title="Nueva empresa" onClose={() => setShowCreateEmpresa(false)}>
+          <EmpresaForm onSubmit={handleCrearEmpresa} saving={mutandoEmpresa} error={empresaFormError} />
+        </Modal>
+      )}
 
       {/* ── Modal: Editar usuario ── */}
       {editUsuario && (
