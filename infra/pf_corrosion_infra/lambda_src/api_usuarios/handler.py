@@ -485,6 +485,12 @@ def lambda_handler(event: dict, context) -> dict:
             if rol_nuevo and rol_nuevo != rol_actual:
                 if rol_nuevo not in ROLES_VALIDOS:
                     return _respuesta(400, {"error": f"rol debe ser uno de: {ROLES_VALIDOS}"})
+                # Mismo límite que en la creación: si tu rol no puede CREAR ese
+                # rol, tampoco podés otorgarlo editando a alguien ya existente
+                # (si no, un admin podría auto-promoverse o promover a otro
+                # usuario de su empresa a super_admin editando en vez de crear).
+                if rol_nuevo not in CREATABLE_ROLES.get(creador.get("rol"), set()):
+                    return _respuesta(403, {"error": f"Tu rol ({creador.get('rol')}) no puede asignar el rol '{rol_nuevo}'"})
                 try:
                     if rol_actual in ROLES_VALIDOS:
                         cognito.admin_remove_user_from_group(
