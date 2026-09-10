@@ -82,6 +82,12 @@ class CorriaApiStack(Stack):
         colaborador = self.api.root.add_resource("colaborador")
         colaborador.add_method("POST", usuarios_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
 
+        # ── /empresas — gestión de empresas, solo super_admin (chequeo en
+        # el handler, misma Lambda api-usuarios) ───────────────────────────
+        empresas = self.api.root.add_resource("empresas")
+        empresas.add_method("GET", usuarios_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
+        empresas.add_method("POST", usuarios_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
+
         # ── /puntos ──────────────────────────────────────────────────────
         puntos = self.api.root.add_resource("puntos")
         puntos.add_method("GET", puntos_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)

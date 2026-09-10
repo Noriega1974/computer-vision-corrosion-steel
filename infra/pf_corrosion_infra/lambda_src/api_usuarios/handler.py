@@ -15,6 +15,8 @@ Rutas API Gateway:
                                              que el historial sigue siendo legible aunque la cuenta se borre)
   DELETE /usuarios/{id_usuario}           → deshabilitar usuario (admin/super_admin, con alcance de empresa)
   POST   /colaborador                     → crear colaborador temporal con nickname (admin/super_admin)
+  GET    /empresas                        → listar empresas (solo super_admin)
+  POST   /empresas                        → crear empresa (solo super_admin)
 
 Evento directo (EventBridge cron diario):
   Sin httpMethod → ejecuta limpieza de colaboradores vencidos
@@ -637,6 +639,39 @@ def lambda_handler(event: dict, context) -> dict:
                     logger.error("Rollback de deshabilitación falló para '%s': %s", email_objetivo, rollback_err)
                 raise
             return _respuesta(200, {"mensaje": "Usuario deshabilitado correctamente"})
+
+        # ── GET /empresas — listar (solo super_admin) ──────────────────────────
+        elif metodo == "GET" and resource == "/empresas":
+            creador = _usuario_actual(event)
+            if not creador or creador.get("rol") != "super_admin":
+                return _respuesta(403, {"error": "Solo super_admin puede ver la lista de empresas"})
+            resp = tabla_empresas.scan()
+            return _respuesta(200, {"empresas": resp.get("Items", [])})
+
+        # ── POST /empresas — crear (solo super_admin) ──────────────────────────
+        elif metodo == "POST" and resource == "/empresas":
+            creador = _usuario_actual(event)
+            if not creador or creador.get("rol") != "super_admin":
+                return _respuesta(403, {"error": "Solo super_admin puede crear empresas"})
+            body = json.loads(event.get("body") or "{}")
+            nombre = (body.get("nombre") or "").strip()
+            if not nombre:
+                return _respuesta(400, {"error": "nombre es requerido"})
+            # Evitar duplicados obvios por nombre (case-insensitive) — un
+            # scan es aceptable acá: se espera un puñado de empresas, no miles.
+            existentes = tabla_empresas.scan().get("Items", [])
+            if any(e.get("nombre", "").strip().lower() == nombre.lower() for e in existentes):
+                return _respuesta(409, {"error": f"Ya existe una empresa llamada '{nombre}'"})
+            id_empresa = f"EMP-{uuid.uuid4()}"
+            item = {
+                "id_empresa": id_empresa,
+                "nombre": nombre,
+                "activa": True,
+                "fecha_creacion": datetime.now(timezone.utc).isoformat(),
+                "creado_por": creador.get("id_usuario", ""),
+            }
+            tabla_empresas.put_item(Item=item)
+            return _respuesta(201, item)
 
         return _respuesta(405, {"error": f"Método {metodo} no permitido"})
 

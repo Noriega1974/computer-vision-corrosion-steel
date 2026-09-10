@@ -86,9 +86,10 @@ class CorriaComputeStack(Stack):
             },
         )
         usuarios_table.grant_read_write_data(self.api_usuarios_fn)
-        # Solo necesita verificar que un empresa_id exista al crear un
-        # usuario con empresa explícita (super_admin) — nunca escribe acá.
-        empresas_table.grant_read_data(self.api_usuarios_fn)
+        # Lectura: verificar que un empresa_id exista al crear un usuario con
+        # empresa explícita (super_admin). Escritura: POST /empresas (crear
+        # empresas nuevas), restringido a super_admin dentro del handler.
+        empresas_table.grant_read_write_data(self.api_usuarios_fn)
         # Solo necesita chequear (vía usuario-timestamp-index) si el usuario
         # a eliminar permanentemente tiene puntos/mediciones asociados, para
         # bloquear el borrado en vez de dejarlos huérfanos — nunca escribe acá.
