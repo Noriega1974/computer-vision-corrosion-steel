@@ -35,7 +35,7 @@ const NAV_ITEMS = [
     path: '/upload',
     icon: Upload,
     label: 'Subir medición',
-    roles: ['admin', 'tecnico'],
+    roles: ['super_admin', 'admin', 'tecnico'],
   },
 
   {
@@ -50,14 +50,14 @@ const NAV_ITEMS = [
     path: '/plantas',
     icon: MapPin,
     label: 'Ubicaciones',
-    roles: ['admin', 'tecnico'],
+    roles: ['super_admin', 'admin', 'tecnico'],
   },
 
   {
     path: '/usuarios',
     icon: Users,
     label: 'Usuarios',
-    roles: ['admin'],
+    roles: ['super_admin', 'admin', 'tecnico'],
   },
 
   { divider: true },
@@ -72,7 +72,7 @@ const NAV_ITEMS = [
     path: '/configuracion',
     icon: Settings,
     label: 'Configuración',
-    roles: ['admin'],
+    roles: ['super_admin', 'admin'],
   },
 ];
 
@@ -94,12 +94,14 @@ function getInitials(name = '') {
 }
 
 const ROL_LABELS = {
+  super_admin: 'Super Admin',
   admin: 'Administrador',
   tecnico: 'Técnico',
   cliente: 'Cliente',
 };
 
 function getPrimaryRole(groups = []) {
+  if (groups.includes('super_admin')) return 'super_admin';
   if (groups.includes('admin')) return 'admin';
   if (groups.includes('tecnico')) return 'tecnico';
   if (groups.includes('cliente')) return 'cliente';
