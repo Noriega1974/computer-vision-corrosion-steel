@@ -230,6 +230,13 @@ def lambda_handler(event: dict, context) -> dict:
             if creado_por_id:
                 item["creado_por_id"] = creado_por_id
                 item["usuario_id"] = creado_por_id
+                # Foto fija del nombre al momento de crear el punto — no se
+                # actualiza si el usuario después cambia su nombre, y sigue
+                # siendo legible aunque esa cuenta se borre más adelante
+                # (a diferencia de creado_por_id/usuario_id, que dejan de
+                # resolverse a nadie si la cuenta ya no existe).
+                if creador.get("nombre"):
+                    item["creado_por_nombre"] = creador.get("nombre")
             # lat/lng vienen como float desde el frontend — DynamoDB requiere Decimal
             item = floats_to_decimal(item)
             tabla.put_item(Item=item)

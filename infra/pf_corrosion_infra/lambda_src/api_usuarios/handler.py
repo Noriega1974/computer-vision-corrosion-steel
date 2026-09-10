@@ -9,7 +9,10 @@ Rutas API Gateway:
   PUT    /usuarios/{id_usuario}           → actualizar usuario (admin/super_admin, con alcance de empresa)
   DELETE /usuarios/{id_usuario}/eliminar  → eliminar usuario permanentemente (admin/super_admin, con alcance de
                                              empresa; bloqueado con 409 si el usuario tiene puntos/mediciones
-                                             asociados, para no dejarlos huérfanos — usar deshabilitar en ese caso)
+                                             asociados, para no dejarlos huérfanos — usar deshabilitar en ese
+                                             caso, o ?forzar=true (solo super_admin) para saltarse el bloqueo;
+                                             el nombre del creador ya queda guardado en cada punto/medición, así
+                                             que el historial sigue siendo legible aunque la cuenta se borre)
   DELETE /usuarios/{id_usuario}           → deshabilitar usuario (admin/super_admin, con alcance de empresa)
   POST   /colaborador                     → crear colaborador temporal con nickname (admin/super_admin)
 
@@ -574,12 +577,17 @@ def lambda_handler(event: dict, context) -> dict:
                 return _respuesta(403, {"error": "No tenés permiso para eliminar usuarios de otra empresa"})
             if usuario.get("email") == email_propio:
                 return _respuesta(400, {"error": "No puedes eliminar tu propia cuenta"})
-            if _tiene_historial(usuario.get("cognito_sub", "")):
+            query_params = event.get("queryStringParameters") or {}
+            forzar = query_params.get("forzar") == "true" and creador.get("rol") == "super_admin"
+            if _tiene_historial(usuario.get("cognito_sub", "")) and not forzar:
                 return _respuesta(
                     409,
                     {"error": "Este usuario tiene puntos o mediciones asociados — "
                               "eliminarlo dejaría ese historial huérfano. "
-                              "Usá deshabilitar (DELETE /usuarios/{id_usuario}) en su lugar."},
+                              "Usá deshabilitar (DELETE /usuarios/{id_usuario}) en su lugar, "
+                              "o pedile a un super_admin que fuerce el borrado con ?forzar=true "
+                              "(el nombre queda guardado en cada punto/medición, así que el "
+                              "historial sigue siendo legible aunque la cuenta desaparezca)."},
                 )
             email_objetivo = usuario.get("email")
             cognito.admin_delete_user(UserPoolId=USER_POOL_ID, Username=email_objetivo)

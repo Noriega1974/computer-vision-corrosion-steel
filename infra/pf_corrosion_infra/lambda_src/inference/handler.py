@@ -138,7 +138,8 @@ def _crear_punto(datos: dict) -> dict:
 
 
 def _resolver_punto(
-    ubicacion: dict, ts: str, tomado_por_id: str, empresa_id: str | None, es_super_admin: bool = False,
+    ubicacion: dict, ts: str, tomado_por_id: str, empresa_id: str | None,
+    es_super_admin: bool = False, tomado_por_nombre: str = "",
 ) -> tuple[str, dict]:
     modo = ubicacion.get("modo")
 
@@ -190,6 +191,8 @@ def _resolver_punto(
         if tomado_por_id:
             nuevo["creado_por_id"] = tomado_por_id
             nuevo["usuario_id"] = tomado_por_id
+            if tomado_por_nombre:
+                nuevo["creado_por_nombre"] = tomado_por_nombre
         # empresa_id del recurso SIEMPRE se resuelve del creador autenticado
         # (ver lambda_handler), nunca de un campo del body/ubicacion.
         if empresa_id:
@@ -225,6 +228,8 @@ def _resolver_punto(
         if tomado_por_id:
             nuevo["creado_por_id"] = tomado_por_id
             nuevo["usuario_id"] = tomado_por_id
+            if tomado_por_nombre:
+                nuevo["creado_por_nombre"] = tomado_por_nombre
         if empresa_id:
             nuevo["empresa_id"] = empresa_id
         _crear_punto(nuevo)
@@ -563,10 +568,16 @@ def lambda_handler(event: dict, context) -> dict:
             ts = datetime.now(timezone.utc).isoformat()
 
         tomado_por_id = _claims(event).get("sub", "")
+        # Foto fija del nombre al momento de tomar la medición -- sigue
+        # siendo legible en el histórico aunque la cuenta se borre después
+        # (a diferencia de tomado_por_id/usuario_id, que dejan de resolverse
+        # a nadie si esa cuenta ya no existe).
+        tomado_por_nombre = creador.get("nombre", "") if creador else ""
 
         try:
             id_punto, info_punto = _resolver_punto(
                 ubicacion, ts, tomado_por_id, empresa_id_creador, es_super_admin,
+                tomado_por_nombre=tomado_por_nombre,
             )
         except LookupError as e:
             return _respuesta(404, {"error": str(e)})
@@ -678,6 +689,8 @@ def lambda_handler(event: dict, context) -> dict:
                 # "usuario_id" solo se agrega cuando hay un usuario real.
                 item_db["tomado_por_id"] = tomado_por_id
                 item_db["usuario_id"] = tomado_por_id
+                if tomado_por_nombre:
+                    item_db["creado_por_nombre"] = tomado_por_nombre
             if latitud_real is not None:
                 item_db["latitud_real"] = Decimal(str(latitud_real))
             if longitud_real is not None:
