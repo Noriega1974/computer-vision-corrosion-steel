@@ -16,13 +16,14 @@ Rutas API Gateway:
   DELETE /usuarios/{id_usuario}           → deshabilitar usuario (admin/super_admin, con alcance de empresa)
   POST   /colaborador                     → crear colaborador temporal con nickname (admin/super_admin)
   GET    /empresas                        → listar empresas (solo super_admin)
-  POST   /empresas                        → crear empresa (solo super_admin); acepta `zonas`
-                                             opcional (lista de círculos {lat,lng,radio_metros}
-                                             que delimitan su área geográfica); deja además un
+  POST   /empresas                        → crear empresa (solo super_admin); requiere
+                                             `departamento`/`ciudad`; acepta `zonas` opcional
+                                             (lista de círculos {lat,lng,radio_metros} que
+                                             delimitan su área geográfica); deja además un
                                              marcador vacío `empresas/{id_empresa}/` en el bucket
                                              de imágenes (no bloqueante)
-  PUT    /empresas/{id_empresa}           → editar nombre, activar-desactivar y/o `zonas` (solo
-                                             super_admin)
+  PUT    /empresas/{id_empresa}           → editar nombre, activar-desactivar, departamento,
+                                             ciudad y/o `zonas` (solo super_admin)
 
 Evento directo (EventBridge cron diario):
   Sin httpMethod → ejecuta limpieza de colaboradores vencidos
@@ -741,6 +742,16 @@ def lambda_handler(event: dict, context) -> dict:
             nombre = (body.get("nombre") or "").strip()
             if not nombre:
                 return _respuesta(400, {"error": "nombre es requerido"})
+            # departamento/ciudad: requeridos al crear -- ubican la empresa
+            # de forma legible antes de que exista una zona dibujada.
+            departamento = body.get("departamento")
+            if not isinstance(departamento, str) or not departamento.strip():
+                return _respuesta(400, {"error": "departamento es requerido"})
+            departamento = departamento.strip()
+            ciudad = body.get("ciudad")
+            if not isinstance(ciudad, str) or not ciudad.strip():
+                return _respuesta(400, {"error": "ciudad es requerida"})
+            ciudad = ciudad.strip()
             # zonas: opcional -- una empresa puede no tener zona dibujada
             # todavía (lista vacía o ausente).
             zonas = body.get("zonas")
@@ -757,6 +768,8 @@ def lambda_handler(event: dict, context) -> dict:
             item = {
                 "id_empresa": id_empresa,
                 "nombre": nombre,
+                "departamento": departamento,
+                "ciudad": ciudad,
                 "activa": True,
                 "fecha_creacion": datetime.now(timezone.utc).isoformat(),
                 "creado_por": creador.get("id_usuario", ""),
@@ -789,12 +802,14 @@ def lambda_handler(event: dict, context) -> dict:
             if not empresa:
                 return _respuesta(404, {"error": f"Empresa {id_empresa} no encontrada"})
 
-            body   = json.loads(event.get("body") or "{}")
-            nombre = body.get("nombre")
-            activa = body.get("activa")
-            zonas  = body.get("zonas")
-            if nombre is None and activa is None and zonas is None:
-                return _respuesta(400, {"error": "Debes indicar nombre, activa y/o zonas para actualizar"})
+            body         = json.loads(event.get("body") or "{}")
+            nombre       = body.get("nombre")
+            activa       = body.get("activa")
+            departamento = body.get("departamento")
+            ciudad       = body.get("ciudad")
+            zonas        = body.get("zonas")
+            if all(v is None for v in (nombre, activa, departamento, ciudad, zonas)):
+                return _respuesta(400, {"error": "Debes indicar al menos un campo para actualizar"})
 
             campos = {}
             if nombre is not None:
@@ -816,6 +831,14 @@ def lambda_handler(event: dict, context) -> dict:
                 if not isinstance(activa, bool):
                     return _respuesta(400, {"error": "activa debe ser un booleano"})
                 campos["activa"] = activa
+            if departamento is not None:
+                if not isinstance(departamento, str) or not departamento.strip():
+                    return _respuesta(400, {"error": "departamento debe ser un texto no vacío"})
+                campos["departamento"] = departamento.strip()
+            if ciudad is not None:
+                if not isinstance(ciudad, str) or not ciudad.strip():
+                    return _respuesta(400, {"error": "ciudad debe ser un texto no vacío"})
+                campos["ciudad"] = ciudad.strip()
             if zonas is not None:
                 error_zonas = _validar_zonas(zonas)
                 if error_zonas:

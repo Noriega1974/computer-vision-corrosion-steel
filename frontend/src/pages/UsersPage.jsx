@@ -9,6 +9,13 @@ import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
 import { Building2 } from 'lucide-react';
 import ZonaMapPicker from '../components/ZonaMapPicker';
+import SearchableSelect from '../components/SearchableSelect';
+import colombiaData from '../data/colombia-divipola.json';
+
+const DEPARTAMENTOS_EMPRESA = colombiaData.departamentos.map(d => d.nombre);
+const MUNICIPIOS_POR_DEPARTAMENTO_EMPRESA = Object.fromEntries(
+  colombiaData.departamentos.map(d => [d.nombre, d.municipios])
+);
 
 // ─── RBAC multi-empresa ────────────────────────────────────────────────────
 // Jerarquía de creación de usuarios, espejo de CREATABLE_ROLES en
@@ -404,12 +411,67 @@ function ColaboradorForm({ onSubmit, saving, error }) {
 // /empresas/{id_empresa}) en vez de duplicarlo.
 function EmpresaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
   const [nombre, setNombre] = useState(initial.nombre ?? '');
-  // Zonas: opcionales, van al final del formulario -- una empresa se puede
-  // crear sin dibujar su área todavía y agregarla después editando.
+  const [departamento, setDepartamento] = useState(initial.departamento ?? '');
+  const [ciudad, setCiudad] = useState(initial.ciudad ?? '');
+  const municipiosDisponibles = MUNICIPIOS_POR_DEPARTAMENTO_EMPRESA[departamento] ?? [];
+
+  // Coordenadas del "centro" de la empresa (dónde arranca a mirar el mapa al
+  // dibujar la zona) -- mismo patrón que tenía PuntoForm en la vieja
+  // PlantsPage: detecta la ubicación del dispositivo sola al abrir el
+  // formulario, con un toggle "Ser más específico" para tipearla a mano.
+  const [latitud, setLatitud] = useState(initial.coordenadas?.lat ?? '');
+  const [longitud, setLongitud] = useState(initial.coordenadas?.lng ?? '');
+  const [geoLoading, setGeoLoading] = useState(false);
+  const [geoError, setGeoError] = useState(null);
+  const [showManual, setShowManual] = useState(false);
+
+  useEffect(() => {
+    const yaHayCoordenadas = initial.coordenadas?.lat;
+    if (yaHayCoordenadas || !navigator.geolocation) return;
+    setGeoLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLatitud(parseFloat(pos.coords.latitude.toFixed(6)));
+        setLongitud(parseFloat(pos.coords.longitude.toFixed(6)));
+        setGeoLoading(false);
+      },
+      () => {
+        setGeoError('No se pudo detectar la ubicación automáticamente.');
+        setGeoLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // El botón "Dibujar zona" solo aparece (y el mapa solo se monta) una vez
+  // que hay una coordenada de referencia -- así el mapa arranca centrado
+  // ahí en vez de en un punto arbitrario de Colombia. Si ya venía con zonas
+  // guardadas (editar), el picker arranca visible de una.
+  const [mostrarMapaZona, setMostrarMapaZona] = useState((initial.zonas ?? []).length > 0);
   const [zonas, setZonas] = useState(initial.zonas ?? []);
+  const hayCoordenadas = latitud !== '' && longitud !== '';
+  const [validationError, setValidationError] = useState(null);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!DEPARTAMENTOS_EMPRESA.includes(departamento)) {
+      setValidationError('Selecciona un departamento válido de la lista.');
+      return;
+    }
+    if (!municipiosDisponibles.includes(ciudad)) {
+      setValidationError('Selecciona una ciudad válida del departamento elegido.');
+      return;
+    }
+    setValidationError(null);
+    // `latitud`/`longitud` son solo el punto de referencia para centrar el
+    // mapa al dibujar zonas -- no se guardan aparte en la empresa, el
+    // backend no tiene ese campo. Lo único persistente es `zonas`.
+    onSubmit({ nombre, departamento, ciudad, zonas });
+  };
 
   return (
-    <form onSubmit={(e) => { e.preventDefault(); onSubmit({ nombre, zonas }); }}>
+    <form onSubmit={handleSubmit}>
       <div style={{ marginBottom: 'var(--space-3-5)' }}>
         <label htmlFor="empresa-nombre" style={labelStyle}>
           Nombre de la afiliación *
@@ -422,15 +484,125 @@ function EmpresaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
       </div>
 
       <div style={{ marginBottom: 'var(--space-3-5)' }}>
-        <span style={{ ...labelStyle, display: 'block' }}>
-          Zona en el mapa (opcional)
-        </span>
-        <ZonaMapPicker zonas={zonas} onChange={setZonas} />
+        <label htmlFor="empresa-departamento" style={labelStyle}>
+          Departamento *
+        </label>
+        <SearchableSelect
+          id="empresa-departamento"
+          options={DEPARTAMENTOS_EMPRESA}
+          value={departamento}
+          onChange={(v) => { setDepartamento(v); setCiudad(''); }}
+          placeholder="Buscar departamento"
+          emptyMessage="Sin coincidencias"
+        />
       </div>
 
-      {error && (
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
+        <label htmlFor="empresa-ciudad" style={labelStyle}>
+          Ciudad *
+        </label>
+        <SearchableSelect
+          id="empresa-ciudad"
+          options={municipiosDisponibles}
+          value={ciudad}
+          onChange={setCiudad}
+          placeholder={departamento ? 'Buscar ciudad' : 'Selecciona un departamento primero'}
+          disabled={!departamento}
+          emptyMessage="Sin coincidencias"
+        />
+      </div>
+
+      {/* Ubicación -- mismo patrón que tenía el punto en PlantsPage:
+          detección automática + toggle manual. No es <label>: encabeza el
+          bloque entero, no un solo control. */}
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
+        <span style={{ ...labelStyle, display: 'block' }}>Ubicación de referencia</span>
+
+        {geoLoading && (
+          <div style={{ padding: '8px 12px', background: 'rgba(156,54,16,0.05)', border: '1px solid rgba(156,54,16,0.15)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>
+            Detectando ubicación…
+          </div>
+        )}
+        {!geoLoading && hayCoordenadas && (
+          <div style={{ padding: '8px 12px', background: 'rgba(156,54,16,0.05)', border: '1px solid rgba(156,54,16,0.15)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>
+            📍 {latitud}, {longitud}
+          </div>
+        )}
+        {geoError && (
+          <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.05)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: '#dc2626', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <AlertCircle size={12} /> {geoError}
+          </div>
+        )}
+
+        <button
+          type="button" onClick={() => setShowManual(v => !v)}
+          style={{
+            marginTop: 'var(--space-2)', background: 'none', border: 'none', padding: 0,
+            fontSize: 'var(--text-2xs)', color: 'var(--accent-amber)', cursor: 'pointer',
+            fontFamily: 'var(--font-data)', fontWeight: 600, letterSpacing: '0.04em',
+            textDecoration: 'underline', textUnderlineOffset: 3,
+          }}
+        >
+          {showManual ? 'Ocultar coordenadas' : 'Ser más específico con la ubicación'}
+        </button>
+
+        {showManual && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)', marginTop: 'var(--space-2-5)' }}>
+            <div>
+              <label htmlFor="empresa-latitud" style={labelStyle}>Latitud</label>
+              <input
+                id="empresa-latitud" name="latitud" type="number" inputMode="decimal" step="any"
+                value={latitud} onChange={e => setLatitud(e.target.value === '' ? '' : Number(e.target.value))}
+                style={inputStyle} placeholder="Ej: 4.710989"
+              />
+            </div>
+            <div>
+              <label htmlFor="empresa-longitud" style={labelStyle}>Longitud</label>
+              <input
+                id="empresa-longitud" name="longitud" type="number" inputMode="decimal" step="any"
+                value={longitud} onChange={e => setLongitud(e.target.value === '' ? '' : Number(e.target.value))}
+                style={inputStyle} placeholder="Ej: -74.072092"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Dibujar zona: recién aparece con una coordenada de referencia --
+          el mapa arranca centrado ahí en vez de en cualquier punto de
+          Colombia. Opcional: se puede crear la empresa sin zona y
+          agregarla después editando. */}
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
+        {!mostrarMapaZona ? (
+          <button
+            type="button"
+            onClick={() => setMostrarMapaZona(true)}
+            disabled={!hayCoordenadas}
+            title={!hayCoordenadas ? 'Marca una ubicación de referencia primero' : undefined}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '7px 14px', background: 'var(--bg-inset)', border: '1px solid var(--border)',
+              borderRadius: 7, cursor: hayCoordenadas ? 'pointer' : 'not-allowed',
+              opacity: hayCoordenadas ? 1 : 0.5,
+              fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)', color: 'var(--accent-amber)',
+            }}
+          >
+            Dibujar zona (opcional)
+          </button>
+        ) : (
+          <>
+            <span style={{ ...labelStyle, display: 'block' }}>Zona en el mapa</span>
+            <ZonaMapPicker
+              zonas={zonas} onChange={setZonas}
+              puntoReferencia={hayCoordenadas ? { lat: Number(latitud), lng: Number(longitud) } : null}
+            />
+          </>
+        )}
+      </div>
+
+      {(validationError || error) && (
         <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, color: '#dc2626', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3-5)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <AlertCircle size={13} /> {error}
+          <AlertCircle size={13} /> {validationError || error}
         </div>
       )}
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>

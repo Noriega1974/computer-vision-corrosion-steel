@@ -23,10 +23,15 @@ const RADIO_DEFAULT_METROS = 150;
 // lista de abajo, no arrastrando en el mapa (más simple y menos frágil de
 // tocar en pantallas chicas). Clic en el mapa agrega una zona nueva en ese
 // punto con el radio por defecto.
-export default function ZonaMapPicker({ zonas = [], onChange }) {
+// `puntoReferencia` ({lat,lng}, opcional): si viene, el mapa arranca
+// centrado y con zoom ahí (en vez del centro genérico de Colombia) y
+// muestra un marcador de referencia -- así el usuario ve enseguida que esa
+// es la coordenada elegida antes de ponerse a dibujar zonas alrededor.
+export default function ZonaMapPicker({ zonas = [], onChange, puntoReferencia = null }) {
   const mapRef = useRef(null);
   const instanceRef = useRef(null);
   const circulosRef = useRef([]); // paralelo a `zonas`, un L.circle por índice
+  const referenciaRef = useRef(null);
   const leafletReady = useLeaflet();
   const zonasRef = useRef(zonas);
   zonasRef.current = zonas;
@@ -35,8 +40,9 @@ export default function ZonaMapPicker({ zonas = [], onChange }) {
   useEffect(() => {
     if (!leafletReady || instanceRef.current) return;
     const L = window.L;
+    const centro = puntoReferencia ? [puntoReferencia.lat, puntoReferencia.lng] : [6.5, -74.5];
     const map = L.map(mapRef.current, {
-      center: [6.5, -74.5], zoom: 5,
+      center: centro, zoom: puntoReferencia ? 13 : 5,
       zoomControl: true, scrollWheelZoom: true,
     });
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -50,6 +56,16 @@ export default function ZonaMapPicker({ zonas = [], onChange }) {
       ]);
     });
     instanceRef.current = map;
+
+    if (puntoReferencia) {
+      referenciaRef.current = L.marker(centro, {
+        icon: L.divIcon({
+          html: `<div style="width:12px;height:12px;border-radius:50%;background:#2563eb;border:2px solid white;box-shadow:0 0 6px #2563eb80;"></div>`,
+          className: '', iconSize: [12, 12], iconAnchor: [6, 6],
+        }),
+      }).addTo(map).bindTooltip('Ubicación de referencia', { sticky: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leafletReady]);
 
   // Redibujar los círculos cuando cambia la lista de zonas (agregar, borrar,

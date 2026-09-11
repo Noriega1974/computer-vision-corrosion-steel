@@ -50,7 +50,7 @@ const NAV_ITEMS = [
     path: '/puntos',
     icon: MapPin,
     label: 'Puntos',
-    roles: ['super_admin', 'admin'],
+    roles: ['super_admin', 'admin', 'tecnico'],
   },
 
   {

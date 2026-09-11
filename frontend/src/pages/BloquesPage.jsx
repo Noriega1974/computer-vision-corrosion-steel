@@ -14,7 +14,10 @@ const MUNICIPIOS_POR_DEPARTAMENTO = Object.fromEntries(
 
 // ─── Skeleton ────────────────────────────────────────────────────────────────
 function SkeletonRow({ cols }) {
-  const widths = cols === 7 ? [70, 90, 50, 60, 30, 40, 40] : [70, 90, 60, 30, 40, 40];
+  // Placeholder cosmético: recorta el set de 7 anchuras a las `cols` que
+  // haya (5 para tecnico, 6 para admin, 7 para super_admin) -- no hace
+  // falta que cada ancho calce exacto con su columna real, es un shimmer.
+  const widths = [70, 90, 50, 60, 30, 40, 40].slice(0, cols);
   return (
     <tr>
       {widths.map((w, i) => (
@@ -329,6 +332,10 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, empresasDis
 export default function BloquesPage() {
   const { user: me } = useAuth();
   const esSuperAdmin = me?.groups?.includes('super_admin');
+  // tecnico puede entrar y CREAR puntos (el backend abre POST /bloques a
+  // los 3 roles), pero no editar/desactivar/eliminar -- eso sigue exclusivo
+  // de admin/super_admin (PUT/DELETE /bloques los rechaza con 403).
+  const puedeGestionar = me?.groups?.includes('super_admin') || me?.groups?.includes('admin');
 
   const { bloques, loading, mutating, mutError, crearBloque, editarBloque, eliminarBloque } = useGestionBloques();
   // `enabled=esSuperAdmin`: evita el fetch (y el 403) de /empresas para
@@ -399,7 +406,8 @@ export default function BloquesPage() {
   };
 
   const thBase = { padding: '9px 14px', textAlign: 'left', fontFamily: 'var(--font-data)', fontSize: 'var(--text-3xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-faint)', borderBottom: '1px solid var(--border)' };
-  const colCount = esSuperAdmin ? 7 : 6;
+  // Punto, Descripción, [Afiliación], Ubicación, Mediciones, Estado, [Acciones]
+  const colCount = 5 + (esSuperAdmin ? 1 : 0) + (puedeGestionar ? 1 : 0);
 
   return (
     <>
@@ -449,7 +457,7 @@ export default function BloquesPage() {
                   <th style={thBase}>Ubicación</th>
                   <th style={thBase}>Mediciones</th>
                   <th style={thBase}>Estado</th>
-                  <th style={thBase}>Acciones</th>
+                  {puedeGestionar && <th style={thBase}>Acciones</th>}
                 </tr>
               </thead>
               <tbody>
@@ -481,31 +489,33 @@ export default function BloquesPage() {
                             {b.activo === false ? 'Inactivo' : 'Activo'}
                           </span>
                         </td>
-                        <td style={{ padding: '10px 14px' }}>
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <button
-                              onClick={() => { setEditBloque(b); setFormError(null); }}
-                              title="Editar"
-                              style={{ padding: '5px 8px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 7, cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}
-                            >
-                              <Edit2 size={13} />
-                            </button>
-                            <button
-                              onClick={() => setConfirmToggle({ bloque: b, activarDespues: b.activo === false })}
-                              title={b.activo === false ? 'Activar' : 'Desactivar'}
-                              style={{ padding: '5px 8px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 7, cursor: 'pointer', color: b.activo === false ? '#16a34a' : '#dc2626', display: 'flex' }}
-                            >
-                              <Power size={13} />
-                            </button>
-                            <button
-                              onClick={() => setConfirmEliminar({ bloque: b })}
-                              title="Eliminar"
-                              style={{ padding: '5px 8px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 7, cursor: 'pointer', color: '#dc2626', display: 'flex' }}
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        </td>
+                        {puedeGestionar && (
+                          <td style={{ padding: '10px 14px' }}>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button
+                                onClick={() => { setEditBloque(b); setFormError(null); }}
+                                title="Editar"
+                                style={{ padding: '5px 8px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 7, cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}
+                              >
+                                <Edit2 size={13} />
+                              </button>
+                              <button
+                                onClick={() => setConfirmToggle({ bloque: b, activarDespues: b.activo === false })}
+                                title={b.activo === false ? 'Activar' : 'Desactivar'}
+                                style={{ padding: '5px 8px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 7, cursor: 'pointer', color: b.activo === false ? '#16a34a' : '#dc2626', display: 'flex' }}
+                              >
+                                <Power size={13} />
+                              </button>
+                              <button
+                                onClick={() => setConfirmEliminar({ bloque: b })}
+                                title="Eliminar"
+                                style={{ padding: '5px 8px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 7, cursor: 'pointer', color: '#dc2626', display: 'flex' }}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))
                 }
