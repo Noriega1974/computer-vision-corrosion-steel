@@ -15,7 +15,8 @@ Rutas:
   PUT  /puntos/{id_punto}         → actualizar con auditoría (solo admin/super_admin);
                                     bloque_id se puede cambiar (mismas validaciones) o
                                     desasignar con bloque_id: null
-  DELETE /puntos/{id_punto}       → eliminar (solo admin/super_admin)
+  DELETE /puntos/{id_punto}       → eliminar (solo super_admin -- un punto es la "Zona",
+                                    admin solo puede borrar bloques dentro de ella)
 
   GET    /bloques                 → listar bloques de la empresa del caller (super_admin: todos,
                                     o los de ?empresa_id=); cada uno con cantidad_puntos
@@ -623,16 +624,18 @@ def lambda_handler(event: dict, context) -> dict:
             tabla.update_item(**kwargs_update)
             return _respuesta(200, {"mensaje": "Punto actualizado", "id_punto": id_punto})
 
-        # ── DELETE /puntos/{id_punto} — eliminar (admin/super_admin) ─────────
+        # ── DELETE /puntos/{id_punto} — eliminar (solo super_admin) ──────────
+        # Un punto es la "Zona" (= la empresa vista en el mapa); borrar una
+        # zona entera es demasiado destructivo para dejarlo en manos de un
+        # admin -- admin solo borra bloques (las subcarpetas dentro de su
+        # empresa, ver DELETE /bloques), nunca el punto/zona en sí.
         elif metodo == "DELETE" and id_punto:
             creador = _usuario_actual(event)
-            if not creador or creador.get("rol") not in ("admin", "super_admin"):
-                return _respuesta(403, {"error": "Solo administradores pueden eliminar puntos"})
+            if not creador or creador.get("rol") != "super_admin":
+                return _respuesta(403, {"error": "Solo super_admin puede eliminar puntos"})
 
             punto_actual = tabla.get_item(Key={"id_punto": id_punto, "sk": SK_METADATA}).get("Item")
             if not punto_actual:
-                return _respuesta(404, {"error": f"Punto {id_punto} no encontrado"})
-            if creador.get("rol") != "super_admin" and punto_actual.get("empresa_id") != creador.get("empresa_id"):
                 return _respuesta(404, {"error": f"Punto {id_punto} no encontrado"})
 
             # Si el punto tiene mediciones asociadas, borrarlo las deja

@@ -143,7 +143,13 @@ const labelStyle = {
 // del usuario logueado) — defensa en profundidad, la validación real ya está
 // en el backend. Al editar se muestran los 4 roles sin restricción (fuera de
 // alcance de esta tarea: el backend tampoco valida CREATABLE_ROLES en PUT).
-function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error, rolesPermitidos }) {
+// `requiereEmpresa`/`empresasDisponibles`: solo al CREAR y solo para
+// super_admin -- es el único que no tiene empresa propia de la cual el
+// backend pueda forzarla (POST /usuarios responde 400 "empresa_id es
+// requerido" si super_admin no la manda). admin/tecnico creando un usuario
+// no ven este campo: el backend ya la fuerza a la suya, mandarla del body
+// no tendría efecto y solo confundiría.
+function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error, rolesPermitidos, empresasDisponibles, requiereEmpresa }) {
   const opcionesRol = isEdit
     ? TODOS_ROLES
     : TODOS_ROLES.filter(r => (rolesPermitidos ?? []).includes(r.value));
@@ -152,14 +158,23 @@ function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error, rolesPermi
     email: initial.email ?? '',
     nombre: initial.nombre ?? initial.name ?? '',
     rol: initial.rol ?? initial.role ?? opcionesRol[0]?.value ?? 'cliente',
+    empresa_id: initial.empresa_id ?? '',
   });
+  const [validationError, setValidationError] = useState(null);
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (requiereEmpresa && !form.empresa_id) {
+      setValidationError('Selecciona a qué afiliación pertenece este usuario.');
+      return;
+    }
+    setValidationError(null);
+    const payload = { email: form.email, nombre: form.nombre, rol: form.rol };
+    if (requiereEmpresa) payload.empresa_id = form.empresa_id;
     // Al crear, el backend genera y envía la contraseña temporal automáticamente
-    onSubmit({ ...form });
+    onSubmit(payload);
   };
 
   return (
@@ -194,9 +209,26 @@ function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error, rolesPermi
           ))}
         </select>
       </div>
-      {error && (
+      {requiereEmpresa && (
+        <div style={{ marginBottom: 'var(--space-3-5)' }}>
+          <label htmlFor="usuario-empresa" style={labelStyle}>
+            Afiliación *
+          </label>
+          <select
+            id="usuario-empresa" name="empresa_id"
+            value={form.empresa_id} onChange={set('empresa_id')}
+            required style={inputStyle}
+          >
+            <option value="">Selecciona una afiliación…</option>
+            {(empresasDisponibles ?? []).map(e => (
+              <option key={e.id_empresa} value={e.id_empresa}>{e.nombre}</option>
+            ))}
+          </select>
+        </div>
+      )}
+      {(validationError || error) && (
         <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, color: '#dc2626', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3-5)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <AlertCircle size={13} /> {error}
+          <AlertCircle size={13} /> {validationError || error}
         </div>
       )}
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -942,7 +974,10 @@ export default function UsersPage() {
       {/* ── Modal: Crear usuario ── */}
       {showCreate && (
         <Modal title="Nuevo usuario" onClose={() => setShowCreate(false)}>
-          <UsuarioForm onSubmit={handleCreate} saving={mutating} error={formError} rolesPermitidos={rolesCreables} />
+          <UsuarioForm
+            onSubmit={handleCreate} saving={mutating} error={formError} rolesPermitidos={rolesCreables}
+            empresasDisponibles={empresas} requiereEmpresa={esSuperAdmin}
+          />
         </Modal>
       )}
 
