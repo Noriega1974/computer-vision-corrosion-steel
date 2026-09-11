@@ -2,8 +2,11 @@
 pf-corrosion - Lambda de mediciones.
 
 Almacenamiento: tabla fusionada puntos+mediciones. Los registros de
-medición usan sort key "MED#{timestamp}"; el registro del punto padre
-usa sort key constante "METADATA" (ver lambda_src/api_puntos).
+medición usan sort key "MED#{timestamp}". `id_punto` es un identificador
+opaco para este handler -- nunca resuelve un registro "padre" con
+sk="METADATA" (eso era el punto viejo, retirado en la fusión punto→bloque,
+ver lambda_src/api_puntos). Hoy `id_punto` vale el `id_bloque` (BLQ-...) de
+la medición; a este handler no le importa, solo lo usa como clave.
 
 Rutas:
   GET    /mediciones/{id_punto}    → historial de un punto, filtrado por empresa (cualquier rol)
