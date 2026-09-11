@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   LayoutGrid,
   MapPin,
+  Boxes,
   Users,
   Settings,
   LogOut,
@@ -51,6 +52,13 @@ const NAV_ITEMS = [
     icon: MapPin,
     label: 'Ubicaciones',
     roles: ['super_admin', 'admin', 'tecnico'],
+  },
+
+  {
+    path: '/bloques',
+    icon: Boxes,
+    label: 'Bloques',
+    roles: ['super_admin', 'admin'],
   },
 
   {

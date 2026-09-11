@@ -563,6 +563,9 @@ export default function MedicionDetailPage() {
               <MetaItem label="ID punto" value={medicion.id_punto ?? '—'} wrap />
               <MetaItem label="Planta" value={punto.sede ?? '—'} />
               <MetaItem label="Ciudad" value={punto.ciudad ?? '—'} />
+              {medicion.bloque_nombre && (
+                <MetaItem label="Bloque" value={medicion.bloque_nombre} />
+              )}
             </div>
           </div>
 
