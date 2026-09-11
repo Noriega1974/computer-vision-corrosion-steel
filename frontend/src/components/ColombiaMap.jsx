@@ -25,7 +25,8 @@ function buildNivelMap(mediciones) {
 
 export default function ColombiaMap({
   selectedPunto,
-  onSelectPunto
+  onSelectPunto,
+  selectedZona,
 }) {
   const {
     bloques: puntos,
@@ -311,6 +312,14 @@ export default function ColombiaMap({
       { duration: 0.8 }
     );
   }, [selectedPunto]);
+
+  // Centrar el mapa en una zona elegida desde ZonasList.
+  useEffect(() => {
+    const L = window.L;
+    if (!L || !mapInstanceRef.current || !selectedZona?.puntos?.length) return;
+    const bounds = L.polygon(selectedZona.puntos.map(p => [p.lat, p.lng])).getBounds();
+    mapInstanceRef.current.flyToBounds(bounds, { padding: [40, 40], duration: 0.8 });
+  }, [selectedZona]);
 
   const puntosCount = puntos.length;
   // El cartel de "sin ubicaciones" tapaba el mapa entero (zIndex sobre el
