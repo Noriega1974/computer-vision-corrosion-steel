@@ -21,7 +21,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 export default function PlantDetail({ punto }) {
-  const { mediciones, loading, error } = useMedicionesPunto(punto?.id_punto);
+  const { mediciones, loading, error } = useMedicionesPunto(punto?.id_bloque);
 
   if (!punto) {
     return (
@@ -36,7 +36,7 @@ export default function PlantDetail({ punto }) {
           <circle cx="12" cy="9" r="2.5" stroke="#7a9ab5" strokeWidth="1.5"/>
         </svg>
         <div style={{ fontSize: 'var(--text-2xs)', letterSpacing: '0.15em', textTransform: 'uppercase', textAlign: 'center', padding: '0 16px' }}>
-          Selecciona una planta en el mapa
+          Selecciona un punto en el mapa
         </div>
       </div>
     );
@@ -73,7 +73,7 @@ export default function PlantDetail({ punto }) {
               fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 16,
               color, letterSpacing: '0.04em', lineHeight: 1,
             }}>
-              {(punto.sede ?? punto.id_punto).toUpperCase()}
+              {(punto.nombre ?? 'PUNTO SIN NOMBRE').toUpperCase()}
             </div>
             <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)', marginTop: 'var(--space-1)', letterSpacing: '0.08em' }}>
               {punto.ciudad} · {punto.departamento}
@@ -136,7 +136,7 @@ export default function PlantDetail({ punto }) {
           <ResponsiveContainer width="100%" height={70}>
             <AreaChart data={trendData} margin={{ top: 2, right: 0, left: -28, bottom: 0 }}>
               <defs>
-                <linearGradient id={`grad-${punto.id_punto}`} x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id={`grad-${punto.id_bloque}`} x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#C1460B" stopOpacity={0.4}/>
                   <stop offset="100%" stopColor="#C1460B" stopOpacity={0}/>
                 </linearGradient>
@@ -144,7 +144,7 @@ export default function PlantDetail({ punto }) {
               <XAxis dataKey="fecha" tick={{ fill: '#3d5a72', fontSize: 8 }} tickLine={false} axisLine={false} interval={4} />
               <YAxis tick={{ fill: '#3d5a72', fontSize: 8 }} tickLine={false} axisLine={false} />
               <Tooltip content={<CustomTooltip />} />
-              <Area type="monotone" dataKey="corrosion" stroke="#C1460B" strokeWidth={1.5} fill={`url(#grad-${punto.id_punto})`} dot={false} />
+              <Area type="monotone" dataKey="corrosion" stroke="#C1460B" strokeWidth={1.5} fill={`url(#grad-${punto.id_bloque})`} dot={false} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -166,7 +166,7 @@ export default function PlantDetail({ punto }) {
         )}
         {!loading && !error && mediciones.length === 0 && (
           <div style={{ textAlign: 'center', padding: 20, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
-            Sin mediciones registradas para esta planta.
+            Sin mediciones registradas para este punto.
           </div>
         )}
         {/* Antes esta lista crecia con la cantidad real de fotos: una planta

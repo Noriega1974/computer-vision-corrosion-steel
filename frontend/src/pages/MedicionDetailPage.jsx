@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Download, Share2, Trash2, MapPin, AlertCircle, Thermometer, Droplets, Wind } from 'lucide-react';
 import { useMedicion } from '../hooks/useMedicion';
-import { usePuntos } from '../hooks/usePuntos';
+import { useBloques } from '../hooks/useBloques';
 import { useAuth } from '../auth/AuthContext';
 import { nivelColor, nivelBg, nivelLabel, nivelToStatus } from '../lib/statusUtils';
 import { apiDelete } from '../lib/apiClient';
@@ -131,7 +131,11 @@ export default function MedicionDetailPage() {
   const location = useLocation();
   const { user } = useAuth();
   const { medicion, loading, error } = useMedicion(idMedicion);
-  const { puntos } = usePuntos();
+  // El "Punto" viejo (GET /puntos/{id}) fue absorbido por "Bloque" -- no hay
+  // endpoint por-id, así que se trae la lista completa y se filtra
+  // client-side por bloque_id (mismo patrón que el filtro de bloque en
+  // GaleriaPage.jsx).
+  const { bloques } = useBloques(true);
   const [activeTab, setActiveTab] = useState('original');
   const [shareMsg, setShareMsg] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -152,7 +156,7 @@ export default function MedicionDetailPage() {
     setEliminando(true);
     setErrorEliminar('');
     try {
-      await apiDelete(`/mediciones/${medicion.id_punto}?id_medicion=${encodeURIComponent(idMedicion)}`);
+      await apiDelete(`/mediciones/${medicion.bloque_id}?id_medicion=${encodeURIComponent(idMedicion)}`);
       navigate('/galeria');
     } catch (err) {
       setErrorEliminar(err.message || 'No se pudo eliminar la medición.');
@@ -309,15 +313,14 @@ export default function MedicionDetailPage() {
   const nivel = medicion.nivel_corrosion ?? 0;
   const color = nivelColor(nivel);
   const bg = nivelBg(nivel);
-  const puntoFallback = puntos.find(p => p.id_punto === medicion.id_punto) ?? {};
-  const punto = Object.keys(medicion.punto_info ?? {}).length > 0
-    ? medicion.punto_info
-    : {
-        sede:        medicion.sede      ?? puntoFallback.sede      ?? '',
-        ciudad:      medicion.ciudad    ?? puntoFallback.ciudad    ?? '',
-        coordenadas: puntoFallback.coordenadas ?? {},
-        id_punto:    medicion.id_punto,
-      };
+  // sede/ciudad ya no viajan denormalizados en la medición -- se resuelven
+  // desde el bloque (punto) al que pertenece.
+  const bloqueInfo = bloques.find(b => b.id_bloque === medicion.bloque_id) ?? {};
+  const punto = {
+    sede: medicion.bloque_nombre ?? bloqueInfo.nombre ?? '',
+    ciudad: bloqueInfo.ciudad ?? '',
+    coordenadas: bloqueInfo.coordenadas ?? {},
+  };
   const lat = punto.coordenadas?.lat;
   const lng = punto.coordenadas?.lng;
 
@@ -437,7 +440,7 @@ export default function MedicionDetailPage() {
             />
             {lat && lng && (
               <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', fontFamily: 'var(--font-data)', display: 'flex', gap: 'var(--space-3)' }}>
-                <span style={{ color: 'var(--accent-amber)' }}>● Planta: {lat?.toFixed(5)}, {lng?.toFixed(5)}</span>
+                <span style={{ color: 'var(--accent-amber)' }}>● Punto: {lat?.toFixed(5)}, {lng?.toFixed(5)}</span>
                 {medicion.latitud_real && medicion.longitud_real && (
                   <span style={{ color: '#38bdf8' }}>● Foto: {medicion.latitud_real.toFixed(5)}, {medicion.longitud_real.toFixed(5)}</span>
                 )}
@@ -460,9 +463,9 @@ export default function MedicionDetailPage() {
 
               <ActionButton
                 icon={<MapPin size={15} />}
-                onClick={() => navigate(`/dashboard?punto=${medicion.id_punto}`)}
+                onClick={() => navigate(`/dashboard?punto=${medicion.bloque_id}`)}
               >
-                Ver planta en dashboard
+                Ver punto en dashboard
               </ActionButton>
 
               {/* Eliminar: solo admins */}
@@ -560,12 +563,8 @@ export default function MedicionDetailPage() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2-5)' }}>
               <MetaItem label="ID medición" value={medicion.id_medicion ?? '—'} wrap />
-              <MetaItem label="ID punto" value={medicion.id_punto ?? '—'} wrap />
-              <MetaItem label="Planta" value={punto.sede ?? '—'} />
+              <MetaItem label="Punto" value={punto.sede ?? '—'} />
               <MetaItem label="Ciudad" value={punto.ciudad ?? '—'} />
-              {medicion.bloque_nombre && (
-                <MetaItem label="Bloque" value={medicion.bloque_nombre} />
-              )}
             </div>
           </div>
 

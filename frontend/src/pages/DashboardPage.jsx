@@ -8,7 +8,7 @@ import PlantDetail from '../components/PlantDetail';
 import PlantsTable from '../components/PlantsTable';
 import ChartsRow from '../components/ChartsRow';
 
-import { usePuntos } from '../hooks/usePuntos';
+import { useBloques } from '../hooks/useBloques';
 
 
 // ================================================================
@@ -59,11 +59,14 @@ export default function DashboardPage() {
   const leafletReady =
     useLeaflet();
 
+  // "puntos" aquí son bloques (el "Punto" viejo fue absorbido por "Bloque",
+  // ver hooks/useBloques.js) -- se mantiene el nombre de variable para no
+  // tocar el resto del layout de este componente.
   const {
-    puntos,
+    bloques: puntos,
     loading: loadingPuntos,
     error: errorPuntos
-  } = usePuntos();
+  } = useBloques();
 
 
   return (
@@ -160,9 +163,9 @@ export default function DashboardPage() {
 
 
         {/* ========================================================
-            PLANTAS + MAP + DETAIL
+            PUNTOS + MAP + DETAIL
 
-            Las tres columnas son la misma tarea: elegir una planta,
+            Las tres columnas son la misma tarea: elegir un punto,
             ubicarla y leer su detalle. Estaban partidas en dos filas,
             con la lista debajo del mapa, asi que seleccionar obligaba a
             bajar y volver a subir. El mapa manda al centro por ser el
@@ -209,7 +212,7 @@ export default function DashboardPage() {
             <div style={{ flexShrink: 0 }}>
 
               <div className="dashboard-section-title">
-                Plantas
+                Puntos
               </div>
 
               <div
@@ -221,7 +224,7 @@ export default function DashboardPage() {
                   color: 'var(--text-faint)',
                 }}
               >
-                Seleccioná una para ver su detalle
+                Seleccioná uno para ver su detalle
               </div>
 
             </div>

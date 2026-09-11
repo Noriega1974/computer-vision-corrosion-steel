@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   XAxis,
   YAxis,
@@ -15,6 +15,7 @@ import {
 } from 'recharts';
 
 import { useMediciones } from '../hooks/useMediciones';
+import { useBloques } from '../hooks/useBloques';
 import {
   nivelColor,
   nivelToStatus,
@@ -116,6 +117,14 @@ export default function ChartsRow() {
     loading,
   } = useMediciones(100);
 
+  // Ciudad ya no viaja denormalizada en la medición -- se resuelve por
+  // bloque_id contra la lista de puntos (bloques).
+  const { bloques } = useBloques(true);
+  const ciudadPorBloqueId = useMemo(
+    () => Object.fromEntries(bloques.map(b => [b.id_bloque, b.ciudad])),
+    [bloques]
+  );
+
   // --------------------------------------------------
   // DISTRIBUCIÓN POR NIVEL DE CORROSIÓN
   // --------------------------------------------------
@@ -162,7 +171,7 @@ export default function ChartsRow() {
   // Bar: mediciones por ciudad (top 6)
   const byCity = {};
   mediciones.forEach(m => {
-    const ciudad = m.punto_info?.ciudad ?? m.ciudad ?? '—';
+    const ciudad = ciudadPorBloqueId[m.bloque_id] ?? '—';
     if (!byCity[ciudad]) byCity[ciudad] = { count: 0, totalArea: 0, maxNivel: 0 };
     byCity[ciudad].count++;
     byCity[ciudad].totalArea += m.area_corroida_pct ?? 0;

@@ -1,12 +1,20 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Edit2, X, AlertCircle, Check, Power, Boxes } from 'lucide-react';
+import { Plus, Edit2, X, AlertCircle, Check, Power, Trash2, MapPin } from 'lucide-react';
 import { useGestionBloques } from '../hooks/useBloques';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useAuth } from '../auth/AuthContext';
+import SearchableSelect from '../components/SearchableSelect';
+import MapPicker from '../components/MapPicker';
+import colombiaData from '../data/colombia-divipola.json';
+
+const DEPARTAMENTOS = colombiaData.departamentos.map(d => d.nombre);
+const MUNICIPIOS_POR_DEPARTAMENTO = Object.fromEntries(
+  colombiaData.departamentos.map(d => [d.nombre, d.municipios])
+);
 
 // ─── Skeleton ────────────────────────────────────────────────────────────────
 function SkeletonRow({ cols }) {
-  const widths = cols === 6 ? [70, 90, 50, 30, 40, 40] : [70, 90, 30, 40, 40];
+  const widths = cols === 7 ? [70, 90, 50, 60, 30, 40, 40] : [70, 90, 60, 30, 40, 40];
   return (
     <tr>
       {widths.map((w, i) => (
@@ -30,7 +38,7 @@ function Modal({ title, onClose, children }) {
         // dashboard) -- --bg-card-solid es la variante opaca para un modal
         // sin blur propio, igual que en UsersPage/PlantsPage.
         background: 'var(--bg-card-solid)', border: '1px solid var(--border)',
-        borderRadius: 12, width: '100%', maxWidth: 480,
+        borderRadius: 12, width: '100%', maxWidth: 560,
         maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
@@ -118,42 +126,76 @@ const labelStyle = {
   color: 'var(--text-faint)', marginBottom: 5,
 };
 
-// ─── Formulario de bloque ──────────────────────────────────────────────────
-// `empresasDisponibles`/`requiereEmpresa`: solo al CREAR y solo para
-// super_admin (mismo motivo que PuntoForm en PlantsPage -- admin ya tiene
-// su empresa forzada en el backend, no elige). El backend no acepta cambiar
-// la empresa de un bloque ya creado, así que este campo nunca aparece al
-// editar.
+// ─── Formulario de punto de monitoreo ───────────────────────────────────────
+// Internamente sigue siendo "bloque" (identificadores, endpoint /bloques):
+// el "Punto" viejo (PlantsPage/PuntoForm, ya retirado) fue absorbido por el
+// "Bloque", que pasa a ser la única entidad de ubicación. `empresasDisponibles`/
+// `requiereEmpresa`: solo al CREAR y solo para super_admin (admin ya tiene su
+// empresa forzada en el backend, no elige). El backend no acepta cambiar la
+// empresa de un bloque ya creado, así que ese campo nunca aparece al editar.
 function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, empresasDisponibles, requiereEmpresa }) {
   const [form, setForm] = useState({
     nombre: initial.nombre ?? '',
     descripcion: initial.descripcion ?? '',
     empresa_id: initial.empresa_id ?? '',
+    ciudad: initial.ciudad ?? '',
+    departamento: initial.departamento ?? '',
+    latitud: initial.coordenadas?.lat ?? '',
+    longitud: initial.coordenadas?.lng ?? '',
+    tipo_material: initial.tipo_material ?? '',
+    tipo_estructura: initial.tipo_estructura ?? '',
   });
   const [validationError, setValidationError] = useState(null);
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
+  const setField = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
+
+  const municipiosDisponibles = MUNICIPIOS_POR_DEPARTAMENTO[form.departamento] ?? [];
 
   const handleSubmit = (e) => {
     e.preventDefault();
+
     if (requiereEmpresa && !form.empresa_id) {
-      setValidationError('Selecciona a qué afiliación pertenece este bloque.');
+      setValidationError('Selecciona a qué afiliación pertenece este punto.');
       return;
     }
+    if (!DEPARTAMENTOS.includes(form.departamento)) {
+      setValidationError('Selecciona un departamento válido de la lista.');
+      return;
+    }
+    if (!municipiosDisponibles.includes(form.ciudad)) {
+      setValidationError('Selecciona una ciudad válida del departamento elegido.');
+      return;
+    }
+    if (form.latitud === '' || form.longitud === '') {
+      setValidationError('Marca la ubicación en el mapa.');
+      return;
+    }
+
     setValidationError(null);
-    const payload = { nombre: form.nombre, descripcion: form.descripcion };
+
+    const payload = {
+      nombre: form.nombre,
+      descripcion: form.descripcion,
+      ciudad: form.ciudad,
+      departamento: form.departamento,
+      coordenadas: { lat: Number(form.latitud), lng: Number(form.longitud) },
+      ...(form.tipo_material && { tipo_material: form.tipo_material }),
+      ...(form.tipo_estructura && { tipo_estructura: form.tipo_estructura }),
+    };
     if (requiereEmpresa) payload.empresa_id = form.empresa_id;
+
     onSubmit(payload);
   };
 
   return (
     <form onSubmit={handleSubmit}>
       <div style={{ marginBottom: 'var(--space-3-5)' }}>
-        <label htmlFor="bloque-nombre" style={labelStyle}>
-          Nombre del bloque *
+        <label htmlFor="punto-nombre" style={labelStyle}>
+          Nombre del punto *
         </label>
         <input
-          id="bloque-nombre" name="nombre" autoComplete="off"
+          id="punto-nombre" name="nombre" autoComplete="off"
           required value={form.nombre} onChange={set('nombre')}
           placeholder="ej: Nave A" style={inputStyle}
         />
@@ -161,11 +203,11 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, empresasDis
 
       {requiereEmpresa && (
         <div style={{ marginBottom: 'var(--space-3-5)' }}>
-          <label htmlFor="bloque-empresa" style={labelStyle}>
+          <label htmlFor="punto-empresa" style={labelStyle}>
             Afiliación *
           </label>
           <select
-            id="bloque-empresa" name="empresa_id"
+            id="punto-empresa" name="empresa_id"
             value={form.empresa_id} onChange={set('empresa_id')}
             required style={inputStyle}
           >
@@ -177,12 +219,82 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, empresasDis
         </div>
       )}
 
+      {/* Departamento */}
       <div style={{ marginBottom: 'var(--space-3-5)' }}>
-        <label htmlFor="bloque-descripcion" style={labelStyle}>
+        <label htmlFor="punto-departamento" style={labelStyle}>
+          Departamento *
+        </label>
+        <SearchableSelect
+          id="punto-departamento"
+          options={DEPARTAMENTOS}
+          value={form.departamento}
+          onChange={(v) =>
+            setForm(f => ({
+              ...f,
+              departamento: v,
+              ciudad: v === f.departamento ? f.ciudad : '',
+            }))
+          }
+          placeholder="Buscar departamento"
+          emptyMessage="Sin coincidencias"
+        />
+      </div>
+
+      {/* Ciudad */}
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
+        <label htmlFor="punto-ciudad" style={labelStyle}>
+          Ciudad *
+        </label>
+        <SearchableSelect
+          id="punto-ciudad"
+          options={municipiosDisponibles}
+          value={form.ciudad}
+          onChange={setField('ciudad')}
+          placeholder={form.departamento ? 'Buscar ciudad' : 'Selecciona un departamento primero'}
+          disabled={!form.departamento}
+          emptyMessage="Sin coincidencias"
+        />
+      </div>
+
+      {/* Coordenadas */}
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
+        <span style={{ ...labelStyle, display: 'block' }}>Coordenadas *</span>
+        <MapPicker
+          lat={form.latitud || null}
+          lng={form.longitud || null}
+          onChange={(la, ln) => setForm(f => ({ ...f, latitud: la, longitud: ln }))}
+        />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)', marginBottom: 'var(--space-3-5)' }}>
+        <div>
+          <label htmlFor="punto-tipo-material" style={labelStyle}>
+            Tipo de material
+          </label>
+          <input
+            id="punto-tipo-material" name="tipo_material" autoComplete="off"
+            value={form.tipo_material} onChange={set('tipo_material')}
+            placeholder="ej: Galvanizado" style={inputStyle}
+          />
+        </div>
+        <div>
+          <label htmlFor="punto-tipo-estructura" style={labelStyle}>
+            Tipo de estructura
+          </label>
+          <input
+            id="punto-tipo-estructura" name="tipo_estructura" autoComplete="off"
+            value={form.tipo_estructura} onChange={set('tipo_estructura')}
+            placeholder="ej: Tubería" style={inputStyle}
+          />
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
+        <label htmlFor="punto-descripcion" style={labelStyle}>
           Descripción
         </label>
         <input
-          id="bloque-descripcion" name="descripcion" autoComplete="off"
+          id="punto-descripcion" name="descripcion" autoComplete="off"
           value={form.descripcion} onChange={set('descripcion')}
           placeholder="ej: Techo y estructura metálica del galpón principal"
           style={inputStyle}
@@ -201,7 +313,7 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, empresasDis
           fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'white',
           opacity: saving ? 0.6 : 1,
         }}>
-          {saving ? 'Guardando…' : isEdit ? 'Guardar cambios' : 'Crear bloque'}
+          {saving ? 'Guardando…' : isEdit ? 'Guardar cambios' : 'Crear punto'}
         </button>
       </div>
     </form>
@@ -209,17 +321,19 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, empresasDis
 }
 
 // ─── BloquesPage ──────────────────────────────────────────────────────────────
-// Ruta /bloques -- solo super_admin/admin (ver RoleRoute en App.jsx). Un
-// bloque es una carpeta lógica dentro de una empresa para agrupar puntos de
-// monitoreo (ej. "Nave A", "Patio de tanques").
+// Ruta /puntos -- solo super_admin/admin (ver RoleRoute en App.jsx; el backend
+// exige ese mismo rol para POST/PUT/DELETE /bloques, tecnico/cliente no
+// administran la lista). Página "Puntos": el "Punto" viejo (PlantsPage,
+// retirado) fue absorbido por el "Bloque" -- esta es ahora la única entidad
+// de ubicación, y agrupa además las mediciones tomadas ahí.
 export default function BloquesPage() {
   const { user: me } = useAuth();
   const esSuperAdmin = me?.groups?.includes('super_admin');
 
-  const { bloques, loading, mutating, mutError, crearBloque, editarBloque } = useGestionBloques();
+  const { bloques, loading, mutating, mutError, crearBloque, editarBloque, eliminarBloque } = useGestionBloques();
   // `enabled=esSuperAdmin`: evita el fetch (y el 403) de /empresas para
   // admin -- solo hace falta la lista completa para el selector y la
-  // columna "Empresa" de super_admin.
+  // columna "Afiliación" de super_admin.
   const { empresas } = useEmpresas(esSuperAdmin);
   const empresaNombrePorId = useMemo(
     () => Object.fromEntries(empresas.map(e => [e.id_empresa, e.nombre])),
@@ -229,6 +343,7 @@ export default function BloquesPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [editBloque, setEditBloque] = useState(null);
   const [confirmToggle, setConfirmToggle] = useState(null); // { bloque, activarDespues }
+  const [confirmEliminar, setConfirmEliminar] = useState(null); // { bloque }
   const [formError, setFormError] = useState(null);
   const [toast, setToast] = useState(null);
 
@@ -237,7 +352,7 @@ export default function BloquesPage() {
     try {
       await crearBloque(payload);
       setShowCreate(false);
-      setToast('Bloque creado correctamente.');
+      setToast('Punto creado correctamente.');
     } catch (err) {
       setFormError(err.message);
     }
@@ -248,7 +363,7 @@ export default function BloquesPage() {
     try {
       await editarBloque(editBloque.id_bloque, payload);
       setEditBloque(null);
-      setToast('Bloque actualizado correctamente.');
+      setToast('Punto actualizado correctamente.');
     } catch (err) {
       setFormError(err.message);
     }
@@ -259,7 +374,7 @@ export default function BloquesPage() {
     const { bloque, activarDespues } = confirmToggle;
     try {
       await editarBloque(bloque.id_bloque, { activo: activarDespues });
-      setToast(activarDespues ? 'Bloque activado correctamente.' : 'Bloque desactivado correctamente.');
+      setToast(activarDespues ? 'Punto activado correctamente.' : 'Punto desactivado correctamente.');
     } catch {
       // mutError muestra el error en el banner sobre la tabla; el diálogo se
       // cierra igual para que ese banner no quede tapado por el overlay.
@@ -268,8 +383,23 @@ export default function BloquesPage() {
     }
   };
 
+  // 409 si el punto (bloque) tiene mediciones asociadas -- el mensaje real
+  // del backend viaja tal cual en mutError (ver useBloques.eliminarBloque),
+  // se muestra sin reescribirlo en el banner sobre la tabla.
+  const handleEliminar = async () => {
+    if (!confirmEliminar) return;
+    try {
+      await eliminarBloque(confirmEliminar.bloque.id_bloque);
+      setToast('Punto eliminado correctamente.');
+    } catch {
+      // idem handleToggle: el error real queda en mutError.
+    } finally {
+      setConfirmEliminar(null);
+    }
+  };
+
   const thBase = { padding: '9px 14px', textAlign: 'left', fontFamily: 'var(--font-data)', fontSize: 'var(--text-3xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-faint)', borderBottom: '1px solid var(--border)' };
-  const colCount = esSuperAdmin ? 6 : 5;
+  const colCount = esSuperAdmin ? 7 : 6;
 
   return (
     <>
@@ -282,9 +412,9 @@ export default function BloquesPage() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 'var(--space-3)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2-5)' }}>
             <span style={{ background: 'var(--accent-amber)', width: 3, height: 20, borderRadius: 2, display: 'inline-block' }} />
-            <Boxes size={16} color="var(--text-primary)" />
+            <MapPin size={16} color="var(--text-primary)" />
             <span style={{ fontFamily: 'var(--font-data)', fontSize: 'var(--text-sm)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-primary)' }}>
-              Bloques
+              Puntos
             </span>
           </div>
           <button onClick={() => { setShowCreate(true); setFormError(null); }} style={{
@@ -292,12 +422,12 @@ export default function BloquesPage() {
             padding: '8px 14px', background: 'var(--accent-amber)', border: 'none',
             borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)', color: 'white',
           }}>
-            <Plus size={14} /> Nuevo bloque
+            <Plus size={14} /> Nuevo punto
           </button>
         </div>
 
         <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: -12, marginBottom: 20, fontFamily: 'var(--font-ui)' }}>
-          Un bloque agrupa puntos de monitoreo dentro de una afiliación (ej. una nave, un patio de tanques).
+          Un punto de monitoreo pertenece a una afiliación y agrupa las mediciones tomadas en un mismo lugar.
         </p>
 
         {/* Error de mutación */}
@@ -313,10 +443,11 @@ export default function BloquesPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-ui)' }}>
               <thead>
                 <tr style={{ background: 'var(--bg-page)' }}>
-                  <th style={thBase}>Nombre</th>
+                  <th style={thBase}>Punto</th>
                   <th style={thBase}>Descripción</th>
-                  {esSuperAdmin && <th style={thBase}>Empresa</th>}
-                  <th style={thBase}>Puntos</th>
+                  {esSuperAdmin && <th style={thBase}>Afiliación</th>}
+                  <th style={thBase}>Ubicación</th>
+                  <th style={thBase}>Mediciones</th>
                   <th style={thBase}>Estado</th>
                   <th style={thBase}>Acciones</th>
                 </tr>
@@ -330,11 +461,14 @@ export default function BloquesPage() {
                         <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>{b.descripcion || '—'}</td>
                         {esSuperAdmin && (
                           <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>
-                            {empresaNombrePorId[b.empresa_id] ?? b.empresa_id}
+                            {empresaNombrePorId[b.empresa_id] ?? '—'}
                           </td>
                         )}
+                        <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>
+                          {b.ciudad ? `${b.ciudad}${b.departamento ? ` · ${b.departamento}` : ''}` : '—'}
+                        </td>
                         <td style={{ padding: '10px 14px', color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>
-                          {b.cantidad_puntos ?? 0}
+                          {b.cantidad_mediciones ?? 0}
                         </td>
                         <td style={{ padding: '10px 14px' }}>
                           <span style={{
@@ -363,6 +497,13 @@ export default function BloquesPage() {
                             >
                               <Power size={13} />
                             </button>
+                            <button
+                              onClick={() => setConfirmEliminar({ bloque: b })}
+                              title="Eliminar"
+                              style={{ padding: '5px 8px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 7, cursor: 'pointer', color: '#dc2626', display: 'flex' }}
+                            >
+                              <Trash2 size={13} />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -370,7 +511,7 @@ export default function BloquesPage() {
                 }
                 {!loading && bloques.length === 0 && (
                   <tr><td colSpan={colCount} style={{ padding: 'var(--space-6)', textAlign: 'center', color: 'var(--text-faint)', fontSize: 'var(--text-sm)' }}>
-                    No hay bloques registrados
+                    No hay puntos registrados
                   </td></tr>
                 )}
               </tbody>
@@ -379,9 +520,9 @@ export default function BloquesPage() {
         </div>
       </div>
 
-      {/* ── Modal: Crear bloque ── */}
+      {/* ── Modal: Crear punto ── */}
       {showCreate && (
-        <Modal title="Nuevo bloque" onClose={() => setShowCreate(false)}>
+        <Modal title="Nuevo punto" onClose={() => setShowCreate(false)}>
           <BloqueForm
             onSubmit={handleCrear}
             saving={mutating}
@@ -392,7 +533,7 @@ export default function BloquesPage() {
         </Modal>
       )}
 
-      {/* ── Modal: Editar bloque ── */}
+      {/* ── Modal: Editar punto ── */}
       {editBloque && (
         <Modal title={`Editar: ${editBloque.nombre}`} onClose={() => setEditBloque(null)}>
           <BloqueForm initial={editBloque} isEdit onSubmit={handleEditar} saving={mutating} error={formError} />
@@ -404,13 +545,25 @@ export default function BloquesPage() {
         <ConfirmDialog
           message={
             confirmToggle.activarDespues
-              ? `¿Activar el bloque ${confirmToggle.bloque.nombre}?`
-              : `¿Desactivar el bloque ${confirmToggle.bloque.nombre}?`
+              ? `¿Activar el punto ${confirmToggle.bloque.nombre}?`
+              : `¿Desactivar el punto ${confirmToggle.bloque.nombre}?`
           }
           confirmLabel={confirmToggle.activarDespues ? 'Activar' : 'Desactivar'}
           danger={!confirmToggle.activarDespues}
           onConfirm={handleToggle}
           onCancel={() => setConfirmToggle(null)}
+          loading={mutating}
+        />
+      )}
+
+      {/* ── Confirm: eliminar ── */}
+      {confirmEliminar && (
+        <ConfirmDialog
+          message={`¿Eliminar permanentemente el punto ${confirmEliminar.bloque.nombre}? Esta acción no se puede deshacer.`}
+          confirmLabel="Eliminar"
+          danger
+          onConfirm={handleEliminar}
+          onCancel={() => setConfirmEliminar(null)}
           loading={mutating}
         />
       )}

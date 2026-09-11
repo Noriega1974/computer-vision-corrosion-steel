@@ -11,8 +11,9 @@ import { useRefreshKey } from './RefreshKeyContext';
 // `enabled` evita el fetch para roles/vistas que no lo necesitan (mismo
 // patrón que useEmpresas). `empresaId` agrega ?empresa_id= a la query --
 // solo tiene efecto real para super_admin (el resto ya viene scopeado por
-// el backend sin importar el parámetro); se usa en los selectores de bloque
-// (PuntoForm, UploadPage) cuando super_admin elige una afiliación.
+// el backend sin importar el parámetro); se usa en el selector de afiliación
+// del formulario de punto (BloqueForm, en BloquesPage) cuando super_admin
+// elige una.
 export function useBloques(enabled = true, empresaId) {
   const { key: globalKey } = useRefreshKey();
   const [localKey, setLocalKey] = useState(0);
@@ -89,9 +90,8 @@ export function useGestionBloques(enabled = true) {
     }
   }, [refetch]);
 
-  // 409 si el bloque tiene puntos asociados -- el mensaje real del backend
-  // ("No se puede eliminar: el bloque tiene puntos asociados...") viaja en
-  // mutError tal cual, sin reescribirlo acá.
+  // 409 si el bloque (punto) tiene mediciones asociadas -- el mensaje real
+  // del backend viaja en mutError tal cual, sin reescribirlo acá.
   const eliminarBloque = useCallback(async (idBloque) => {
     setMutating(true);
     setMutError(null);

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Upload, AlertCircle } from 'lucide-react';
 import { useMediciones } from '../hooks/useMediciones';
-import { usePuntos } from '../hooks/usePuntos';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useAuth } from '../auth/AuthContext';
 import { nivelColor, nivelLabel, nivelToStatus } from '../lib/statusUtils';
@@ -22,11 +21,12 @@ function tiempoRelativo(timestamp) {
 }
 
 // ─── Card de galería ─────────────────────────────────────────────────────────
-function MedicionCard({ medicion, puntoInfo, to, state }) {
+function MedicionCard({ medicion, to, state }) {
   const nivel = medicion.nivel_corrosion ?? 0;
   const color = nivelColor(nivel);
-  const sede = medicion.punto_info?.sede ?? medicion.sede ?? puntoInfo?.sede ?? medicion.id_punto ?? '—';
-  const ciudad = medicion.punto_info?.ciudad ?? medicion.ciudad ?? puntoInfo?.ciudad ?? '';
+  // sede/ciudad ya no viajan denormalizadas en la medición -- el nombre del
+  // punto (bloque) sí, resuelto y congelado al momento de subir la medición.
+  const nombrePunto = medicion.bloque_nombre ?? 'Sin punto asignado';
 
   return (
     // Link y no <div onClick>: esto navega a la ficha de la medicion, asi que
@@ -112,13 +112,10 @@ function MedicionCard({ medicion, puntoInfo, to, state }) {
       <div style={{ padding: '12px 14px' }}>
         <div style={{
           fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)',
-          color: 'var(--text-primary)', marginBottom: 2,
+          color: 'var(--text-primary)', marginBottom: 'var(--space-2)',
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
-          {sede}
-        </div>
-        <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>
-          {ciudad || medicion.id_punto}
+          {nombrePunto}
         </div>
 
         <div style={{
@@ -151,7 +148,6 @@ export default function GaleriaPage() {
   // Límite de mediciones cargadas — aumenta con infinite scroll
   const [limit, setLimit] = useState(24);
   const { mediciones, loading } = useMediciones(limit);
-  const { puntos } = usePuntos();
   const sentinelRef = useRef(null);
   const isLoadingMore = useRef(false);
 
@@ -164,7 +160,6 @@ export default function GaleriaPage() {
 
   // ─── Filtros ──────────────────────────────────────────────────────────────
   const [nivelFilter, setNivelFilter] = useState('all');
-  const [puntoFilter, setPuntoFilter] = useState('');
   const [bloqueFilter, setBloqueFilter] = useState('');
   const [empresaFilter, setEmpresaFilter] = useState('');
   const [fechaInicio, setFechaInicio] = useState('');
@@ -196,7 +191,6 @@ export default function GaleriaPage() {
   // ─── Filtrado client-side ─────────────────────────────────────────────────
   const filtered = mediciones.filter(m => {
     if (nivelFilter !== 'all' && (m.nivel_corrosion ?? 0) !== Number(nivelFilter)) return false;
-    if (puntoFilter && m.id_punto !== puntoFilter) return false;
     if (bloqueFilter && m.bloque_id !== bloqueFilter) return false;
     if (empresaFilter && m.empresa_id !== empresaFilter) return false;
     if (fechaInicio && new Date(m.timestamp) < new Date(fechaInicio)) return false;
@@ -205,14 +199,9 @@ export default function GaleriaPage() {
     return true;
   });
 
-  // Puntos únicos en las mediciones para el dropdown
-  const puntosEnMediciones = puntos.filter(p =>
-    mediciones.some(m => m.id_punto === p.id_punto)
-  );
-
-  // Bloques únicos entre las mediciones ya traídas -- no hace falta pedir
-  // /bloques, bloque_id/bloque_nombre ya vienen resueltos en cada medición
-  // que tenga uno (congelados al momento de subirla).
+  // Puntos (bloques) únicos entre las mediciones ya traídas -- no hace falta
+  // pedir /bloques, bloque_id/bloque_nombre ya vienen resueltos en cada
+  // medición (congelados al momento de subirla).
   const bloquesEnMediciones = Array.from(
     mediciones.reduce((map, m) => {
       if (m.bloque_id && !map.has(m.bloque_id)) {
@@ -306,30 +295,11 @@ export default function GaleriaPage() {
           </div>
         </div>
 
-        {/* Dropdown de planta */}
-        <div>
-          {/* Eran <div>: se veian como etiquetas pero no lo eran, asi que ningun
-              control de este bloque tenia nombre accesible. */}
-          <label htmlFor="filtro-planta" style={FILTRO_LABEL_STYLE}>PLANTA</label>
-          <select
-            id="filtro-planta"
-            name="filtro-planta"
-            value={puntoFilter}
-            onChange={e => setPuntoFilter(e.target.value)}
-            style={{ ...inputStyle, appearance: 'none', paddingRight: 'var(--space-5)' }}
-          >
-            <option value="">Todas las plantas</option>
-            {puntosEnMediciones.map(p => (
-              <option key={p.id_punto} value={p.id_punto}>{p.sede} · {p.ciudad}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Dropdown de bloque -- solo aparece si hay mediciones con bloque
-            asignado, igual criterio que el dropdown de planta. */}
+        {/* Dropdown de punto -- solo aparece si hay mediciones con punto
+            asignado. */}
         {bloquesEnMediciones.length > 0 && (
           <div>
-            <label htmlFor="filtro-bloque" style={FILTRO_LABEL_STYLE}>BLOQUE</label>
+            <label htmlFor="filtro-bloque" style={FILTRO_LABEL_STYLE}>PUNTO</label>
             <select
               id="filtro-bloque"
               name="filtro-bloque"
@@ -337,7 +307,7 @@ export default function GaleriaPage() {
               onChange={e => setBloqueFilter(e.target.value)}
               style={{ ...inputStyle, appearance: 'none', paddingRight: 'var(--space-5)' }}
             >
-              <option value="">Todos los bloques</option>
+              <option value="">Todos los puntos</option>
               {bloquesEnMediciones.map(b => (
                 <option key={b.id} value={b.id}>{b.nombre}</option>
               ))}
@@ -388,10 +358,10 @@ export default function GaleriaPage() {
         </div>
 
         {/* Botón limpiar filtros */}
-        {(nivelFilter !== 'all' || puntoFilter || bloqueFilter || empresaFilter || fechaInicio || fechaFin || notasQuery) && (
+        {(nivelFilter !== 'all' || bloqueFilter || empresaFilter || fechaInicio || fechaFin || notasQuery) && (
           <button
             onClick={() => {
-              setNivelFilter('all'); setPuntoFilter(''); setBloqueFilter(''); setEmpresaFilter('');
+              setNivelFilter('all'); setBloqueFilter(''); setEmpresaFilter('');
               setFechaInicio(''); setFechaFin(''); setNotasQuery('');
             }}
             style={{
@@ -456,9 +426,8 @@ export default function GaleriaPage() {
               <MedicionCard
                 key={m.id_medicion}
                 medicion={m}
-                puntoInfo={puntos.find(p => p.id_punto === m.id_punto)}
                 to={`/galeria/${m.id_medicion}`}
-                state={{ filters: { nivelFilter, puntoFilter, fechaInicio, fechaFin, notasQuery } }}
+                state={{ filters: { nivelFilter, bloqueFilter, fechaInicio, fechaFin, notasQuery } }}
               />
             ))}
           </div>

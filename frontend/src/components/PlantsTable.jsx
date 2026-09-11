@@ -1,7 +1,7 @@
 import React from 'react';
 import { Factory } from 'lucide-react';
 
-// ─── Lista de plantas — reemplaza el antiguo "Centro de alertas" en el Dashboard ──
+// ─── Lista de puntos — reemplaza el antiguo "Centro de alertas" en el Dashboard ──
 export default function PlantsTable({ puntos, loading, error, selectedPunto, onSelectPunto }) {
   return (
     <div style={{
@@ -15,10 +15,10 @@ export default function PlantsTable({ puntos, loading, error, selectedPunto, onS
           fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 'var(--text-sm)',
           letterSpacing: '0.1em', color: 'var(--text-primary)',
         }}>
-          PLANTAS REGISTRADAS
+          PUNTOS REGISTRADOS
         </div>
         <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)', letterSpacing: '0.1em', marginTop: 2 }}>
-          {loading ? 'Cargando…' : `${puntos.length} PLANTAS`}
+          {loading ? 'Cargando…' : `${puntos.length} PUNTOS`}
         </div>
       </div>
 
@@ -39,17 +39,17 @@ export default function PlantsTable({ puntos, loading, error, selectedPunto, onS
           }}>
             <Factory size={22} opacity={0.4} />
             <div style={{ fontSize: 'var(--text-2xs)', letterSpacing: '0.12em', textAlign: 'center' }}>
-              Sin plantas registradas.
+              Sin puntos registrados.
             </div>
           </div>
         )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
           {puntos.map((p, i) => (
             <PlantRow
-              key={p.id_punto}
+              key={p.id_bloque}
               punto={p}
               index={i}
-              selected={selectedPunto?.id_punto === p.id_punto}
+              selected={selectedPunto?.id_bloque === p.id_bloque}
               onClick={() => onSelectPunto(p)}
             />
           ))}
@@ -60,7 +60,7 @@ export default function PlantsTable({ puntos, loading, error, selectedPunto, onS
 }
 
 function PlantRow({ punto, index, selected, onClick }) {
-  const nombre = punto.sede ?? punto.id_punto;
+  const nombre = punto.nombre ?? 'Punto sin nombre';
   return (
     // Mismo gotcha que se corrigio ayer en el resto de la app: era un
     // <div onClick>, invisible para el teclado. button+aria-pressed lo

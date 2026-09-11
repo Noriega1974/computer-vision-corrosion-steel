@@ -1,83 +1,16 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import exifr from 'exifr';
-import { usePuntos } from '../hooks/usePuntos';
 import { useBloques } from '../hooks/useBloques';
 import { useUploadMedicion } from '../hooks/useUploadMedicion';
 import { nivelColor, nivelLabel } from '../lib/statusUtils';
 import SearchableSelect from '../components/SearchableSelect';
 
-// ─── Carga Leaflet para el picker de mapa ────────────────────────────────────
-function useLeaflet() {
-  const [ready, setReady] = useState(!!window.L);
-  useEffect(() => {
-    if (window.L) { setReady(true); return; }
-    const script = document.createElement('script');
-    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-    script.onload = () => setReady(true);
-    document.head.appendChild(script);
-  }, []);
-  return ready;
-}
-
-// ─── Componente: picker de coordenadas en mapa Leaflet ───────────────────────
-function MapPicker({ lat, lng, onChange }) {
-  const mapRef = useRef(null);
-  const instanceRef = useRef(null);
-  const markerRef = useRef(null);
-  const leafletReady = useLeaflet();
-
-  useEffect(() => {
-    if (!leafletReady || instanceRef.current) return;
-    const L = window.L;
-    const map = L.map(mapRef.current, {
-      center: [6.5, -74.5], zoom: 5,
-      zoomControl: true, scrollWheelZoom: true,
-    });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap', maxZoom: 18,
-    }).addTo(map);
-    map.on('click', e => {
-      const { lat, lng } = e.latlng;
-      onChange(parseFloat(lat.toFixed(6)), parseFloat(lng.toFixed(6)));
-    });
-    instanceRef.current = map;
-  }, [leafletReady]);
-
-  // Actualizar marcador cuando cambian coordenadas
-  useEffect(() => {
-    const L = window.L;
-    if (!L || !instanceRef.current || !lat || !lng) return;
-    if (markerRef.current) markerRef.current.remove();
-    markerRef.current = L.marker([lat, lng], {
-      icon: L.divIcon({
-        html: `<div style="width:14px;height:14px;border-radius:50%;background:#C1460B;border:2px solid white;box-shadow:0 0 8px #C1460B80;"></div>`,
-        className: '', iconSize: [14, 14], iconAnchor: [7, 7],
-      }),
-    }).addTo(instanceRef.current);
-    instanceRef.current.setView([lat, lng], Math.max(instanceRef.current.getZoom(), 10));
-  }, [lat, lng]);
-
-  return (
-    <div>
-      <div ref={mapRef} style={{
-        height: 220, borderRadius: 8, border: '1px solid var(--border)',
-        overflow: 'hidden',
-      }} />
-      <div style={{ marginTop: 6, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>
-        {lat && lng
-          ? `📍 ${lat}, ${lng} — Haz clic para mover`
-          : 'Haz clic en el mapa para marcar la ubicación'}
-      </div>
-    </div>
-  );
-}
-
 // ─── Componente: resultado del análisis ─────────────────────────────────────
 function ResultadoAnalisis({ result, onReset, onDashboard }) {
   const nivel = result.nivel_corrosion ?? 0;
   const color = nivelColor(nivel);
-  const punto = result.punto_info ?? {};
+  const bloque = result.bloque_info ?? {};
 
   return (
     <div style={{ maxWidth: 560, margin: '0 auto', animation: 'fade-in-up 0.4s ease' }}>
@@ -94,7 +27,7 @@ function ResultadoAnalisis({ result, onReset, onDashboard }) {
           {nivelLabel(nivel)}
         </div>
         <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-          Análisis completado — {punto.sede ?? result.id_punto} · {punto.ciudad ?? ''}
+          Análisis completado — {bloque.nombre ?? '—'}{bloque.ciudad ? ` · ${bloque.ciudad}` : ''}
         </div>
       </div>
 
@@ -129,9 +62,8 @@ function ResultadoAnalisis({ result, onReset, onDashboard }) {
         <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)', marginBottom: 'var(--space-2)', letterSpacing: '0.08em' }}>PUNTO DE MEDICIÓN</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
           {[
-            ['Sede', punto.sede ?? '—'],
-            ['Ciudad', punto.ciudad ?? '—'],
-            ['ID', result.id_punto ?? '—'],
+            ['Punto', bloque.nombre ?? '—'],
+            ['Ciudad', bloque.ciudad ?? '—'],
           ].map(([l, v]) => (
             <div key={l}>
               <span style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)' }}>{l}: </span>
@@ -176,23 +108,17 @@ const inputStyle = {
   color: 'var(--text-primary)', fontFamily: 'var(--font-ui)',
   fontSize: 14,
 };
-const selectStyle = { ...inputStyle, appearance: 'none', cursor: 'pointer' };
 
 // ─── Página principal ─────────────────────────────────────────────────────────
 export default function UploadPage() {
   const navigate = useNavigate();
-  const { puntos } = usePuntos();
   const { upload, loading: uploading, error: uploadError, result, reset } = useUploadMedicion();
 
-  // Bloque opcional para "planta nueva" / "coordenadas libres" -- en
-  // "planta existente" el punto elegido ya trae el suyo, no se pide de
-  // nuevo. Sin filtro de empresa: GET /bloques sin parámetro ya viene
-  // scopeado por el backend a la empresa de quien sube (admin/tecnico).
-  // super_admin no tiene empresa propia y este formulario nunca le pidió
-  // elegir una para crear la planta -- ve todos los bloques sin filtrar,
-  // igual que ya pasa hoy con el resto de este flujo para ese rol.
+  // Lista de puntos (bloques) para elegir dónde se tomó la medición -- ya
+  // scopeada por el backend a la empresa de quien sube (admin/tecnico).
+  // super_admin ve todos los bloques sin filtrar.
   const { bloques } = useBloques(true);
-  const [bloqueId, setBloqueId] = useState('');
+  const [bloqueSeleccionado, setBloqueSeleccionado] = useState(null);
 
   // Estado del formulario
   const [imagen, setImagen] = useState(null);         // File object
@@ -200,37 +126,18 @@ export default function UploadPage() {
   const [exifGps, setExifGps] = useState(null);       // {latitude, longitude}
   const [dragOver, setDragOver] = useState(false);
 
-  const [modo, setModo] = useState('planta_existente');
-
-  // Modo "planta existente"
-  const [puntoSeleccionado, setPuntoSeleccionado] = useState(null);
-
-  // Modo "planta nueva"
-  const [sede, setSede] = useState('');
-  const [ciudad, setCiudad] = useState('');
-  const [departamento, setDepartamento] = useState('');
-  const [tipoMaterial, setTipoMaterial] = useState('galvanizado');
-  const [tipoEstructura, setTipoEstructura] = useState('tuberia');
-  const [coordNuevaLat, setCoordNuevaLat] = useState(null);
-  const [coordNuevaLng, setCoordNuevaLng] = useState(null);
-
-  // Modo "coordenadas libres"
-  const [descripcionLibre, setDescripcionLibre] = useState('');
-  const [coordLibreLat, setCoordLibreLat] = useState(null);
-  const [coordLibreLng, setCoordLibreLng] = useState(null);
-
   // Detalles opcionales
   const [notas, setNotas] = useState('');
   const [esMedicionPasada, setEsMedicionPasada] = useState(false);
   const [fechaMedicion, setFechaMedicion] = useState(() => new Date().toISOString().slice(0, 10));
 
-  // El combobox de plantas existentes trabaja con strings (mismo componente
-  // que usa PlantsPage para departamento/ciudad, no un input suelto): arma
-  // una etiqueta legible por punto y un mapa para volver del string elegido
-  // al objeto punto real.
-  const plantaLabel = p => `${p.sede} · ${p.ciudad}`;
-  const plantaOpciones = puntos.map(plantaLabel);
-  const plantaPorLabel = Object.fromEntries(puntos.map(p => [plantaLabel(p), p]));
+  // El combobox de puntos trabaja con strings (mismo componente que usan
+  // BloquesPage/GaleriaPage para búsquedas, no un <select> suelto): arma una
+  // etiqueta legible por punto y un mapa para volver del string elegido al
+  // objeto bloque real. Muestra solo el nombre -- nunca el id_bloque.
+  const bloqueLabel = b => b.nombre;
+  const bloqueOpciones = bloques.map(bloqueLabel);
+  const bloquePorLabel = Object.fromEntries(bloques.map(b => [bloqueLabel(b), b]));
 
   // Procesar archivo de imagen
   const procesarImagen = useCallback(async (file) => {
@@ -248,7 +155,8 @@ export default function UploadPage() {
     const reader = new FileReader();
     reader.onload = e => setPreview(e.target.result);
     reader.readAsDataURL(file);
-    // EXIF GPS
+    // EXIF GPS -- metadata informativa de la foto (dónde se tomó exactamente),
+    // independiente de la ubicación fija del punto elegido abajo.
     try {
       const gps = await exifr.gps(file);
       if (gps?.latitude && gps?.longitude) setExifGps(gps);
@@ -280,45 +188,21 @@ export default function UploadPage() {
 
   // Enviar formulario
   //
-  // bloque_id viaja en la RAÍZ del body, no dentro de `ubicacion` -- así lo
-  // lee inference/handler.py (`body.get("bloque_id")`, ver _resolver_punto).
-  // Solo aplica a "planta_nueva"/"coordenadas_libres" (ahí se crea el punto);
-  // en "planta_existente" el punto ya tiene el suyo y no se manda.
+  // bloque_id viaja en la RAÍZ del body y es obligatorio -- el punto ya
+  // existe de antes (se crea/edita desde la página Puntos, no acá) y trae
+  // sus propias coordenadas fijas, así que este formulario ya no arma
+  // `ubicacion` ni pide lat/lng.
   async function handleSubmit(e) {
     e.preventDefault();
     if (!imagen) { alert('Selecciona una imagen primero.'); return; }
+    if (!bloqueSeleccionado) { alert('Selecciona el punto donde se tomó la medición.'); return; }
 
     const imagen_base64 = await imagenABase64(imagen);
-
-    let ubicacion;
-    if (modo === 'planta_existente') {
-      if (!puntoSeleccionado) { alert('Selecciona una planta existente.'); return; }
-      ubicacion = { modo: 'planta_existente', id_punto: puntoSeleccionado.id_punto };
-    } else if (modo === 'planta_nueva') {
-      if (!sede || !ciudad || !departamento) { alert('Completa los campos de la planta nueva.'); return; }
-      if (!coordNuevaLat || !coordNuevaLng) { alert('Marca la ubicación en el mapa.'); return; }
-      ubicacion = {
-        modo: 'planta_nueva',
-        sede, ciudad, departamento,
-        tipo_material: tipoMaterial,
-        tipo_estructura: tipoEstructura,
-        coordenadas: { lat: coordNuevaLat, lng: coordNuevaLng },
-      };
-    } else {
-      if (!coordLibreLat || !coordLibreLng) { alert('Marca la ubicación en el mapa.'); return; }
-      ubicacion = {
-        modo: 'coordenadas_libres',
-        latitud: coordLibreLat,
-        longitud: coordLibreLng,
-        descripcion: descripcionLibre,
-      };
-    }
 
     const body = {
       imagen_base64,
       fuente: 'movil',
-      ubicacion,
-      ...(modo !== 'planta_existente' && bloqueId && { bloque_id: bloqueId }),
+      bloque_id: bloqueSeleccionado.id_bloque,
       ...(notas && { notas }),
       ...(exifGps && {
         latitud_real: exifGps.latitude,
@@ -338,7 +222,7 @@ export default function UploadPage() {
       <div style={{ minHeight: '100vh', background: 'var(--bg-page)', padding: '32px 20px' }}>
         <ResultadoAnalisis
           result={result}
-          onReset={() => { reset(); setImagen(null); setPreview(null); setExifGps(null); setPuntoSeleccionado(null); setBloqueId(''); }}
+          onReset={() => { reset(); setImagen(null); setPreview(null); setExifGps(null); setBloqueSeleccionado(null); }}
           onDashboard={() => navigate('/galeria')}
         />
       </div>
@@ -435,156 +319,30 @@ export default function UploadPage() {
             )}
           </Section>
 
-          {/* ─── SECCIÓN 2: Ubicación ─── */}
-          <Section title="2. Ubicación" accent="var(--accent-blue)">
-            {/* Tabs de modo */}
-            <div style={{ display: 'flex', gap: 'var(--space-1)', marginBottom: 18 }}>
-              {[
-                { key: 'planta_existente', label: 'Planta existente' },
-                { key: 'planta_nueva', label: 'Planta nueva' },
-                { key: 'coordenadas_libres', label: 'Ubicación libre' },
-              ].map(({ key, label }) => (
-                <button
-                  key={key} type="button"
-                  onClick={() => setModo(key)}
-                  style={{
-                    flex: 1, padding: '8px 6px', borderRadius: 7,
-                    border: `1px solid ${modo === key ? 'var(--accent-amber)' : 'var(--border)'}`,
-                    background: modo === key ? 'rgba(156,54,16,0.1)' : 'var(--bg-inset)',
-                    color: modo === key ? 'var(--accent-amber)' : 'var(--text-muted)',
-                    fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)', cursor: 'pointer',
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {/* Planta existente */}
-            {modo === 'planta_existente' && (
-              <div>
-                <label htmlFor="upload-buscar-planta" style={labelStyle}>Buscar planta</label>
-                <SearchableSelect
-                  id="upload-buscar-planta"
-                  options={plantaOpciones}
-                  value={puntoSeleccionado ? plantaLabel(puntoSeleccionado) : ''}
-                  onChange={label => setPuntoSeleccionado(plantaPorLabel[label] ?? null)}
-                  placeholder="Nombre o ciudad"
-                  emptyMessage="Sin plantas que coincidan"
-                  disabled={puntos.length === 0}
-                />
-                {puntoSeleccionado && (
-                  <div style={{
-                    marginTop: 'var(--space-2-5)', padding: '10px 14px',
-                    background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.3)',
-                    borderRadius: 7, fontSize: 'var(--text-xs)', color: 'var(--accent-green)',
-                  }}>
-                    ✓ Planta seleccionada: <strong>{puntoSeleccionado.sede}</strong> — {puntoSeleccionado.ciudad}
-                  </div>
-                )}
-                {puntos.length === 0 && (
-                  <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>
-                    No hay plantas registradas aún. Usa "Planta nueva" para crear la primera.
-                  </div>
-                )}
+          {/* ─── SECCIÓN 2: Punto de medición ─── */}
+          <Section title="2. Punto de medición" accent="var(--accent-blue)">
+            <label htmlFor="upload-buscar-punto" style={labelStyle}>Buscar punto</label>
+            <SearchableSelect
+              id="upload-buscar-punto"
+              options={bloqueOpciones}
+              value={bloqueSeleccionado ? bloqueLabel(bloqueSeleccionado) : ''}
+              onChange={label => setBloqueSeleccionado(bloquePorLabel[label] ?? null)}
+              placeholder="Nombre del punto"
+              emptyMessage="Sin puntos que coincidan"
+              disabled={bloques.length === 0}
+            />
+            {bloqueSeleccionado && (
+              <div style={{
+                marginTop: 'var(--space-2-5)', padding: '10px 14px',
+                background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.3)',
+                borderRadius: 7, fontSize: 'var(--text-xs)', color: 'var(--accent-green)',
+              }}>
+                ✓ Punto seleccionado: <strong>{bloqueSeleccionado.nombre}</strong>{bloqueSeleccionado.ciudad ? ` — ${bloqueSeleccionado.ciudad}` : ''}
               </div>
             )}
-
-            {/* Planta nueva */}
-            {modo === 'planta_nueva' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2-5)' }}>
-                  <div>
-                    <label htmlFor="upload-sede" style={labelStyle}>Sede / Nombre</label>
-                    <input id="upload-sede" name="sede" style={inputStyle} value={sede} onChange={e => setSede(e.target.value)} placeholder="Planta Principal" required />
-                  </div>
-                  <div>
-                    <label htmlFor="upload-ciudad" style={labelStyle}>Ciudad</label>
-                    <input id="upload-ciudad" name="ciudad" autoComplete="address-level2" style={inputStyle} value={ciudad} onChange={e => setCiudad(e.target.value)} placeholder="Barranquilla" required />
-                  </div>
-                  <div>
-                    <label htmlFor="upload-departamento" style={labelStyle}>Departamento</label>
-                    <input id="upload-departamento" name="departamento" autoComplete="address-level1" style={inputStyle} value={departamento} onChange={e => setDepartamento(e.target.value)} placeholder="Atlántico" required />
-                  </div>
-                  <div>
-                    <label htmlFor="upload-material" style={labelStyle}>Tipo de material</label>
-                    <select id="upload-material" name="tipo-material" style={selectStyle} value={tipoMaterial} onChange={e => setTipoMaterial(e.target.value)}>
-                      <option value="galvanizado">Galvanizado</option>
-                      <option value="A588">A588</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label htmlFor="upload-estructura" style={labelStyle}>Tipo de estructura</label>
-                    <select id="upload-estructura" name="tipo-estructura" style={selectStyle} value={tipoEstructura} onChange={e => setTipoEstructura(e.target.value)}>
-                      <option value="tuberia">Tubería</option>
-                      <option value="viga">Viga</option>
-                      <option value="tanque">Tanque</option>
-                      <option value="otro">Otro</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label htmlFor="upload-bloque-nueva" style={labelStyle}>Bloque (opcional)</label>
-                    <select
-                      id="upload-bloque-nueva" name="bloque_id"
-                      style={selectStyle} value={bloqueId}
-                      onChange={e => setBloqueId(e.target.value)}
-                      disabled={bloques.length === 0}
-                    >
-                      <option value="">Sin bloque</option>
-                      {bloques.map(b => (
-                        <option key={b.id_bloque} value={b.id_bloque}>{b.nombre}</option>
-                      ))}
-                    </select>
-                    {bloques.length === 0 && (
-                      <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', marginTop: 4 }}>
-                        No hay bloques disponibles.
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  {/* span y no label: MapPicker no es un control de formulario nativo. */}
-                  <span style={{ ...labelStyle, display: 'block' }}>Ubicación en el mapa (haz clic para marcar)</span>
-                  <MapPicker lat={coordNuevaLat} lng={coordNuevaLng} onChange={(la, ln) => { setCoordNuevaLat(la); setCoordNuevaLng(ln); }} />
-                </div>
-              </div>
-            )}
-
-            {/* Coordenadas libres */}
-            {modo === 'coordenadas_libres' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-                <div>
-                  <label htmlFor="upload-descripcion-libre" style={labelStyle}>Descripción del lugar</label>
-                  <input
-                    id="upload-descripcion-libre" name="descripcion-libre"
-                    style={inputStyle} value={descripcionLibre}
-                    onChange={e => setDescripcionLibre(e.target.value)}
-                    placeholder="Esquina norte del taller, columna #3…"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="upload-bloque-libre" style={labelStyle}>Bloque (opcional)</label>
-                  <select
-                    id="upload-bloque-libre" name="bloque_id"
-                    style={selectStyle} value={bloqueId}
-                    onChange={e => setBloqueId(e.target.value)}
-                    disabled={bloques.length === 0}
-                  >
-                    <option value="">Sin bloque</option>
-                    {bloques.map(b => (
-                      <option key={b.id_bloque} value={b.id_bloque}>{b.nombre}</option>
-                    ))}
-                  </select>
-                  {bloques.length === 0 && (
-                    <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', marginTop: 4 }}>
-                      No hay bloques disponibles.
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <span style={{ ...labelStyle, display: 'block' }}>Ubicación en el mapa (haz clic para marcar)</span>
-                  <MapPicker lat={coordLibreLat} lng={coordLibreLng} onChange={(la, ln) => { setCoordLibreLat(la); setCoordLibreLng(ln); }} />
-                </div>
+            {bloques.length === 0 && (
+              <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>
+                No hay puntos registrados aún. Crea uno primero desde la sección "Puntos".
               </div>
             )}
           </Section>
