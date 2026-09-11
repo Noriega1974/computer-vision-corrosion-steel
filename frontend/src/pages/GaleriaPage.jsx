@@ -165,6 +165,7 @@ export default function GaleriaPage() {
   // ─── Filtros ──────────────────────────────────────────────────────────────
   const [nivelFilter, setNivelFilter] = useState('all');
   const [puntoFilter, setPuntoFilter] = useState('');
+  const [bloqueFilter, setBloqueFilter] = useState('');
   const [empresaFilter, setEmpresaFilter] = useState('');
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
@@ -196,6 +197,7 @@ export default function GaleriaPage() {
   const filtered = mediciones.filter(m => {
     if (nivelFilter !== 'all' && (m.nivel_corrosion ?? 0) !== Number(nivelFilter)) return false;
     if (puntoFilter && m.id_punto !== puntoFilter) return false;
+    if (bloqueFilter && m.bloque_id !== bloqueFilter) return false;
     if (empresaFilter && m.empresa_id !== empresaFilter) return false;
     if (fechaInicio && new Date(m.timestamp) < new Date(fechaInicio)) return false;
     if (fechaFin && new Date(m.timestamp) > new Date(fechaFin + 'T23:59:59')) return false;
@@ -207,6 +209,18 @@ export default function GaleriaPage() {
   const puntosEnMediciones = puntos.filter(p =>
     mediciones.some(m => m.id_punto === p.id_punto)
   );
+
+  // Bloques únicos entre las mediciones ya traídas -- no hace falta pedir
+  // /bloques, bloque_id/bloque_nombre ya vienen resueltos en cada medición
+  // que tenga uno (congelados al momento de subirla).
+  const bloquesEnMediciones = Array.from(
+    mediciones.reduce((map, m) => {
+      if (m.bloque_id && !map.has(m.bloque_id)) {
+        map.set(m.bloque_id, m.bloque_nombre ?? m.bloque_id);
+      }
+      return map;
+    }, new Map())
+  ).map(([id, nombre]) => ({ id, nombre }));
 
   const inputStyle = {
     padding: '7px 12px', background: 'var(--bg-inset)',
@@ -311,6 +325,26 @@ export default function GaleriaPage() {
           </select>
         </div>
 
+        {/* Dropdown de bloque -- solo aparece si hay mediciones con bloque
+            asignado, igual criterio que el dropdown de planta. */}
+        {bloquesEnMediciones.length > 0 && (
+          <div>
+            <label htmlFor="filtro-bloque" style={FILTRO_LABEL_STYLE}>BLOQUE</label>
+            <select
+              id="filtro-bloque"
+              name="filtro-bloque"
+              value={bloqueFilter}
+              onChange={e => setBloqueFilter(e.target.value)}
+              style={{ ...inputStyle, appearance: 'none', paddingRight: 'var(--space-5)' }}
+            >
+              <option value="">Todos los bloques</option>
+              {bloquesEnMediciones.map(b => (
+                <option key={b.id} value={b.id}>{b.nombre}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Dropdown de afiliación -- exclusivo de super_admin, los demás
             roles ya ven solo las mediciones de la suya (scopeado en el
             backend), así que este filtro no les aportaría nada. */}
@@ -354,10 +388,10 @@ export default function GaleriaPage() {
         </div>
 
         {/* Botón limpiar filtros */}
-        {(nivelFilter !== 'all' || puntoFilter || empresaFilter || fechaInicio || fechaFin || notasQuery) && (
+        {(nivelFilter !== 'all' || puntoFilter || bloqueFilter || empresaFilter || fechaInicio || fechaFin || notasQuery) && (
           <button
             onClick={() => {
-              setNivelFilter('all'); setPuntoFilter(''); setEmpresaFilter('');
+              setNivelFilter('all'); setPuntoFilter(''); setBloqueFilter(''); setEmpresaFilter('');
               setFechaInicio(''); setFechaFin(''); setNotasQuery('');
             }}
             style={{

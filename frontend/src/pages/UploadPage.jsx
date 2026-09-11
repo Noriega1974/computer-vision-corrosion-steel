@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import exifr from 'exifr';
 import { usePuntos } from '../hooks/usePuntos';
+import { useBloques } from '../hooks/useBloques';
 import { useUploadMedicion } from '../hooks/useUploadMedicion';
 import { nivelColor, nivelLabel } from '../lib/statusUtils';
 import SearchableSelect from '../components/SearchableSelect';
@@ -183,6 +184,16 @@ export default function UploadPage() {
   const { puntos } = usePuntos();
   const { upload, loading: uploading, error: uploadError, result, reset } = useUploadMedicion();
 
+  // Bloque opcional para "planta nueva" / "coordenadas libres" -- en
+  // "planta existente" el punto elegido ya trae el suyo, no se pide de
+  // nuevo. Sin filtro de empresa: GET /bloques sin parámetro ya viene
+  // scopeado por el backend a la empresa de quien sube (admin/tecnico).
+  // super_admin no tiene empresa propia y este formulario nunca le pidió
+  // elegir una para crear la planta -- ve todos los bloques sin filtrar,
+  // igual que ya pasa hoy con el resto de este flujo para ese rol.
+  const { bloques } = useBloques(true);
+  const [bloqueId, setBloqueId] = useState('');
+
   // Estado del formulario
   const [imagen, setImagen] = useState(null);         // File object
   const [preview, setPreview] = useState(null);       // data URL
@@ -268,6 +279,11 @@ export default function UploadPage() {
   }
 
   // Enviar formulario
+  //
+  // bloque_id viaja en la RAÍZ del body, no dentro de `ubicacion` -- así lo
+  // lee inference/handler.py (`body.get("bloque_id")`, ver _resolver_punto).
+  // Solo aplica a "planta_nueva"/"coordenadas_libres" (ahí se crea el punto);
+  // en "planta_existente" el punto ya tiene el suyo y no se manda.
   async function handleSubmit(e) {
     e.preventDefault();
     if (!imagen) { alert('Selecciona una imagen primero.'); return; }
@@ -302,6 +318,7 @@ export default function UploadPage() {
       imagen_base64,
       fuente: 'movil',
       ubicacion,
+      ...(modo !== 'planta_existente' && bloqueId && { bloque_id: bloqueId }),
       ...(notas && { notas }),
       ...(exifGps && {
         latitud_real: exifGps.latitude,
@@ -321,7 +338,7 @@ export default function UploadPage() {
       <div style={{ minHeight: '100vh', background: 'var(--bg-page)', padding: '32px 20px' }}>
         <ResultadoAnalisis
           result={result}
-          onReset={() => { reset(); setImagen(null); setPreview(null); setExifGps(null); setPuntoSeleccionado(null); }}
+          onReset={() => { reset(); setImagen(null); setPreview(null); setExifGps(null); setPuntoSeleccionado(null); setBloqueId(''); }}
           onDashboard={() => navigate('/galeria')}
         />
       </div>
@@ -505,6 +522,25 @@ export default function UploadPage() {
                       <option value="otro">Otro</option>
                     </select>
                   </div>
+                  <div>
+                    <label htmlFor="upload-bloque-nueva" style={labelStyle}>Bloque (opcional)</label>
+                    <select
+                      id="upload-bloque-nueva" name="bloque_id"
+                      style={selectStyle} value={bloqueId}
+                      onChange={e => setBloqueId(e.target.value)}
+                      disabled={bloques.length === 0}
+                    >
+                      <option value="">Sin bloque</option>
+                      {bloques.map(b => (
+                        <option key={b.id_bloque} value={b.id_bloque}>{b.nombre}</option>
+                      ))}
+                    </select>
+                    {bloques.length === 0 && (
+                      <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', marginTop: 4 }}>
+                        No hay bloques disponibles.
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div>
                   {/* span y no label: MapPicker no es un control de formulario nativo. */}
@@ -525,6 +561,25 @@ export default function UploadPage() {
                     onChange={e => setDescripcionLibre(e.target.value)}
                     placeholder="Esquina norte del taller, columna #3…"
                   />
+                </div>
+                <div>
+                  <label htmlFor="upload-bloque-libre" style={labelStyle}>Bloque (opcional)</label>
+                  <select
+                    id="upload-bloque-libre" name="bloque_id"
+                    style={selectStyle} value={bloqueId}
+                    onChange={e => setBloqueId(e.target.value)}
+                    disabled={bloques.length === 0}
+                  >
+                    <option value="">Sin bloque</option>
+                    {bloques.map(b => (
+                      <option key={b.id_bloque} value={b.id_bloque}>{b.nombre}</option>
+                    ))}
+                  </select>
+                  {bloques.length === 0 && (
+                    <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', marginTop: 4 }}>
+                      No hay bloques disponibles.
+                    </div>
+                  )}
                 </div>
                 <div>
                   <span style={{ ...labelStyle, display: 'block' }}>Ubicación en el mapa (haz clic para marcar)</span>

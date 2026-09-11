@@ -6,11 +6,30 @@ usan sort key constante "METADATA"; las mediciones usan "MED#{timestamp}"
 (ver lambda_src/api_mediciones y lambda_src/inference).
 
 Rutas:
-  GET  /puntos                    → listar, filtrado por empresa (excepto super_admin)
+  GET  /puntos                    → listar, filtrado por empresa (excepto super_admin);
+                                    cada punto con bloque_id trae bloque_nombre resuelto
   GET  /puntos/{id_punto}         → detalle con historial_cambios (cualquier rol)
-  POST /puntos                    → crear directamente (admin/super_admin; cliente y tecnico: 403)
-  PUT  /puntos/{id_punto}         → actualizar con auditoría (solo admin/super_admin)
+  POST /puntos                    → crear directamente (admin/super_admin; cliente y tecnico: 403);
+                                    acepta bloque_id opcional (debe existir, ser de la misma
+                                    empresa y estar activo)
+  PUT  /puntos/{id_punto}         → actualizar con auditoría (solo admin/super_admin);
+                                    bloque_id se puede cambiar (mismas validaciones) o
+                                    desasignar con bloque_id: null
   DELETE /puntos/{id_punto}       → eliminar (solo admin/super_admin)
+
+  GET    /bloques                 → listar bloques de la empresa del caller (super_admin: todos,
+                                    o los de ?empresa_id=); cada uno con cantidad_puntos
+  POST   /bloques                 → crear bloque (admin/super_admin; super_admin debe mandar empresa_id)
+  PUT    /bloques/{id_bloque}     → editar nombre/descripcion/activo (super_admin o admin de esa empresa)
+  DELETE /bloques/{id_bloque}     → eliminar (super_admin o admin de esa empresa; 409 si tiene puntos)
+
+Bloques: jerarquía de UN nivel, empresa → bloque → punto → medición, sin
+anidamiento. Un bloque es una "carpeta" dentro de una empresa (tabla
+`bloques`, GSI `empresa_id-index`); los puntos lo referencian con el
+atributo opcional `bloque_id`. Al crear un bloque se deja un marcador vacío
+`empresas/{empresa_id}/{id_bloque}/` en el bucket de imágenes — es solo
+cosmético (hace visible la carpeta en la consola), el ítem en DynamoDB es
+la fuente de verdad.
 
 Nota: la ruta GET /puntos/buscar del sistema original fue eliminada en esta
 migración (ver README del proyecto).
@@ -40,6 +59,8 @@ logger.setLevel(logging.INFO)
 TABLA_PUNTOS = os.environ["TABLA_PUNTOS"]
 TABLA_USUARIOS = os.environ["TABLA_USUARIOS"]
 TABLA_EMPRESAS = os.environ["TABLA_EMPRESAS"]
+TABLA_BLOQUES = os.environ["TABLA_BLOQUES"]
+BUCKET_NAME = os.environ["BUCKET_NAME"]
 REGION = os.environ["REGION"]
 
 SK_METADATA = "METADATA"
@@ -48,6 +69,10 @@ dynamodb = boto3.resource("dynamodb", region_name=REGION)
 tabla = dynamodb.Table(TABLA_PUNTOS)
 tabla_usuarios = dynamodb.Table(TABLA_USUARIOS)
 tabla_empresas = dynamodb.Table(TABLA_EMPRESAS)
+tabla_bloques = dynamodb.Table(TABLA_BLOQUES)
+# Solo para dejar el marcador `empresas/{empresa_id}/{id_bloque}/` al crear
+# un bloque (grant acotado a PutObject bajo ese prefijo, ver CorriaComputeStack).
+s3 = boto3.client("s3", region_name=REGION)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -72,13 +97,14 @@ class DecimalEncoder(json.JSONEncoder):
 
 
 def _respuesta(codigo: int, cuerpo) -> dict:
+    """`cuerpo=None` → respuesta sin body (p. ej. 204 No Content)."""
     return {
         "statusCode": codigo,
         "headers": {
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": "*",
         },
-        "body": json.dumps(cuerpo, ensure_ascii=False, cls=DecimalEncoder),
+        "body": "" if cuerpo is None else json.dumps(cuerpo, ensure_ascii=False, cls=DecimalEncoder),
     }
 
 
@@ -152,14 +178,254 @@ def _construir_historial_cambio(item_actual: dict, campos_nuevos: dict, email: s
     }
 
 
+# ── Helpers de bloques ───────────────────────────────────────────────────────
+
+def _bloques_de_empresa(empresa_id: str | None) -> list[dict]:
+    """Todos los bloques de una empresa vía el GSI empresa_id-index.
+    Con empresa_id None (usuario sin empresa) devuelve lista vacía en vez de
+    consultar por vacío por accidente."""
+    if not empresa_id:
+        return []
+    items: list[dict] = []
+    kwargs = dict(
+        IndexName="empresa_id-index",
+        KeyConditionExpression=Key("empresa_id").eq(empresa_id),
+    )
+    while True:
+        resp = tabla_bloques.query(**kwargs)
+        items.extend(resp.get("Items", []))
+        if "LastEvaluatedKey" not in resp:
+            return items
+        kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
+
+
+def _todos_los_bloques() -> list[dict]:
+    """Scan completo de la tabla de bloques (solo super_admin sin filtro)."""
+    items: list[dict] = []
+    kwargs: dict = {}
+    while True:
+        resp = tabla_bloques.scan(**kwargs)
+        items.extend(resp.get("Items", []))
+        if "LastEvaluatedKey" not in resp:
+            return items
+        kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
+
+
+def _contar_puntos_de_bloque(id_bloque: str) -> int:
+    """Cuenta los puntos (sk=METADATA) asignados a un bloque. Un scan
+    filtrado alcanza: la tabla es chica y no hay GSI por bloque_id."""
+    total = 0
+    kwargs = dict(
+        FilterExpression=Attr("sk").eq(SK_METADATA) & Attr("bloque_id").eq(id_bloque),
+        Select="COUNT",
+    )
+    while True:
+        resp = tabla.scan(**kwargs)
+        total += resp.get("Count", 0)
+        if "LastEvaluatedKey" not in resp:
+            return total
+        kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
+
+
+def _nombre_bloque_repetido(empresa_id: str | None, nombre: str, excluir_id: str | None = None) -> bool:
+    """True si ya existe otro bloque con ese nombre (case-insensitive) en la
+    misma empresa. Mismo criterio que POST/PUT /empresas en api_usuarios."""
+    objetivo = nombre.strip().lower()
+    return any(
+        (b.get("nombre") or "").strip().lower() == objetivo and b.get("id_bloque") != excluir_id
+        for b in _bloques_de_empresa(empresa_id)
+    )
+
+
+def _validar_bloque_para_punto(bloque_id, empresa_id_punto: str | None) -> tuple[int, str] | None:
+    """Valida que `bloque_id` pueda asignarse a un punto de `empresa_id_punto`.
+    Devuelve (codigo_http, mensaje) si NO es válido, o None si está todo bien.
+    Reglas: debe ser string, existir (404), pertenecer a la misma empresa
+    que el punto (400) y estar activo (400)."""
+    if not isinstance(bloque_id, str) or not bloque_id.strip():
+        return 400, "bloque_id debe ser un texto no vacío"
+    bloque = tabla_bloques.get_item(Key={"id_bloque": bloque_id}).get("Item")
+    if not bloque:
+        return 404, f"Bloque {bloque_id} no encontrado"
+    if bloque.get("empresa_id") != empresa_id_punto:
+        return 400, "El bloque pertenece a otra empresa"
+    if bloque.get("activo") is False:
+        return 400, "El bloque está inactivo. Actívalo antes de asignarle puntos"
+    return None
+
+
+def _mapa_nombres_bloques(creador: dict | None) -> dict[str, str]:
+    """id_bloque → nombre, cargado UNA vez para no hacer un get_item por punto
+    en el listado. super_admin (sin empresa propia) carga todos; el resto
+    solo los de su empresa (que es lo único que puede ver en GET /puntos)."""
+    if creador and creador.get("rol") == "super_admin":
+        bloques = _todos_los_bloques()
+    else:
+        bloques = _bloques_de_empresa(creador.get("empresa_id") if creador else None)
+    return {b["id_bloque"]: b.get("nombre", "") for b in bloques if b.get("id_bloque")}
+
+
+def _anexar_bloque_nombre(puntos: list[dict], nombres: dict[str, str]) -> list[dict]:
+    for p in puntos:
+        if p.get("bloque_id"):
+            p["bloque_nombre"] = nombres.get(p["bloque_id"])
+    return puntos
+
+
+def _crear_marcador_s3_bloque(empresa_id: str, id_bloque: str) -> None:
+    """Objeto vacío `empresas/{empresa_id}/{id_bloque}/` para que la carpeta
+    exista en S3 aunque todavía no tenga mediciones. No bloqueante: si S3
+    falla se loguea y se sigue, el ítem en DynamoDB es lo que manda."""
+    try:
+        s3.put_object(Bucket=BUCKET_NAME, Key=f"empresas/{empresa_id}/{id_bloque}/", Body=b"")
+    except Exception as e:
+        logger.warning("No se pudo crear el marcador S3 del bloque %s: %s", id_bloque, e)
+
+
+# ── Rutas /bloques ───────────────────────────────────────────────────────────
+
+def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
+    creador = _usuario_actual(event)
+    rol = creador.get("rol") if creador else None
+
+    # ── GET /bloques ─────────────────────────────────────────────────────
+    if metodo == "GET" and not id_bloque:
+        qp = event.get("queryStringParameters") or {}
+        if rol == "super_admin":
+            filtro_empresa = qp.get("empresa_id")
+            bloques = _bloques_de_empresa(filtro_empresa) if filtro_empresa else _todos_los_bloques()
+        else:
+            # Ver bloques de otra empresa es exclusivo de super_admin.
+            bloques = _bloques_de_empresa(creador.get("empresa_id") if creador else None)
+        for b in bloques:
+            b["cantidad_puntos"] = _contar_puntos_de_bloque(b["id_bloque"])
+        return _respuesta(200, {"bloques": bloques})
+
+    # Todo lo que sigue muta: solo admin/super_admin.
+    if rol not in ("admin", "super_admin"):
+        return _respuesta(403, {"error": "Solo administradores pueden gestionar bloques"})
+
+    # ── POST /bloques ────────────────────────────────────────────────────
+    if metodo == "POST" and not id_bloque:
+        body = json.loads(event.get("body") or "{}")
+        nombre = body.get("nombre")
+        if not isinstance(nombre, str) or not nombre.strip():
+            return _respuesta(400, {"error": "nombre es requerido"})
+        nombre = nombre.strip()
+        descripcion = body.get("descripcion")
+        if descripcion is not None and not isinstance(descripcion, str):
+            return _respuesta(400, {"error": "descripcion debe ser un texto"})
+
+        # empresa_id: SOLO super_admin lo manda (y es obligatorio para él),
+        # validado contra la tabla empresas — mismo patrón que POST /usuarios
+        # y POST /puntos. Para admin se fuerza al suyo, nunca del body.
+        if rol == "super_admin":
+            empresa_id = body.get("empresa_id")
+            if not empresa_id:
+                return _respuesta(400, {"error": "super_admin debe indicar empresa_id al crear un bloque"})
+            if not tabla_empresas.get_item(Key={"id_empresa": empresa_id}).get("Item"):
+                return _respuesta(404, {"error": f"Empresa {empresa_id} no encontrada"})
+        else:
+            empresa_id = creador.get("empresa_id")
+            if not empresa_id:
+                return _respuesta(400, {"error": "Tu usuario no tiene empresa asignada. Contacta a un super_admin"})
+
+        if _nombre_bloque_repetido(empresa_id, nombre):
+            return _respuesta(409, {"error": f"Ya existe un bloque llamado '{nombre}' en esta empresa"})
+
+        id_bloque_nuevo = f"BLQ-{uuid.uuid4()}"
+        item = {
+            "id_bloque": id_bloque_nuevo,
+            "empresa_id": empresa_id,
+            "nombre": nombre,
+            "activo": True,
+            "fecha_creacion": datetime.now(timezone.utc).isoformat(),
+            "creado_por_id": creador.get("id_usuario", ""),
+        }
+        if descripcion is not None:
+            item["descripcion"] = descripcion
+        # Foto fija del nombre del creador (mismo patrón que puntos/mediciones:
+        # sigue siendo legible aunque la cuenta se borre después).
+        if creador.get("nombre"):
+            item["creado_por_nombre"] = creador.get("nombre")
+        tabla_bloques.put_item(Item=item)
+        _crear_marcador_s3_bloque(empresa_id, id_bloque_nuevo)
+        return _respuesta(201, item)
+
+    # PUT/DELETE necesitan el bloque y el chequeo de alcance por empresa.
+    if not id_bloque:
+        return _respuesta(405, {"error": f"Método {metodo} no permitido"})
+    bloque = tabla_bloques.get_item(Key={"id_bloque": id_bloque}).get("Item")
+    if not bloque:
+        return _respuesta(404, {"error": f"Bloque {id_bloque} no encontrado"})
+    if rol != "super_admin" and bloque.get("empresa_id") != creador.get("empresa_id"):
+        return _respuesta(403, {"error": "No puedes modificar bloques de otra empresa"})
+
+    # ── PUT /bloques/{id_bloque} ─────────────────────────────────────────
+    if metodo == "PUT":
+        body = json.loads(event.get("body") or "{}")
+        nombre = body.get("nombre")
+        descripcion = body.get("descripcion")
+        activo = body.get("activo")
+        if nombre is None and descripcion is None and activo is None:
+            return _respuesta(400, {"error": "Debes indicar nombre, descripcion y/o activo para actualizar"})
+
+        campos = {}
+        if nombre is not None:
+            if not isinstance(nombre, str):
+                return _respuesta(400, {"error": "nombre debe ser un texto"})
+            nombre = nombre.strip()
+            if not nombre:
+                return _respuesta(400, {"error": "nombre no puede estar vacío"})
+            if _nombre_bloque_repetido(bloque.get("empresa_id"), nombre, excluir_id=id_bloque):
+                return _respuesta(409, {"error": f"Ya existe un bloque llamado '{nombre}' en esta empresa"})
+            campos["nombre"] = nombre
+        if descripcion is not None:
+            if not isinstance(descripcion, str):
+                return _respuesta(400, {"error": "descripcion debe ser un texto"})
+            campos["descripcion"] = descripcion
+        if activo is not None:
+            if not isinstance(activo, bool):
+                return _respuesta(400, {"error": "activo debe ser un booleano"})
+            campos["activo"] = activo
+
+        expr = "SET " + ", ".join(f"#{k} = :{k}" for k in campos)
+        nombres = {f"#{k}": k for k in campos}
+        valores = {f":{k}": v for k, v in campos.items()}
+        tabla_bloques.update_item(
+            Key={"id_bloque": id_bloque},
+            UpdateExpression=expr,
+            ExpressionAttributeNames=nombres,
+            ExpressionAttributeValues=valores,
+        )
+        return _respuesta(200, tabla_bloques.get_item(Key={"id_bloque": id_bloque}).get("Item", {}))
+
+    # ── DELETE /bloques/{id_bloque} ──────────────────────────────────────
+    if metodo == "DELETE":
+        # Borrar un bloque con puntos adentro los dejaría apuntando a un
+        # bloque_id inexistente. Bloqueamos en vez de desasignar en cascada.
+        # El marcador S3 no se toca: puede quedar, es inocuo.
+        if _contar_puntos_de_bloque(id_bloque) > 0:
+            return _respuesta(409, {"error": "No se puede eliminar: el bloque tiene puntos asociados. Desasigna o elimina sus puntos primero"})
+        tabla_bloques.delete_item(Key={"id_bloque": id_bloque})
+        return _respuesta(204, None)
+
+    return _respuesta(405, {"error": f"Método {metodo} no permitido"})
+
+
 # ── Handler principal ────────────────────────────────────────────────────────
 
 def lambda_handler(event: dict, context) -> dict:
     metodo = event.get("httpMethod", "")
+    resource = event.get("resource", "")
     path_params = event.get("pathParameters") or {}
     id_punto = path_params.get("id_punto")
 
     try:
+        # ── /bloques y /bloques/{id_bloque} — misma Lambda, rutas aparte ─────
+        if resource.startswith("/bloques"):
+            return _handle_bloques(event, metodo, path_params.get("id_bloque"))
+
         # ── GET /puntos — listar todos, filtrado por empresa ─────────────────
         if metodo == "GET" and not id_punto:
             creador = _usuario_actual(event)
@@ -173,7 +439,12 @@ def lambda_handler(event: dict, context) -> dict:
                 empresa_id = creador.get("empresa_id") if creador else None
                 f_expr = f_expr & Attr("empresa_id").eq(empresa_id)
             resp = tabla.scan(FilterExpression=f_expr)
-            return _respuesta(200, resp.get("Items", []))
+            puntos = resp.get("Items", [])
+            # bloque_nombre resuelto con una sola carga de bloques (no un
+            # get_item por punto).
+            if any(p.get("bloque_id") for p in puntos):
+                _anexar_bloque_nombre(puntos, _mapa_nombres_bloques(creador))
+            return _respuesta(200, puntos)
 
         # ── GET /puntos/{id_punto} ───────────────────────────────────────────
         elif metodo == "GET" and id_punto:
@@ -186,6 +457,9 @@ def lambda_handler(event: dict, context) -> dict:
                 # Ver datos de otra empresa es exclusivo de super_admin — 404
                 # en vez de 403 para no revelar que el punto existe.
                 return _respuesta(404, {"error": f"Punto {id_punto} no encontrado"})
+            if item.get("bloque_id"):
+                bloque = tabla_bloques.get_item(Key={"id_bloque": item["bloque_id"]}).get("Item")
+                item["bloque_nombre"] = bloque.get("nombre") if bloque else None
             return _respuesta(200, item)
 
         # ── POST /puntos — crear (admin/super_admin) ──────────────────────────
@@ -237,6 +511,14 @@ def lambda_handler(event: dict, context) -> dict:
                 item["empresa_id"] = empresa_id_body
             elif creador.get("empresa_id"):
                 item["empresa_id"] = creador.get("empresa_id")
+            # bloque_id opcional: debe existir, ser de la misma empresa que
+            # el punto (la recién resuelta arriba) y estar activo.
+            bloque_id = body.get("bloque_id")
+            if bloque_id is not None:
+                error_bloque = _validar_bloque_para_punto(bloque_id, item.get("empresa_id"))
+                if error_bloque:
+                    return _respuesta(error_bloque[0], {"error": error_bloque[1]})
+                item["bloque_id"] = bloque_id
             # GSI de búsqueda inversa por usuario (usuario_id/timestamp) — ver
             # CorriaStorageStack. DynamoDB rechaza strings vacíos como clave
             # de GSI, así que "usuario_id" solo se agrega cuando hay un
@@ -279,14 +561,29 @@ def lambda_handler(event: dict, context) -> dict:
                 ciudad = campos.get("ciudad", punto_actual.get("ciudad", ""))
                 campos["clave_logica"] = f"{sede}-{ciudad}"
 
-            # Construir entrada de auditoría con los campos que realmente cambiaron
+            # bloque_id: cambiar (mismas validaciones que POST, contra la
+            # empresa del punto — nunca la del caller, que para super_admin
+            # no existe) o desasignar con `bloque_id: null` → REMOVE.
+            desasignar_bloque = "bloque_id" in campos and campos["bloque_id"] is None
+            if "bloque_id" in campos and not desasignar_bloque:
+                error_bloque = _validar_bloque_para_punto(campos["bloque_id"], punto_actual.get("empresa_id"))
+                if error_bloque:
+                    return _respuesta(error_bloque[0], {"error": error_bloque[1]})
+
+            # Construir entrada de auditoría con los campos que realmente
+            # cambiaron (incluye bloque_id → None cuando se desasigna).
             email = _email_usuario(event)
             entrada_cambio = _construir_historial_cambio(punto_actual, campos, email)
 
-            expr_parts = [f"#{k} = :{k}" for k in campos]
-            nombres = {f"#{k}": k for k in campos}
+            campos_set = {k: v for k, v in campos.items() if not (k == "bloque_id" and v is None)}
+            expr_parts = [f"#{k} = :{k}" for k in campos_set]
+            nombres = {f"#{k}": k for k in campos_set}
             # floats en coordenadas u otros campos numéricos → Decimal
-            valores = floats_to_decimal({f":{k}": v for k, v in campos.items()})
+            valores = floats_to_decimal({f":{k}": v for k, v in campos_set.items()})
+            remove_parts = []
+            if desasignar_bloque:
+                nombres["#bloque_id"] = "bloque_id"
+                remove_parts.append("#bloque_id")
 
             if entrada_cambio:
                 # Serializar el cambio con Decimal para DynamoDB
@@ -308,12 +605,22 @@ def lambda_handler(event: dict, context) -> dict:
                     )
                     nombres["#historial_cambios"] = "historial_cambios"
 
-            tabla.update_item(
+            expresion = ""
+            if expr_parts:
+                expresion = "SET " + ", ".join(expr_parts)
+            if remove_parts:
+                # Un PUT con solo `bloque_id: null` no tiene cláusula SET, y
+                # DynamoDB rechaza un ExpressionAttributeValues vacío.
+                expresion = (expresion + " " if expresion else "") + "REMOVE " + ", ".join(remove_parts)
+
+            kwargs_update = dict(
                 Key={"id_punto": id_punto, "sk": SK_METADATA},
-                UpdateExpression="SET " + ", ".join(expr_parts),
+                UpdateExpression=expresion,
                 ExpressionAttributeNames=nombres,
-                ExpressionAttributeValues=valores,
             )
+            if valores:
+                kwargs_update["ExpressionAttributeValues"] = valores
+            tabla.update_item(**kwargs_update)
             return _respuesta(200, {"mensaje": "Punto actualizado", "id_punto": id_punto})
 
         # ── DELETE /puntos/{id_punto} — eliminar (admin/super_admin) ─────────

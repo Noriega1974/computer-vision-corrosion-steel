@@ -3,6 +3,7 @@ import { Factory, Plus, Edit2, MapPin, Clock, LayoutGrid, X, Check, AlertCircle 
 import { useGestionPuntos } from '../hooks/usePunto';
 import { useMedicionesPunto } from '../hooks/useMedicionesPunto';
 import { useEmpresas } from '../hooks/useEmpresas';
+import { useBloques } from '../hooks/useBloques';
 import { useAuth } from '../auth/AuthContext';
 import { nivelLabel, nivelColor, nivelBg } from '../lib/statusUtils';
 import SearchableSelect from '../components/SearchableSelect';
@@ -204,6 +205,8 @@ const LABEL_STYLE = {
 // afiliación de un punto ya creado (PUT /puntos excluye empresa_id a
 // propósito), así que este campo nunca aparece al editar.
 function PuntoForm({ initial = {}, onSubmit, saving, error, empresasDisponibles, requiereEmpresa }) {
+  const isEdit = Boolean(initial.id_punto);
+
   const [form, setForm] = useState({
     sede: initial.sede ?? '',
     ciudad: initial.ciudad ?? '',
@@ -212,6 +215,7 @@ function PuntoForm({ initial = {}, onSubmit, saving, error, empresasDisponibles,
     latitud: initial.coordenadas?.lat ?? initial.latitud ?? '',
     longitud: initial.coordenadas?.lng ?? initial.longitud ?? '',
     empresa_id: initial.empresa_id ?? '',
+    bloque_id: initial.bloque_id ?? '',
   });
 
   const [geoLoading, setGeoLoading] = useState(false);
@@ -224,6 +228,18 @@ function PuntoForm({ initial = {}, onSubmit, saving, error, empresasDisponibles,
 
   const setField = (k) => (v) =>
     setForm(f => ({ ...f, [k]: v }));
+
+  // ── Bloques disponibles para el selector ──────────────────────────────
+  // `requiereEmpresa` (crear, solo super_admin): recién se puede saber a
+  // qué empresa pertenecen los bloques cuando eligió una en el selector de
+  // arriba -- hasta entonces el select de bloque queda deshabilitado.
+  // El resto de los casos (admin/tecnico creando, o editar un punto que ya
+  // tiene empresa fija) no necesitan resolver la propia empresa del usuario:
+  // un GET /bloques sin filtro ya viene scopeado por el backend a la
+  // empresa correspondiente.
+  const empresaIdParaBloques = requiereEmpresa ? (form.empresa_id || null) : (initial.empresa_id ?? null);
+  const bloquesHabilitado = !requiereEmpresa || !!form.empresa_id;
+  const { bloques, loading: loadingBloques } = useBloques(bloquesHabilitado, empresaIdParaBloques || undefined);
 
   const municipiosDisponibles =
     MUNICIPIOS_POR_DEPARTAMENTO[form.departamento] ?? [];
@@ -292,6 +308,18 @@ function PuntoForm({ initial = {}, onSubmit, saving, error, empresasDisponibles,
 
     const payload = { ...form };
 
+    // Al editar, un select vacío significa "desasignar" y se manda como
+    // `null` explícito (el backend lo acepta solo en el PUT). Al crear, un
+    // select vacío simplemente no se manda -- el backend no espera la
+    // clave si no se eligió bloque.
+    if (isEdit) {
+      payload.bloque_id = form.bloque_id || null;
+    } else if (form.bloque_id) {
+      payload.bloque_id = form.bloque_id;
+    } else {
+      delete payload.bloque_id;
+    }
+
     if (payload.latitud !== '') {
       payload.latitud = Number(payload.latitud);
     }
@@ -343,17 +371,55 @@ function PuntoForm({ initial = {}, onSubmit, saving, error, empresasDisponibles,
             id="punto-empresa"
             name="empresa_id"
             value={form.empresa_id}
-            onChange={set('empresa_id')}
+            onChange={e => {
+              const nuevaEmpresa = e.target.value;
+              // Cambiar de afiliación invalida el bloque elegido -- pertenecía
+              // a la empresa anterior, y el select de abajo va a recargar sus
+              // opciones para la nueva.
+              setForm(f => ({ ...f, empresa_id: nuevaEmpresa, bloque_id: '' }));
+            }}
             required
             style={inputStyle}
           >
-            <option value="">Seleccioná una afiliación…</option>
+            <option value="">Selecciona una afiliación…</option>
             {(empresasDisponibles ?? []).map(e => (
               <option key={e.id_empresa} value={e.id_empresa}>{e.nombre}</option>
             ))}
           </select>
         </div>
       )}
+
+      {/* Bloque -- opcional, agrupa el punto dentro de una carpeta de la
+          empresa. Sin bloques disponibles, el select queda deshabilitado
+          con una nota en vez de romper el formulario. */}
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
+        <label htmlFor="punto-bloque" style={LABEL_STYLE}>
+          Bloque (opcional)
+        </label>
+        <select
+          id="punto-bloque"
+          name="bloque_id"
+          value={form.bloque_id}
+          onChange={set('bloque_id')}
+          disabled={!bloquesHabilitado || (!loadingBloques && bloques.length === 0)}
+          style={{ ...inputStyle, opacity: (!bloquesHabilitado || (!loadingBloques && bloques.length === 0)) ? 0.6 : 1 }}
+        >
+          <option value="">Sin bloque</option>
+          {bloques.map(b => (
+            <option key={b.id_bloque} value={b.id_bloque}>{b.nombre}</option>
+          ))}
+        </select>
+        {requiereEmpresa && !form.empresa_id && (
+          <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-faint)', marginTop: 'var(--space-1)' }}>
+            Selecciona una afiliación primero.
+          </div>
+        )}
+        {(!requiereEmpresa || form.empresa_id) && !loadingBloques && bloques.length === 0 && (
+          <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-faint)', marginTop: 'var(--space-1)' }}>
+            No hay bloques en esta empresa.
+          </div>
+        )}
+      </div>
 
       {/* Departamento */}
       <div style={{ marginBottom: 'var(--space-3-5)' }}>
@@ -642,6 +708,7 @@ function PuntoDetail({ punto, onEdit, isAdmin }) {
                 ['ID', punto.id_punto],
                 ['Ciudad', punto.ciudad],
                 ['Departamento', punto.departamento],
+                ...(punto.bloque_nombre ? [['Bloque', punto.bloque_nombre]] : []),
                 [
                   'Latitud',
                   punto.coordenadas?.lat ??
@@ -1138,6 +1205,7 @@ export default function PlantsPage() {
                     'Departamento',
                     'Coordenadas',
                     ...(esSuperAdmin ? ['Afiliación'] : []),
+                    'Bloque',
                     'Ver'
                   ].map(h => (
                     <th
@@ -1254,6 +1322,16 @@ export default function PlantsPage() {
 
                         <td
                           style={{
+                            padding: '10px 14px',
+                            color: 'var(--text-muted)',
+                            fontSize: 'var(--text-xs)'
+                          }}
+                        >
+                          {p.bloque_nombre ?? '—'}
+                        </td>
+
+                        <td
+                          style={{
                             padding: '10px 14px'
                           }}
                         >
@@ -1286,7 +1364,7 @@ export default function PlantsPage() {
                   filtered.length === 0 && (
                     <tr>
                       <td
-                        colSpan={esSuperAdmin ? 6 : 5}
+                        colSpan={esSuperAdmin ? 7 : 6}
                         style={{
                           padding: 'var(--space-6)',
                           textAlign: 'center',
