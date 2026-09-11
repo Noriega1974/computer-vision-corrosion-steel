@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   LayoutGrid,
   MapPin,
+  Globe,
   Users,
   Settings,
   LogOut,
@@ -45,6 +46,13 @@ const NAV_ITEMS = [
   },
 
   { divider: true },
+
+  {
+    path: '/zonas',
+    icon: Globe,
+    label: 'Zonas',
+    roles: ['super_admin'],
+  },
 
   {
     path: '/puntos',

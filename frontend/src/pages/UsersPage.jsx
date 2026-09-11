@@ -1,21 +1,13 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Plus, Edit2, X, AlertCircle, Check,
-  RefreshCw, UserX, Trash2, ChevronUp, ChevronDown, Clock, Power,
+  RefreshCw, UserX, Trash2, ChevronUp, ChevronDown, Clock,
 } from 'lucide-react';
 import { useGestionUsuarios } from '../hooks/useUsuarios';
-import { useGestionEmpresas } from '../hooks/useEmpresas';
+import { useEmpresas } from '../hooks/useEmpresas';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
 import { Building2 } from 'lucide-react';
-import ZonaMapPicker from '../components/ZonaMapPicker';
-import SearchableSelect from '../components/SearchableSelect';
-import colombiaData from '../data/colombia-divipola.json';
-
-const DEPARTAMENTOS_EMPRESA = colombiaData.departamentos.map(d => d.nombre);
-const MUNICIPIOS_POR_DEPARTAMENTO_EMPRESA = Object.fromEntries(
-  colombiaData.departamentos.map(d => [d.nombre, d.municipios])
-);
 
 // ─── RBAC multi-empresa ────────────────────────────────────────────────────
 // Jerarquía de creación de usuarios, espejo de CREATABLE_ROLES en
@@ -405,220 +397,6 @@ function ColaboradorForm({ onSubmit, saving, error }) {
   );
 }
 
-// ─── Formulario de empresa (solo super_admin) ────────────────────────────────
-// Mismo patrón que UsuarioForm: `initial`/`isEdit` para reusar el mismo
-// formulario en creación (POST /empresas) y edición (PUT
-// /empresas/{id_empresa}) en vez de duplicarlo.
-function EmpresaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
-  const [nombre, setNombre] = useState(initial.nombre ?? '');
-  const [departamento, setDepartamento] = useState(initial.departamento ?? '');
-  const [ciudad, setCiudad] = useState(initial.ciudad ?? '');
-  const municipiosDisponibles = MUNICIPIOS_POR_DEPARTAMENTO_EMPRESA[departamento] ?? [];
-
-  // Coordenadas del "centro" de la empresa (dónde arranca a mirar el mapa al
-  // dibujar la zona) -- mismo patrón que tenía PuntoForm en la vieja
-  // PlantsPage: detecta la ubicación del dispositivo sola al abrir el
-  // formulario, con un toggle "Ser más específico" para tipearla a mano.
-  const [latitud, setLatitud] = useState(initial.coordenadas?.lat ?? '');
-  const [longitud, setLongitud] = useState(initial.coordenadas?.lng ?? '');
-  const [geoLoading, setGeoLoading] = useState(false);
-  const [geoError, setGeoError] = useState(null);
-  const [showManual, setShowManual] = useState(false);
-
-  useEffect(() => {
-    const yaHayCoordenadas = initial.coordenadas?.lat;
-    if (yaHayCoordenadas || !navigator.geolocation) return;
-    setGeoLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLatitud(parseFloat(pos.coords.latitude.toFixed(6)));
-        setLongitud(parseFloat(pos.coords.longitude.toFixed(6)));
-        setGeoLoading(false);
-      },
-      () => {
-        setGeoError('No se pudo detectar la ubicación automáticamente.');
-        setGeoLoading(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // El botón "Dibujar zona" solo aparece (y el mapa solo se monta) una vez
-  // que hay una coordenada de referencia -- así el mapa arranca centrado
-  // ahí en vez de en un punto arbitrario de Colombia. Si ya venía con zonas
-  // guardadas (editar), el picker arranca visible de una.
-  const [mostrarMapaZona, setMostrarMapaZona] = useState((initial.zonas ?? []).length > 0);
-  const [zonas, setZonas] = useState(initial.zonas ?? []);
-  const hayCoordenadas = latitud !== '' && longitud !== '';
-  const [validationError, setValidationError] = useState(null);
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!DEPARTAMENTOS_EMPRESA.includes(departamento)) {
-      setValidationError('Selecciona un departamento válido de la lista.');
-      return;
-    }
-    if (!municipiosDisponibles.includes(ciudad)) {
-      setValidationError('Selecciona una ciudad válida del departamento elegido.');
-      return;
-    }
-    setValidationError(null);
-    // `latitud`/`longitud` son solo el punto de referencia para centrar el
-    // mapa al dibujar zonas -- no se guardan aparte en la empresa, el
-    // backend no tiene ese campo. Lo único persistente es `zonas`.
-    onSubmit({ nombre, departamento, ciudad, zonas });
-  };
-
-  return (
-    <form onSubmit={handleSubmit}>
-      <div style={{ marginBottom: 'var(--space-3-5)' }}>
-        <label htmlFor="empresa-nombre" style={labelStyle}>
-          Nombre de la afiliación *
-        </label>
-        <input
-          id="empresa-nombre" name="nombre" autoComplete="off"
-          required value={nombre} onChange={e => setNombre(e.target.value)}
-          placeholder="ej: Universidad del Norte" style={inputStyle}
-        />
-      </div>
-
-      <div style={{ marginBottom: 'var(--space-3-5)' }}>
-        <label htmlFor="empresa-departamento" style={labelStyle}>
-          Departamento *
-        </label>
-        <SearchableSelect
-          id="empresa-departamento"
-          options={DEPARTAMENTOS_EMPRESA}
-          value={departamento}
-          onChange={(v) => { setDepartamento(v); setCiudad(''); }}
-          placeholder="Buscar departamento"
-          emptyMessage="Sin coincidencias"
-        />
-      </div>
-
-      <div style={{ marginBottom: 'var(--space-3-5)' }}>
-        <label htmlFor="empresa-ciudad" style={labelStyle}>
-          Ciudad *
-        </label>
-        <SearchableSelect
-          id="empresa-ciudad"
-          options={municipiosDisponibles}
-          value={ciudad}
-          onChange={setCiudad}
-          placeholder={departamento ? 'Buscar ciudad' : 'Selecciona un departamento primero'}
-          disabled={!departamento}
-          emptyMessage="Sin coincidencias"
-        />
-      </div>
-
-      {/* Ubicación -- mismo patrón que tenía el punto en PlantsPage:
-          detección automática + toggle manual. No es <label>: encabeza el
-          bloque entero, no un solo control. */}
-      <div style={{ marginBottom: 'var(--space-3-5)' }}>
-        <span style={{ ...labelStyle, display: 'block' }}>Ubicación de referencia</span>
-
-        {geoLoading && (
-          <div style={{ padding: '8px 12px', background: 'rgba(156,54,16,0.05)', border: '1px solid rgba(156,54,16,0.15)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>
-            Detectando ubicación…
-          </div>
-        )}
-        {!geoLoading && hayCoordenadas && (
-          <div style={{ padding: '8px 12px', background: 'rgba(156,54,16,0.05)', border: '1px solid rgba(156,54,16,0.15)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>
-            📍 {latitud}, {longitud}
-          </div>
-        )}
-        {geoError && (
-          <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.05)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: '#dc2626', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <AlertCircle size={12} /> {geoError}
-          </div>
-        )}
-
-        <button
-          type="button" onClick={() => setShowManual(v => !v)}
-          style={{
-            marginTop: 'var(--space-2)', background: 'none', border: 'none', padding: 0,
-            fontSize: 'var(--text-2xs)', color: 'var(--accent-amber)', cursor: 'pointer',
-            fontFamily: 'var(--font-data)', fontWeight: 600, letterSpacing: '0.04em',
-            textDecoration: 'underline', textUnderlineOffset: 3,
-          }}
-        >
-          {showManual ? 'Ocultar coordenadas' : 'Ser más específico con la ubicación'}
-        </button>
-
-        {showManual && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)', marginTop: 'var(--space-2-5)' }}>
-            <div>
-              <label htmlFor="empresa-latitud" style={labelStyle}>Latitud</label>
-              <input
-                id="empresa-latitud" name="latitud" type="number" inputMode="decimal" step="any"
-                value={latitud} onChange={e => setLatitud(e.target.value === '' ? '' : Number(e.target.value))}
-                style={inputStyle} placeholder="Ej: 4.710989"
-              />
-            </div>
-            <div>
-              <label htmlFor="empresa-longitud" style={labelStyle}>Longitud</label>
-              <input
-                id="empresa-longitud" name="longitud" type="number" inputMode="decimal" step="any"
-                value={longitud} onChange={e => setLongitud(e.target.value === '' ? '' : Number(e.target.value))}
-                style={inputStyle} placeholder="Ej: -74.072092"
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Dibujar zona: recién aparece con una coordenada de referencia --
-          el mapa arranca centrado ahí en vez de en cualquier punto de
-          Colombia. Opcional: se puede crear la empresa sin zona y
-          agregarla después editando. */}
-      <div style={{ marginBottom: 'var(--space-3-5)' }}>
-        {!mostrarMapaZona ? (
-          <button
-            type="button"
-            onClick={() => setMostrarMapaZona(true)}
-            disabled={!hayCoordenadas}
-            title={!hayCoordenadas ? 'Marca una ubicación de referencia primero' : undefined}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '7px 14px', background: 'var(--bg-inset)', border: '1px solid var(--border)',
-              borderRadius: 7, cursor: hayCoordenadas ? 'pointer' : 'not-allowed',
-              opacity: hayCoordenadas ? 1 : 0.5,
-              fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)', color: 'var(--accent-amber)',
-            }}
-          >
-            Dibujar zona (opcional)
-          </button>
-        ) : (
-          <>
-            <span style={{ ...labelStyle, display: 'block' }}>Zona en el mapa</span>
-            <ZonaMapPicker
-              zonas={zonas} onChange={setZonas}
-              puntoReferencia={hayCoordenadas ? { lat: Number(latitud), lng: Number(longitud) } : null}
-            />
-          </>
-        )}
-      </div>
-
-      {(validationError || error) && (
-        <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, color: '#dc2626', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3-5)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <AlertCircle size={13} /> {validationError || error}
-        </div>
-      )}
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button type="submit" disabled={saving} style={{
-          padding: '8px 20px', background: 'var(--accent-amber)', border: 'none',
-          borderRadius: 8, cursor: saving ? 'not-allowed' : 'pointer',
-          fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'white',
-          opacity: saving ? 0.6 : 1,
-        }}>
-          {saving ? 'Guardando…' : isEdit ? 'Guardar cambios' : 'Crear afiliación'}
-        </button>
-      </div>
-    </form>
-  );
-}
-
 // ─── UsersPage ────────────────────────────────────────────────────────────────
 export default function UsersPage() {
   const { user: me } = useAuth();
@@ -634,11 +412,10 @@ export default function UsersPage() {
   const esSuperAdmin = miRol === 'super_admin';
 
   const { usuarios, loading, mutating, mutError, crearUsuario, crearColaborador, editarUsuario, deshabilitarUsuario, habilitarUsuario, eliminarUsuario } = useGestionUsuarios();
-  const { empresas, loading: loadingEmpresas, mutating: mutandoEmpresa, mutError: mutErrorEmpresa, crearEmpresa, editarEmpresa } = useGestionEmpresas(esSuperAdmin);
-  const [showCreateEmpresa, setShowCreateEmpresa] = useState(false);
-  const [empresaFormError, setEmpresaFormError] = useState(null);
-  const [editEmpresa, setEditEmpresa] = useState(null);
-  const [confirmToggleEmpresa, setConfirmToggleEmpresa] = useState(null); // { empresa, activarDespues }
+  // Gestión de zonas/afiliaciones (crear, editar, dibujar el área en el
+  // mapa) vive en su propia página /zonas -- acá solo se lee la lista para
+  // resolver nombres y para el selector de UsuarioForm.
+  const { empresas } = useEmpresas(esSuperAdmin);
   // Perfil propio: única forma de conocer el empresa_id del usuario logueado
   // en el frontend (no viaja en el JWT/user de useAuth) — se usa solo para
   // el filtro cliente-side de abajo, defensa en profundidad.
@@ -737,43 +514,6 @@ export default function UsersPage() {
       setShowCreate(false);
     } catch (err) {
       setFormError(err.message);
-    }
-  };
-
-  const handleCrearEmpresa = async (payload) => {
-    setEmpresaFormError(null);
-    try {
-      await crearEmpresa(payload);
-      setShowCreateEmpresa(false);
-      setToast('Afiliación creada correctamente.');
-    } catch (err) {
-      setEmpresaFormError(err.message);
-    }
-  };
-
-  const handleEditarEmpresa = async (payload) => {
-    setEmpresaFormError(null);
-    try {
-      await editarEmpresa(editEmpresa.id_empresa, payload);
-      setEditEmpresa(null);
-      setToast('Afiliación actualizada correctamente.');
-    } catch (err) {
-      setEmpresaFormError(err.message);
-    }
-  };
-
-  const handleToggleEmpresa = async () => {
-    if (!confirmToggleEmpresa) return;
-    const { empresa, activarDespues } = confirmToggleEmpresa;
-    try {
-      await editarEmpresa(empresa.id_empresa, { activa: activarDespues });
-      setToast(activarDespues ? 'Afiliación activada correctamente.' : 'Afiliación desactivada correctamente.');
-    } catch {
-      // mutErrorEmpresa muestra el error en el banner sobre la tabla; el
-      // diálogo se cierra igual para que ese banner no quede tapado por el
-      // overlay.
-    } finally {
-      setConfirmToggleEmpresa(null);
     }
   };
 
@@ -1018,135 +758,7 @@ export default function UsersPage() {
         </div>
         </>
         )}
-
-        {/* ── Empresas: exclusivo de super_admin ── */}
-        {esSuperAdmin && (
-          <div style={{ marginTop: 'var(--space-6)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 'var(--space-3)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2-5)' }}>
-                <span style={{ background: 'var(--accent-amber)', width: 3, height: 20, borderRadius: 2, display: 'inline-block' }} />
-                <Building2 size={16} color="var(--text-primary)" />
-                <span style={{ fontFamily: 'var(--font-data)', fontSize: 'var(--text-sm)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-primary)' }}>
-                  Afiliaciones
-                </span>
-              </div>
-              <button onClick={() => { setShowCreateEmpresa(true); setEmpresaFormError(null); }} style={{
-                display: 'inline-flex', alignItems: 'center', gap: 7,
-                padding: '8px 14px', background: 'var(--accent-amber)', border: 'none',
-                borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)', color: 'white',
-              }}>
-                <Plus size={14} /> Nueva afiliación
-              </button>
-            </div>
-
-            {mutErrorEmpresa && (
-              <div style={{ padding: '8px 14px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 8, color: '#dc2626', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3-5)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <AlertCircle size={13} /> {mutErrorEmpresa}
-              </div>
-            )}
-
-            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-ui)' }}>
-                  <thead>
-                    <tr style={{ background: 'var(--bg-page)' }}>
-                      <th style={thBase}>Afiliación</th>
-                      <th style={thBase}>Creada</th>
-                      <th style={thBase}>Estado</th>
-                      <th style={thBase}>Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loadingEmpresas
-                      ? Array.from({ length: 2 }).map((_, i) => (
-                          <tr key={i}>
-                            {[70, 40, 30, 30].map((w, j) => (
-                              <td key={j} style={{ padding: '10px 14px' }}>
-                                <div style={{ height: 13, borderRadius: 4, background: 'var(--border)', width: `${w}%`, animation: 'shimmer 1.5s infinite' }} />
-                              </td>
-                            ))}
-                          </tr>
-                        ))
-                      : empresas.map(e => (
-                          <tr key={e.id_empresa} style={{ borderBottom: '1px solid var(--border)' }}>
-                            <td style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--text-primary)' }}>{e.nombre}</td>
-                            <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>
-                              {e.fecha_creacion ? new Date(e.fecha_creacion).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
-                            </td>
-                            <td style={{ padding: '10px 14px' }}>
-                              <span style={{
-                                display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)',
-                                padding: '2px 8px', borderRadius: 5, fontSize: 'var(--text-2xs)', fontWeight: 600,
-                                background: e.activa === false ? 'rgba(220,38,38,0.08)' : 'rgba(22,163,74,0.08)',
-                                color: e.activa === false ? '#dc2626' : '#16a34a',
-                              }}>
-                                {e.activa === false ? <X size={11} /> : <Check size={11} />}
-                                {e.activa === false ? 'Inactiva' : 'Activa'}
-                              </span>
-                            </td>
-                            <td style={{ padding: '10px 14px' }}>
-                              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                                <button
-                                  onClick={() => { setEditEmpresa(e); setEmpresaFormError(null); }}
-                                  title="Editar nombre"
-                                  style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text-muted)' }}
-                                >
-                                  <Edit2 size={13} />
-                                </button>
-                                <button
-                                  onClick={() => setConfirmToggleEmpresa({ empresa: e, activarDespues: e.activa === false })}
-                                  title={e.activa === false ? 'Activar' : 'Desactivar'}
-                                  style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', color: e.activa === false ? '#16a34a' : '#dc2626' }}
-                                >
-                                  <Power size={13} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                    }
-                    {!loadingEmpresas && empresas.length === 0 && (
-                      <tr><td colSpan={4} style={{ padding: 'var(--space-6)', textAlign: 'center', color: 'var(--text-faint)', fontSize: 'var(--text-sm)' }}>
-                        No hay afiliaciones registradas
-                      </td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
-
-      {/* ── Modal: Crear empresa ── */}
-      {showCreateEmpresa && (
-        <Modal title="Nueva afiliación" onClose={() => setShowCreateEmpresa(false)} maxWidth={620}>
-          <EmpresaForm onSubmit={handleCrearEmpresa} saving={mutandoEmpresa} error={empresaFormError} />
-        </Modal>
-      )}
-
-      {/* ── Modal: Editar empresa ── */}
-      {editEmpresa && (
-        <Modal title="Editar afiliación" onClose={() => setEditEmpresa(null)} maxWidth={620}>
-          <EmpresaForm initial={editEmpresa} isEdit onSubmit={handleEditarEmpresa} saving={mutandoEmpresa} error={empresaFormError} />
-        </Modal>
-      )}
-
-      {/* ── Confirm: activar / desactivar empresa ── */}
-      {confirmToggleEmpresa && (
-        <ConfirmDialog
-          message={
-            confirmToggleEmpresa.activarDespues
-              ? `¿Activar la afiliación ${confirmToggleEmpresa.empresa.nombre}?`
-              : `¿Desactivar la afiliación ${confirmToggleEmpresa.empresa.nombre}?`
-          }
-          confirmLabel={confirmToggleEmpresa.activarDespues ? 'Activar' : 'Desactivar'}
-          danger={!confirmToggleEmpresa.activarDespues}
-          onConfirm={handleToggleEmpresa}
-          onCancel={() => setConfirmToggleEmpresa(null)}
-          loading={mutandoEmpresa}
-        />
-      )}
 
       {/* ── Modal: Editar usuario ── */}
       {editUsuario && (
