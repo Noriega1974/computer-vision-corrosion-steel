@@ -69,7 +69,26 @@ async function request(method, path, body) {
   return res.json().then(parseNumericStrings);
 }
 
-export const apiGet = (path) => request('GET', path);
+// Dedup de GETs concurrentes: si dos o más llamadas piden la misma URL casi
+// al mismo tiempo (p. ej. varios componentes del dashboard montando juntos
+// y pegándole cada uno a /mediciones/recientes), la segunda y siguientes
+// reciben la MISMA promesa en vez de disparar un fetch nuevo. Sin TTL ni
+// cache persistente: la entrada se borra apenas la promesa resuelve (éxito
+// o error), así que solo colapsa llamadas simultáneas idénticas -- nunca
+// sirve datos viejos a una llamada posterior. Nunca se aplica a
+// POST/PUT/DELETE (esas son mutaciones y jamás deben deduplicarse).
+const getsEnVuelo = new Map();
+
+export const apiGet = (path) => {
+  if (getsEnVuelo.has(path)) {
+    return getsEnVuelo.get(path);
+  }
+  const promesa = request('GET', path).finally(() => {
+    getsEnVuelo.delete(path);
+  });
+  getsEnVuelo.set(path, promesa);
+  return promesa;
+};
 export const apiPost = (path, body) => request('POST', path, body);
 export const apiPut = (path, body) => request('PUT', path, body);
 export const apiDelete = (path) => request('DELETE', path);
