@@ -1,10 +1,10 @@
-import React, { useState, useMemo } from 'react';
-import { Plus, Edit2, X, AlertCircle, Check, Power, Trash2, MapPin } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Plus, Edit2, X, AlertCircle, Check, Power, Trash2, MapPin, Building2 } from 'lucide-react';
 import { useGestionBloques } from '../hooks/useBloques';
 import { useEmpresas } from '../hooks/useEmpresas';
+import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
 import SearchableSelect from '../components/SearchableSelect';
-import MapPicker from '../components/MapPicker';
 import colombiaData from '../data/colombia-divipola.json';
 
 const DEPARTAMENTOS = colombiaData.departamentos.map(d => d.nombre);
@@ -132,27 +132,74 @@ const labelStyle = {
 // ─── Formulario de punto de monitoreo ───────────────────────────────────────
 // Internamente sigue siendo "bloque" (identificadores, endpoint /bloques):
 // el "Punto" viejo (PlantsPage/PuntoForm, ya retirado) fue absorbido por el
-// "Bloque", que pasa a ser la única entidad de ubicación. `empresasDisponibles`/
-// `requiereEmpresa`: solo al CREAR y solo para super_admin (admin ya tiene su
-// empresa forzada en el backend, no elige). El backend no acepta cambiar la
-// empresa de un bloque ya creado, así que ese campo nunca aparece al editar.
-function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, empresasDisponibles, requiereEmpresa }) {
-  // Casi todo lo que se trabaja es galvanizado -- default a eso, con "Otro"
-  // como escape hatch a texto libre en vez de pedirlo siempre.
-  const materialInicialEsOtro = initial.tipo_material && initial.tipo_material !== 'Galvanizado';
+// "Bloque", que pasa a ser la única entidad de ubicación.
+//
+// El formulario cambia según quién lo usa:
+// - super_admin administra TODO: nombre, afiliación (cualquiera), departamento
+//   y ciudad (editables), ubicación (detección automática + "ser más
+//   específico" manual).
+// - admin/tecnico solo cambian nombre y ubicación. Afiliación/departamento/
+//   ciudad ya no son campos editables: se toman de SU PROPIA afiliación
+//   (`perfil.empresa_nombre/departamento/ciudad`, resuelto por el backend en
+//   GET /usuarios/me) y se muestran como dato informativo, nunca como
+//   selector -- no tiene sentido pedírselo si solo pueden pertenecer a una.
+// `tipo_material` NO va acá -- es propiedad de la zona/empresa completa (ver
+// ZonasPage), no de cada punto individual.
+function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, esSuperAdmin, empresasDisponibles, perfil }) {
   const [form, setForm] = useState({
     nombre: initial.nombre ?? '',
     descripcion: initial.descripcion ?? '',
     empresa_id: initial.empresa_id ?? '',
     ciudad: initial.ciudad ?? '',
     departamento: initial.departamento ?? '',
-    latitud: initial.coordenadas?.lat ?? '',
-    longitud: initial.coordenadas?.lng ?? '',
-    tipo_material: materialInicialEsOtro ? 'otro' : 'Galvanizado',
-    tipo_material_otro: materialInicialEsOtro ? initial.tipo_material : '',
     tipo_estructura: initial.tipo_estructura ?? '',
     grosor_mm: initial.grosor_mm ?? '',
   });
+
+  // admin/tecnico: departamento/ciudad/empresa se completan solos desde su
+  // propia afiliación, una sola vez al crear (nunca al editar un punto ya
+  // existente, para no pisar lo que ya tenía guardado).
+  useEffect(() => {
+    if (esSuperAdmin || isEdit || !perfil) return;
+    setForm(f => ({
+      ...f,
+      empresa_id: perfil.empresa_id ?? f.empresa_id,
+      departamento: perfil.empresa_departamento ?? f.departamento,
+      ciudad: perfil.empresa_ciudad ?? f.ciudad,
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [perfil, esSuperAdmin, isEdit]);
+
+  // Ubicación -- detección automática al abrir el formulario, con toggle
+  // "Ser más específico" para tipear lat/lng a mano. Mismo patrón para
+  // super_admin y para admin/tecnico: el nombre y la ubicación son "lo único
+  // que cambiarían con seguridad" según lo pedido.
+  const [latitud, setLatitud] = useState(initial.coordenadas?.lat ?? '');
+  const [longitud, setLongitud] = useState(initial.coordenadas?.lng ?? '');
+  const [geoLoading, setGeoLoading] = useState(false);
+  const [geoError, setGeoError] = useState(null);
+  const [showManual, setShowManual] = useState(false);
+  const hayCoordenadas = latitud !== '' && longitud !== '';
+
+  useEffect(() => {
+    const yaHayCoordenadas = initial.coordenadas?.lat;
+    if (yaHayCoordenadas || !navigator.geolocation) return;
+    setGeoLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLatitud(parseFloat(pos.coords.latitude.toFixed(6)));
+        setLongitud(parseFloat(pos.coords.longitude.toFixed(6)));
+        setGeoLoading(false);
+      },
+      () => {
+        setGeoError('No se pudo detectar la ubicación automáticamente.');
+        setGeoLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [validationError, setValidationError] = useState(null);
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
@@ -163,41 +210,39 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, empresasDis
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    if (requiereEmpresa && !form.empresa_id) {
+    if (esSuperAdmin && !form.empresa_id) {
       setValidationError('Selecciona a qué afiliación pertenece este punto.');
       return;
     }
-    if (!DEPARTAMENTOS.includes(form.departamento)) {
+    if (esSuperAdmin && !DEPARTAMENTOS.includes(form.departamento)) {
       setValidationError('Selecciona un departamento válido de la lista.');
       return;
     }
-    if (!municipiosDisponibles.includes(form.ciudad)) {
+    if (esSuperAdmin && !municipiosDisponibles.includes(form.ciudad)) {
       setValidationError('Selecciona una ciudad válida del departamento elegido.');
       return;
     }
-    if (form.latitud === '' || form.longitud === '') {
-      setValidationError('Marca la ubicación en el mapa.');
+    if (!esSuperAdmin && (!form.departamento || !form.ciudad)) {
+      setValidationError('Tu afiliación todavía no tiene departamento/ciudad. Pedile a un super_admin que la complete en Zonas.');
       return;
     }
-    if (form.tipo_material === 'otro' && !form.tipo_material_otro.trim()) {
-      setValidationError('Especifica el tipo de material.');
+    if (!hayCoordenadas) {
+      setValidationError('Marca la ubicación (detectala o ingresá las coordenadas a mano).');
       return;
     }
 
     setValidationError(null);
 
-    const tipoMaterialFinal = form.tipo_material === 'otro' ? form.tipo_material_otro.trim() : form.tipo_material;
     const payload = {
       nombre: form.nombre,
       descripcion: form.descripcion,
       ciudad: form.ciudad,
       departamento: form.departamento,
-      coordenadas: { lat: Number(form.latitud), lng: Number(form.longitud) },
-      ...(tipoMaterialFinal && { tipo_material: tipoMaterialFinal }),
+      coordenadas: { lat: Number(latitud), lng: Number(longitud) },
       ...(form.tipo_estructura && { tipo_estructura: form.tipo_estructura }),
       ...(form.grosor_mm !== '' && { grosor_mm: Number(form.grosor_mm) }),
     };
-    if (requiereEmpresa) payload.empresa_id = form.empresa_id;
+    if (esSuperAdmin) payload.empresa_id = form.empresa_id;
 
     onSubmit(payload);
   };
@@ -215,108 +260,136 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, empresasDis
         />
       </div>
 
-      {requiereEmpresa && (
-        <div style={{ marginBottom: 'var(--space-3-5)' }}>
-          <label htmlFor="punto-empresa" style={labelStyle}>
-            Afiliación *
-          </label>
-          <select
-            id="punto-empresa" name="empresa_id"
-            value={form.empresa_id} onChange={set('empresa_id')}
-            required style={inputStyle}
-          >
-            <option value="">Selecciona una afiliación…</option>
-            {(empresasDisponibles ?? []).map(e => (
-              <option key={e.id_empresa} value={e.id_empresa}>{e.nombre}</option>
-            ))}
-          </select>
+      {esSuperAdmin ? (
+        <>
+          <div style={{ marginBottom: 'var(--space-3-5)' }}>
+            <label htmlFor="punto-empresa" style={labelStyle}>
+              Afiliación *
+            </label>
+            <select
+              id="punto-empresa" name="empresa_id"
+              value={form.empresa_id} onChange={set('empresa_id')}
+              required style={inputStyle}
+            >
+              <option value="">Selecciona una afiliación…</option>
+              {(empresasDisponibles ?? []).map(e => (
+                <option key={e.id_empresa} value={e.id_empresa}>{e.nombre}</option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ marginBottom: 'var(--space-3-5)' }}>
+            <label htmlFor="punto-departamento" style={labelStyle}>
+              Departamento *
+            </label>
+            <SearchableSelect
+              id="punto-departamento"
+              options={DEPARTAMENTOS}
+              value={form.departamento}
+              onChange={(v) =>
+                setForm(f => ({
+                  ...f,
+                  departamento: v,
+                  ciudad: v === f.departamento ? f.ciudad : '',
+                }))
+              }
+              placeholder="Buscar departamento"
+              emptyMessage="Sin coincidencias"
+            />
+          </div>
+
+          <div style={{ marginBottom: 'var(--space-3-5)' }}>
+            <label htmlFor="punto-ciudad" style={labelStyle}>
+              Ciudad *
+            </label>
+            <SearchableSelect
+              id="punto-ciudad"
+              options={municipiosDisponibles}
+              value={form.ciudad}
+              onChange={setField('ciudad')}
+              placeholder={form.departamento ? 'Buscar ciudad' : 'Selecciona un departamento primero'}
+              disabled={!form.departamento}
+              emptyMessage="Sin coincidencias"
+            />
+          </div>
+        </>
+      ) : (
+        // admin/tecnico: informativo, no editable -- ya viene de su propia
+        // afiliación (perfil, resuelto por el backend).
+        <div style={{ marginBottom: 'var(--space-3-5)', padding: '10px 14px', background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 'var(--space-2)', color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>
+          <Building2 size={14} />
+          <span>
+            {perfil?.empresa_nombre ?? 'Tu afiliación'}
+            {form.ciudad && ` · ${form.ciudad}`}{form.departamento && `, ${form.departamento}`}
+          </span>
         </div>
       )}
 
-      {/* Departamento */}
+      {/* Ubicación -- detección automática + toggle manual, igual para
+          todos los roles. No es <label>: encabeza el bloque entero. */}
       <div style={{ marginBottom: 'var(--space-3-5)' }}>
-        <label htmlFor="punto-departamento" style={labelStyle}>
-          Departamento *
+        <span style={{ ...labelStyle, display: 'block' }}>Ubicación *</span>
+
+        {geoLoading && (
+          <div style={{ padding: '8px 12px', background: 'rgba(156,54,16,0.05)', border: '1px solid rgba(156,54,16,0.15)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>
+            Detectando ubicación…
+          </div>
+        )}
+        {!geoLoading && hayCoordenadas && (
+          <div style={{ padding: '8px 12px', background: 'rgba(156,54,16,0.05)', border: '1px solid rgba(156,54,16,0.15)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>
+            📍 {latitud}, {longitud}
+          </div>
+        )}
+        {geoError && (
+          <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.05)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: '#dc2626', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <AlertCircle size={12} /> {geoError}
+          </div>
+        )}
+
+        <button
+          type="button" onClick={() => setShowManual(v => !v)}
+          style={{
+            marginTop: 'var(--space-2)', background: 'none', border: 'none', padding: 0,
+            fontSize: 'var(--text-2xs)', color: 'var(--accent-amber)', cursor: 'pointer',
+            fontFamily: 'var(--font-data)', fontWeight: 600, letterSpacing: '0.04em',
+            textDecoration: 'underline', textUnderlineOffset: 3,
+          }}
+        >
+          {showManual ? 'Ocultar coordenadas' : 'Ser más específico con la ubicación'}
+        </button>
+
+        {showManual && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)', marginTop: 'var(--space-2-5)' }}>
+            <div>
+              <label htmlFor="punto-latitud" style={labelStyle}>Latitud</label>
+              <input
+                id="punto-latitud" name="latitud" type="number" inputMode="decimal" step="any"
+                value={latitud} onChange={e => setLatitud(e.target.value === '' ? '' : Number(e.target.value))}
+                style={inputStyle} placeholder="Ej: 4.710989"
+              />
+            </div>
+            <div>
+              <label htmlFor="punto-longitud" style={labelStyle}>Longitud</label>
+              <input
+                id="punto-longitud" name="longitud" type="number" inputMode="decimal" step="any"
+                value={longitud} onChange={e => setLongitud(e.target.value === '' ? '' : Number(e.target.value))}
+                style={inputStyle} placeholder="Ej: -74.072092"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
+        <label htmlFor="punto-tipo-estructura" style={labelStyle}>
+          Tipo de estructura (opcional)
         </label>
-        <SearchableSelect
-          id="punto-departamento"
-          options={DEPARTAMENTOS}
-          value={form.departamento}
-          onChange={(v) =>
-            setForm(f => ({
-              ...f,
-              departamento: v,
-              ciudad: v === f.departamento ? f.ciudad : '',
-            }))
-          }
-          placeholder="Buscar departamento"
-          emptyMessage="Sin coincidencias"
+        <input
+          id="punto-tipo-estructura" name="tipo_estructura" autoComplete="off"
+          value={form.tipo_estructura} onChange={set('tipo_estructura')}
+          placeholder="ej: Tubería" style={inputStyle}
         />
       </div>
-
-      {/* Ciudad */}
-      <div style={{ marginBottom: 'var(--space-3-5)' }}>
-        <label htmlFor="punto-ciudad" style={labelStyle}>
-          Ciudad *
-        </label>
-        <SearchableSelect
-          id="punto-ciudad"
-          options={municipiosDisponibles}
-          value={form.ciudad}
-          onChange={setField('ciudad')}
-          placeholder={form.departamento ? 'Buscar ciudad' : 'Selecciona un departamento primero'}
-          disabled={!form.departamento}
-          emptyMessage="Sin coincidencias"
-        />
-      </div>
-
-      {/* Coordenadas */}
-      <div style={{ marginBottom: 'var(--space-3-5)' }}>
-        <span style={{ ...labelStyle, display: 'block' }}>Coordenadas *</span>
-        <MapPicker
-          lat={form.latitud || null}
-          lng={form.longitud || null}
-          onChange={(la, ln) => setForm(f => ({ ...f, latitud: la, longitud: ln }))}
-        />
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)', marginBottom: form.tipo_material === 'otro' ? 'var(--space-2)' : 'var(--space-3-5)' }}>
-        <div>
-          <label htmlFor="punto-tipo-material" style={labelStyle}>
-            Tipo de material (opcional)
-          </label>
-          <select
-            id="punto-tipo-material" name="tipo_material" style={inputStyle}
-            value={form.tipo_material} onChange={set('tipo_material')}
-          >
-            <option value="Galvanizado">Galvanizado</option>
-            <option value="otro">Otro (especificar)</option>
-          </select>
-        </div>
-        <div>
-          <label htmlFor="punto-tipo-estructura" style={labelStyle}>
-            Tipo de estructura (opcional)
-          </label>
-          <input
-            id="punto-tipo-estructura" name="tipo_estructura" autoComplete="off"
-            value={form.tipo_estructura} onChange={set('tipo_estructura')}
-            placeholder="ej: Tubería" style={inputStyle}
-          />
-        </div>
-      </div>
-
-      {form.tipo_material === 'otro' && (
-        <div style={{ marginBottom: 'var(--space-3-5)' }}>
-          <label htmlFor="punto-tipo-material-otro" style={labelStyle}>
-            Especifica el material *
-          </label>
-          <input
-            id="punto-tipo-material-otro" name="tipo_material_otro" autoComplete="off"
-            required value={form.tipo_material_otro} onChange={set('tipo_material_otro')}
-            placeholder="ej: A588" style={inputStyle}
-          />
-        </div>
-      )}
 
       <div style={{ marginBottom: 'var(--space-3-5)' }}>
         <label htmlFor="punto-grosor" style={labelStyle}>
@@ -375,6 +448,9 @@ export default function BloquesPage() {
   // los 3 roles), pero no editar/desactivar/eliminar -- eso sigue exclusivo
   // de admin/super_admin (PUT/DELETE /bloques los rechaza con 403).
   const puedeGestionar = me?.groups?.includes('super_admin') || me?.groups?.includes('admin');
+  // admin/tecnico: departamento/ciudad/afiliación del punto se auto-completan
+  // desde acá (GET /usuarios/me), nunca los elige la persona.
+  const { perfil } = useUsuarioPerfil();
 
   const { bloques, loading, mutating, mutError, crearBloque, editarBloque, eliminarBloque } = useGestionBloques();
   // `enabled=esSuperAdmin`: evita el fetch (y el 403) de /empresas para
@@ -576,8 +652,9 @@ export default function BloquesPage() {
             onSubmit={handleCrear}
             saving={mutating}
             error={formError}
+            esSuperAdmin={esSuperAdmin}
             empresasDisponibles={empresas}
-            requiereEmpresa={esSuperAdmin}
+            perfil={perfil}
           />
         </Modal>
       )}
@@ -585,7 +662,10 @@ export default function BloquesPage() {
       {/* ── Modal: Editar punto ── */}
       {editBloque && (
         <Modal title={`Editar: ${editBloque.nombre}`} onClose={() => setEditBloque(null)}>
-          <BloqueForm initial={editBloque} isEdit onSubmit={handleEditar} saving={mutating} error={formError} />
+          <BloqueForm
+            initial={editBloque} isEdit onSubmit={handleEditar} saving={mutating} error={formError}
+            esSuperAdmin={esSuperAdmin} empresasDisponibles={empresas} perfil={perfil}
+          />
         </Modal>
       )}
 

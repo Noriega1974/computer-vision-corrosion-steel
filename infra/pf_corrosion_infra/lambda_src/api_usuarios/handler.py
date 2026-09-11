@@ -4,7 +4,10 @@ CorrIA - Lambda de gestión de usuarios y colaboradores.
 Rutas API Gateway:
   POST   /usuarios                        → crear usuario (según CREATABLE_ROLES del creador)
   GET    /usuarios                        → listar usuarios (admin/super_admin; tecnico y cliente: 403)
-  GET    /usuarios/me                     → perfil propio (cualquier rol)
+  GET    /usuarios/me                     → perfil propio (cualquier rol); incluye
+                                             empresa_nombre/empresa_departamento/empresa_ciudad
+                                             resueltos de su afiliación, para que admin/tecnico
+                                             auto-completen esos datos al crear un punto
   PUT    /usuarios/me                     → actualizar perfil propio (cualquier rol)
   PUT    /usuarios/{id_usuario}           → actualizar usuario (admin/super_admin, con alcance de empresa)
   DELETE /usuarios/{id_usuario}/eliminar  → eliminar usuario permanentemente (admin/super_admin, con alcance de
@@ -17,13 +20,15 @@ Rutas API Gateway:
   POST   /colaborador                     → crear colaborador temporal con nickname (admin/super_admin)
   GET    /empresas                        → listar empresas (solo super_admin)
   POST   /empresas                        → crear empresa (solo super_admin); requiere
-                                             `departamento`/`ciudad`; acepta `zonas` opcional
-                                             (lista de círculos {lat,lng,radio_metros} que
-                                             delimitan su área geográfica); deja además un
-                                             marcador vacío `empresas/{id_empresa}/` en el bucket
-                                             de imágenes (no bloqueante)
+                                             `departamento`/`ciudad`; acepta `tipo_material`
+                                             opcional (propiedad del sitio completo, no de cada
+                                             punto) y `zonas` opcional (lista de círculos
+                                             {lat,lng,radio_metros} que delimitan su área
+                                             geográfica); deja además un marcador vacío
+                                             `empresas/{id_empresa}/` en el bucket de imágenes
+                                             (no bloqueante)
   PUT    /empresas/{id_empresa}           → editar nombre, activar-desactivar, departamento,
-                                             ciudad y/o `zonas` (solo super_admin)
+                                             ciudad, tipo_material y/o `zonas` (solo super_admin)
 
 Evento directo (EventBridge cron diario):
   Sin httpMethod → ejecuta limpieza de colaboradores vencidos
@@ -328,10 +333,13 @@ def lambda_handler(event: dict, context) -> dict:
             usuario = _buscar_por_email(email)
             if not usuario:
                 return _respuesta_sin_registro()
-            # Resolver el nombre legible de la afiliacion -- el frontend solo
-            # conoce empresa_id (un id opaco), y no puede resolverlo por su
+            # Resolver los datos legibles de la afiliacion -- el frontend solo
+            # conoce empresa_id (un id opaco), y no puede resolverlos por su
             # cuenta porque GET /empresas es exclusivo de super_admin. Cada
-            # usuario sí puede ver el nombre de SU PROPIA afiliación acá.
+            # usuario sí puede ver los de SU PROPIA afiliación acá. Además de
+            # empresa_nombre, admin/tecnico necesitan departamento/ciudad para
+            # que su Punto se auto-complete con la ubicación de su zona (no
+            # las eligen ellos, solo super_admin administra zonas).
             if usuario.get("empresa_id"):
                 empresa = tabla_empresas.get_item(Key={"id_empresa": usuario["empresa_id"]}).get("Item")
                 # Afiliación desactivada → el usuario no entra. super_admin
@@ -339,7 +347,12 @@ def lambda_handler(event: dict, context) -> dict:
                 # queda alguien que pueda reactivarla.
                 if empresa and empresa.get("activa") is False:
                     return _respuesta_afiliacion_inactiva(empresa.get("nombre", usuario["empresa_id"]))
-                usuario = {**usuario, "empresa_nombre": empresa.get("nombre") if empresa else None}
+                usuario = {
+                    **usuario,
+                    "empresa_nombre": empresa.get("nombre") if empresa else None,
+                    "empresa_departamento": empresa.get("departamento") if empresa else None,
+                    "empresa_ciudad": empresa.get("ciudad") if empresa else None,
+                }
             return _respuesta(200, usuario)
 
         # ── PUT /usuarios/me ─────────────────────────────────────────────────
@@ -752,6 +765,12 @@ def lambda_handler(event: dict, context) -> dict:
             if not isinstance(ciudad, str) or not ciudad.strip():
                 return _respuesta(400, {"error": "ciudad es requerida"})
             ciudad = ciudad.strip()
+            # tipo_material: opcional, texto libre -- propiedad del SITIO
+            # completo (los puntos de una zona suelen compartir material),
+            # por eso se pregunta acá y no en cada punto.
+            tipo_material = body.get("tipo_material")
+            if tipo_material is not None and not isinstance(tipo_material, str):
+                return _respuesta(400, {"error": "tipo_material debe ser un texto"})
             # zonas: opcional -- una empresa puede no tener zona dibujada
             # todavía (lista vacía o ausente).
             zonas = body.get("zonas")
@@ -774,6 +793,8 @@ def lambda_handler(event: dict, context) -> dict:
                 "fecha_creacion": datetime.now(timezone.utc).isoformat(),
                 "creado_por": creador.get("id_usuario", ""),
             }
+            if tipo_material is not None:
+                item["tipo_material"] = tipo_material
             if zonas is not None:
                 item["zonas"] = zonas
             # lat/lng/radio_metros de zonas vienen como float desde el
@@ -802,13 +823,14 @@ def lambda_handler(event: dict, context) -> dict:
             if not empresa:
                 return _respuesta(404, {"error": f"Empresa {id_empresa} no encontrada"})
 
-            body         = json.loads(event.get("body") or "{}")
-            nombre       = body.get("nombre")
-            activa       = body.get("activa")
-            departamento = body.get("departamento")
-            ciudad       = body.get("ciudad")
-            zonas        = body.get("zonas")
-            if all(v is None for v in (nombre, activa, departamento, ciudad, zonas)):
+            body          = json.loads(event.get("body") or "{}")
+            nombre        = body.get("nombre")
+            activa        = body.get("activa")
+            departamento  = body.get("departamento")
+            ciudad        = body.get("ciudad")
+            tipo_material = body.get("tipo_material")
+            zonas         = body.get("zonas")
+            if all(v is None for v in (nombre, activa, departamento, ciudad, tipo_material, zonas)):
                 return _respuesta(400, {"error": "Debes indicar al menos un campo para actualizar"})
 
             campos = {}
@@ -839,6 +861,10 @@ def lambda_handler(event: dict, context) -> dict:
                 if not isinstance(ciudad, str) or not ciudad.strip():
                     return _respuesta(400, {"error": "ciudad debe ser un texto no vacío"})
                 campos["ciudad"] = ciudad.strip()
+            if tipo_material is not None:
+                if not isinstance(tipo_material, str):
+                    return _respuesta(400, {"error": "tipo_material debe ser un texto"})
+                campos["tipo_material"] = tipo_material
             if zonas is not None:
                 error_zonas = _validar_zonas(zonas)
                 if error_zonas:

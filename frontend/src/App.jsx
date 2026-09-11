@@ -19,6 +19,7 @@ const UploadPage          = lazy(() => import('./pages/UploadPage'));
 const GaleriaPage         = lazy(() => import('./pages/GaleriaPage'));
 const MedicionDetailPage  = lazy(() => import('./pages/MedicionDetailPage'));
 const BloquesPage         = lazy(() => import('./pages/BloquesPage'));
+const ZonasPage           = lazy(() => import('./pages/ZonasPage'));
 const UsersPage           = lazy(() => import('./pages/UsersPage'));
 const ProfilePage         = lazy(() => import('./pages/ProfilePage'));
 const ConfiguracionPage   = lazy(() => import('./pages/ConfiguracionPage'));
@@ -60,6 +61,14 @@ export default function App() {
                     esas acciones para tecnico. cliente no entra. */}
                 <Route path="/puntos" element={
                   <RoleRoute roles={['super_admin', 'admin', 'tecnico']}><BloquesPage /></RoleRoute>
+                } />
+                {/* Zonas (= empresas/afiliaciones): el "cuadrado grande" con
+                    jurisdicción total, departamento/ciudad/material y el área
+                    dibujada en el mapa. Ventana de creación separada de Puntos,
+                    exclusiva de super_admin (mismo backend que ya exigía
+                    GET/POST/PUT /empresas solo para ese rol). */}
+                <Route path="/zonas" element={
+                  <RoleRoute roles={['super_admin']}><ZonasPage /></RoleRoute>
                 } />
                 {/* tecnico entra para dar de alta un cliente (ver CREATABLE_ROLES) aunque
                     no vea el listado -- eso ya lo devuelve 403 el backend en GET /usuarios */}

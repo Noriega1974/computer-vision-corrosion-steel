@@ -230,9 +230,9 @@ export default function ColombiaMap({
             color:#e2eaf2;
             margin-top:4px;
           ">
-            <span>Material:</span>
+            <span>Estructura:</span>
             <span>
-              ${punto.tipo_material ?? '—'}
+              ${punto.tipo_estructura ?? '—'}
             </span>
           </div>
 

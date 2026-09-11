@@ -26,8 +26,8 @@ Rutas:
                                     absorbió el rol del punto viejo como entidad que lleva
                                     mediciones (ver POST /medicion en lambda_src/inference)
   PUT    /bloques/{id_bloque}     → editar nombre/descripcion/activo/coordenadas/ciudad/
-                                    departamento/tipo_material/tipo_estructura/grosor_mm (solo super_admin
-                                    o admin de esa empresa -- tecnico crea pero no edita)
+                                    departamento/tipo_estructura/grosor_mm (solo super_admin o
+                                    admin de esa empresa -- tecnico crea pero no edita)
   DELETE /bloques/{id_bloque}     → eliminar (solo super_admin o admin de esa empresa; 409 si
                                     tiene mediciones -- tecnico no puede borrar)
 
@@ -42,10 +42,12 @@ Fusión punto→bloque: el bloque absorbió el rol del punto viejo como
 entidad que lleva coordenadas y mediciones (POST /medicion en
 lambda_src/inference ya no crea ni referencia ningún punto, solo un
 bloque existente). Por eso POST/PUT /bloques ahora también aceptan
-`coordenadas`, `ciudad`, `departamento`, `tipo_material` y
-`tipo_estructura`. Las rutas /puntos de abajo quedaron sin consumidor
-desde el frontend tras esta fusión — ver el comentario arriba de esas
-rutas en `lambda_handler`.
+`coordenadas`, `ciudad`, `departamento` y `tipo_estructura`.
+`tipo_material` NO vive acá -- es propiedad de la zona/empresa completa
+(ver POST/PUT /empresas en api_usuarios/handler.py), no de cada punto por
+separado. Las rutas /puntos de abajo quedaron sin consumidor desde el
+frontend tras esta fusión — ver el comentario arriba de esas rutas en
+`lambda_handler`.
 
 Nota: la ruta GET /puntos/buscar del sistema original fue eliminada en esta
 migración (ver README del proyecto).
@@ -372,11 +374,10 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
             return _respuesta(400, {"error": "departamento es requerido"})
         departamento = departamento.strip()
 
-        # tipo_material/tipo_estructura: opcionales, texto libre -- mismo
-        # criterio que tenía POST /puntos (sin validar contra una lista fija).
-        tipo_material = body.get("tipo_material")
-        if tipo_material is not None and not isinstance(tipo_material, str):
-            return _respuesta(400, {"error": "tipo_material debe ser un texto"})
+        # tipo_estructura: opcional, texto libre -- mismo criterio que tenía
+        # POST /puntos (sin validar contra una lista fija). tipo_material NO
+        # va acá: es propiedad de la zona/empresa completa (POST /empresas),
+        # no de cada punto individual.
         tipo_estructura = body.get("tipo_estructura")
         if tipo_estructura is not None and not isinstance(tipo_estructura, str):
             return _respuesta(400, {"error": "tipo_estructura debe ser un texto"})
@@ -418,8 +419,6 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
         }
         if descripcion is not None:
             item["descripcion"] = descripcion
-        if tipo_material is not None:
-            item["tipo_material"] = tipo_material
         if tipo_estructura is not None:
             item["tipo_estructura"] = tipo_estructura
         if grosor_mm is not None:
@@ -452,12 +451,11 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
         coordenadas = body.get("coordenadas")
         ciudad = body.get("ciudad")
         departamento = body.get("departamento")
-        tipo_material = body.get("tipo_material")
         tipo_estructura = body.get("tipo_estructura")
         grosor_mm = body.get("grosor_mm")
         if all(
             v is None
-            for v in (nombre, descripcion, activo, coordenadas, ciudad, departamento, tipo_material, tipo_estructura, grosor_mm)
+            for v in (nombre, descripcion, activo, coordenadas, ciudad, departamento, tipo_estructura, grosor_mm)
         ):
             return _respuesta(400, {"error": "Debes indicar al menos un campo para actualizar"})
 
@@ -479,9 +477,10 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
             if not isinstance(activo, bool):
                 return _respuesta(400, {"error": "activo debe ser un booleano"})
             campos["activo"] = activo
-        # coordenadas/ciudad/departamento/tipo_material/tipo_estructura:
-        # opcionales en PUT (a diferencia de POST, donde son requeridos) --
-        # un bloque ya existente puede editarse campo por campo.
+        # coordenadas/ciudad/departamento/tipo_estructura: opcionales en PUT
+        # (a diferencia de POST, donde son requeridos) -- un bloque ya
+        # existente puede editarse campo por campo. tipo_material NO va acá
+        # (ver PUT /empresas/{id_empresa}, es propiedad de la zona).
         if coordenadas is not None:
             error_coords = _validar_coordenadas(coordenadas)
             if error_coords:
@@ -495,10 +494,6 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
             if not isinstance(departamento, str) or not departamento.strip():
                 return _respuesta(400, {"error": "departamento debe ser un texto no vacío"})
             campos["departamento"] = departamento.strip()
-        if tipo_material is not None:
-            if not isinstance(tipo_material, str):
-                return _respuesta(400, {"error": "tipo_material debe ser un texto"})
-            campos["tipo_material"] = tipo_material
         if tipo_estructura is not None:
             if not isinstance(tipo_estructura, str):
                 return _respuesta(400, {"error": "tipo_estructura debe ser un texto"})
