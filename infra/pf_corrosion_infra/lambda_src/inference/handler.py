@@ -20,7 +20,21 @@ RBAC multi-empresa: `empresa_id` de cada punto/medición se resuelve SIEMPRE
 del usuario autenticado (`_usuario_actual`, replicado de
 api_usuarios/handler.py — no hay módulo compartido entre lambdas), nunca de
 un campo del body. El rol `cliente` no puede subir mediciones (403) — solo
-super_admin/admin/tecnico.
+super_admin/admin/tecnico. La búsqueda de puntos por clave lógica también
+filtra por empresa (ver _buscar_por_clave_logica) — sin eso, una sede con el
+mismo nombre en dos empresas hacía que la medición cayera en el punto de la
+empresa equivocada.
+
+Bloques: el body acepta `bloque_id` opcional; solo se usa cuando hay que
+crear un punto nuevo (modos planta_nueva / coordenadas_libres) y se valida
+contra la tabla `bloques` (existe, misma empresa, activo) ANTES de subir
+nada a S3. La medición denormaliza `bloque_id` + `bloque_nombre` (congelado)
+del punto.
+
+Layout S3: `empresas/{empresa_id}/{bloque_id|sin-bloque}/{id_punto}/{id_medicion}[_thumb].jpg|.json`.
+Reemplaza el viejo `raw/{id_punto}/...` + `resultados/{id_punto}/...`; las
+keys anteriores NO se migran — cada medición guarda las suyas en DynamoDB y
+ningún consumidor deriva una key de otra por string.
 """
 import base64
 import io
@@ -35,7 +49,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import boto3
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Attr, Key
 from PIL import Image
 import numpy as np
 import onnxruntime as ort
@@ -47,6 +61,7 @@ BUCKET_NAME = os.environ["BUCKET_NAME"]
 TABLA_PUNTOS = os.environ["TABLA_PUNTOS"]
 TABLA_MEDICIONES = os.environ["TABLA_MEDICIONES"]
 TABLA_USUARIOS = os.environ["TABLA_USUARIOS"]
+TABLA_BLOQUES = os.environ["TABLA_BLOQUES"]
 REGION = os.environ["REGION"]
 
 RUTA_MODELO = Path(__file__).parent / "model" / "yolov8n-seg.onnx"
@@ -64,6 +79,7 @@ dynamodb = boto3.resource("dynamodb", region_name=REGION)
 tabla_puntos = dynamodb.Table(TABLA_PUNTOS)
 tabla_mediciones = dynamodb.Table(TABLA_MEDICIONES)
 tabla_usuarios = dynamodb.Table(TABLA_USUARIOS)
+tabla_bloques = dynamodb.Table(TABLA_BLOQUES)
 
 
 # ── Helpers de tipo ─────────────────────────────────────────────────────────
@@ -120,14 +136,41 @@ def _usuario_actual(event: dict) -> dict | None:
 
 # ── Resolución de punto ──────────────────────────────────────────────────────
 
-def _buscar_por_clave_logica(clave_logica: str) -> dict | None:
-    resp = tabla_puntos.query(
+def _buscar_por_clave_logica(clave_logica: str, empresa_id: str | None, es_super_admin: bool = False) -> dict | None:
+    """Busca un punto existente por su clave lógica (sede-ciudad, o
+    libre-lat-lng) DENTRO de la empresa indicada.
+
+    Leak que cierra el filtro por empresa: `clave_logica` no es única entre
+    empresas — dos empresas distintas pueden tener una sede "Planta 1" en la
+    misma ciudad. Sin filtrar, los modos planta_nueva/coordenadas_libres
+    reusaban el primer punto con esa clave aunque fuera de OTRA empresa, y
+    como la medición denormaliza el `empresa_id` del punto (ver
+    lambda_handler), terminaba escribiendo datos de un tenant dentro de
+    otro — y quedaban visibles para esa otra empresa en GET /mediciones.
+
+    super_admin (empresa_id None + es_super_admin True) conserva el
+    comportamiento global de antes: no tiene empresa propia con la cual
+    filtrar.
+    """
+    kwargs = dict(
         IndexName="ClaveLogicaIndex",
         KeyConditionExpression=Key("clave_logica").eq(clave_logica),
         Limit=1,
     )
-    items = resp.get("Items", [])
-    return items[0] if items else None
+    if not es_super_admin:
+        # Ojo: con FilterExpression, `Limit` se aplica ANTES del filtro, así
+        # que hay que paginar hasta encontrar uno de la empresa correcta en
+        # vez de quedarse con la primera página vacía.
+        del kwargs["Limit"]
+        kwargs["FilterExpression"] = Attr("empresa_id").eq(empresa_id)
+    while True:
+        resp = tabla_puntos.query(**kwargs)
+        items = resp.get("Items", [])
+        if items:
+            return items[0]
+        if "LastEvaluatedKey" not in resp:
+            return None
+        kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
 
 
 def _crear_punto(datos: dict) -> dict:
@@ -137,10 +180,39 @@ def _crear_punto(datos: dict) -> dict:
     return datos
 
 
+def _validar_bloque(bloque_id, empresa_id: str | None) -> None:
+    """Valida el `bloque_id` opcional antes de crear un punto: debe ser
+    string, existir, pertenecer a `empresa_id` y estar activo. Lanza
+    LookupError (→404) si no existe, ValueError (→400) en el resto — mismo
+    mapeo de excepciones que usa _resolver_punto."""
+    if not isinstance(bloque_id, str) or not bloque_id.strip():
+        raise ValueError("bloque_id debe ser un texto no vacío")
+    bloque = tabla_bloques.get_item(Key={"id_bloque": bloque_id}).get("Item")
+    if not bloque:
+        raise LookupError(f"Bloque {bloque_id} no encontrado")
+    if bloque.get("empresa_id") != empresa_id:
+        raise ValueError("El bloque pertenece a otra empresa")
+    if bloque.get("activo") is False:
+        raise ValueError("El bloque está inactivo. Actívalo antes de asignarle puntos")
+
+
 def _resolver_punto(
     ubicacion: dict, ts: str, tomado_por_id: str, empresa_id: str | None,
     es_super_admin: bool = False, tomado_por_nombre: str = "",
+    bloque_id: str | None = None,
 ) -> tuple[str, dict]:
+    """Resuelve (o crea) el punto al que pertenece la medición.
+
+    `empresa_id` es el de quien sube; `es_super_admin` lo habilita a operar
+    fuera de una empresa propia. Ambos alcanzan también a la búsqueda por
+    clave lógica (ver _buscar_por_clave_logica), que sin ese filtro reusaba
+    puntos de otras empresas.
+
+    `bloque_id` (opcional) solo aplica cuando se CREA un punto nuevo
+    (planta_nueva / coordenadas_libres); en planta_existente, y cuando se
+    reusa un punto ya existente por clave lógica, el punto ya tiene el suyo
+    y el del body se ignora.
+    """
     modo = ubicacion.get("modo")
 
     if modo == "planta_existente":
@@ -164,9 +236,12 @@ def _resolver_punto(
             raise ValueError("modo=planta_nueva requiere sede y ciudad")
 
         clave_logica = f"{sede}-{ciudad}"
-        existente = _buscar_por_clave_logica(clave_logica)
+        existente = _buscar_por_clave_logica(clave_logica, empresa_id, es_super_admin)
         if existente:
             return existente["id_punto"], existente
+
+        if bloque_id is not None:
+            _validar_bloque(bloque_id, empresa_id)
 
         coordenadas = ubicacion.get("coordenadas", {})
         nuevo = {
@@ -197,6 +272,8 @@ def _resolver_punto(
         # (ver lambda_handler), nunca de un campo del body/ubicacion.
         if empresa_id:
             nuevo["empresa_id"] = empresa_id
+        if bloque_id is not None:
+            nuevo["bloque_id"] = bloque_id
         _crear_punto(nuevo)
         return nuevo["id_punto"], nuevo
 
@@ -208,9 +285,12 @@ def _resolver_punto(
 
         descripcion = ubicacion.get("descripcion", f"Punto {lat},{lng}")
         clave_logica = f"libre-{round(lat, 4)}-{round(lng, 4)}"
-        existente = _buscar_por_clave_logica(clave_logica)
+        existente = _buscar_por_clave_logica(clave_logica, empresa_id, es_super_admin)
         if existente:
             return existente["id_punto"], existente
+
+        if bloque_id is not None:
+            _validar_bloque(bloque_id, empresa_id)
 
         nuevo = {
             "id_punto": f"PT-{uuid.uuid4()}",
@@ -232,6 +312,8 @@ def _resolver_punto(
                 nuevo["creado_por_nombre"] = tomado_por_nombre
         if empresa_id:
             nuevo["empresa_id"] = empresa_id
+        if bloque_id is not None:
+            nuevo["bloque_id"] = bloque_id
         _crear_punto(nuevo)
         return nuevo["id_punto"], nuevo
 
@@ -553,6 +635,10 @@ def lambda_handler(event: dict, context) -> dict:
         longitud_real    = body.get("longitud_real")
         notas            = body.get("notas", "")
         timestamp_custom = body.get("timestamp_medicion")  # YYYY-MM-DD, opcional
+        # Solo se usa si hay que CREAR un punto (planta_nueva /
+        # coordenadas_libres); con planta_existente el punto ya tiene su
+        # bloque y este campo se ignora.
+        bloque_id_body   = body.get("bloque_id")
 
         if not imagen_b64:
             return _respuesta(400, {"error": "imagen_base64 es requerido"})
@@ -578,6 +664,7 @@ def lambda_handler(event: dict, context) -> dict:
             id_punto, info_punto = _resolver_punto(
                 ubicacion, ts, tomado_por_id, empresa_id_creador, es_super_admin,
                 tomado_por_nombre=tomado_por_nombre,
+                bloque_id=bloque_id_body if ubicacion.get("modo") != "planta_existente" else None,
             )
         except LookupError as e:
             return _respuesta(404, {"error": str(e)})
@@ -599,9 +686,20 @@ def lambda_handler(event: dict, context) -> dict:
         resultado_ml = _inferir(imagen)
 
         id_medicion       = f"MED-{uuid.uuid4()}"
-        s3_key_imagen     = f"raw/{id_punto}/{id_medicion}.jpg"
-        s3_key_thumbnail  = f"raw/{id_punto}/{id_medicion}_thumb.jpg"
-        s3_key_resultado  = f"resultados/{id_punto}/{id_medicion}.json"
+        # Layout S3 por empresa/bloque: los objetos quedan agrupados igual
+        # que la jerarquía de la app (empresa → bloque → punto → medición),
+        # así una carpeta de S3 se puede acotar por tenant. El empresa_id es
+        # el del PUNTO, no el del uploader (un super_admin puede subir a
+        # nombre de otra empresa). Las keys viejas (`raw/`, `resultados/`) NO
+        # se migran: cada medición guarda las suyas en DynamoDB y se leen de
+        # ahí (ver api_mediciones/_agregar_url_imagen, que nunca deriva una
+        # key de otra por string).
+        empresa_key = info_punto.get("empresa_id") or "sin-empresa"
+        bloque_key  = info_punto.get("bloque_id") or "sin-bloque"
+        prefijo_s3        = f"empresas/{empresa_key}/{bloque_key}/{id_punto}"
+        s3_key_imagen     = f"{prefijo_s3}/{id_medicion}.jpg"
+        s3_key_thumbnail  = f"{prefijo_s3}/{id_medicion}_thumb.jpg"
+        s3_key_resultado  = f"{prefijo_s3}/{id_medicion}.json"
 
         buffer = io.BytesIO()
         imagen.save(buffer, format="JPEG", quality=85)
@@ -706,6 +804,16 @@ def lambda_handler(event: dict, context) -> dict:
             # api_alertas puedan filtrar sin un lookup extra al punto.
             if info_punto.get("empresa_id"):
                 item_db["empresa_id"] = info_punto.get("empresa_id")
+            # Igual que empresa_id: bloque del PUNTO, denormalizado en la
+            # medición. `bloque_nombre` queda congelado (como
+            # creado_por_nombre) — si después renombran el bloque, el
+            # histórico sigue mostrando cómo se llamaba entonces. Si el punto
+            # no tiene bloque, no se escribe ninguno de los dos campos.
+            if info_punto.get("bloque_id"):
+                item_db["bloque_id"] = info_punto["bloque_id"]
+                bloque = tabla_bloques.get_item(Key={"id_bloque": info_punto["bloque_id"]}).get("Item")
+                if bloque and bloque.get("nombre"):
+                    item_db["bloque_nombre"] = bloque["nombre"]
 
             tabla_mediciones.put_item(Item=item_db)
         except Exception as e:

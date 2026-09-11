@@ -3,14 +3,19 @@ CorriaComputeStack — 5 Lambda functions (api-reportes was eliminated, not
 ported — see README).
 
 IAM is scoped per function to the minimum actually used by its handler code:
-  - pf-corrosion-api-usuarios:    read/write on `usuarios` table, READ-ONLY
-                                   on the new `empresas` table (only needs to
-                                   check a given empresa_id exists), + narrow
-                                   Cognito admin-* actions on the user pool.
-  - pf-corrosion-api-puntos:      read/write on the fused table + READ-ONLY
-                                   on `usuarios` (multi-empresa RBAC: needs
-                                   to resolve the caller's empresa_id/rol via
-                                   `_usuario_actual`, see handler.py).
+  - pf-corrosion-api-usuarios:    read/write on `usuarios` and `empresas`
+                                   tables, + narrow Cognito admin-* actions on
+                                   the user pool, + PutObject on the images
+                                   bucket restricted to `empresas/*` (folder
+                                   marker created with each new empresa).
+  - pf-corrosion-api-puntos:      read/write on the fused table and on
+                                   `bloques` (the /bloques CRUD lives here),
+                                   READ-ONLY on `usuarios` (multi-empresa
+                                   RBAC: needs to resolve the caller's
+                                   empresa_id/rol via `_usuario_actual`, see
+                                   handler.py) and `empresas`, + PutObject on
+                                   the images bucket restricted to
+                                   `empresas/*` (folder marker per bloque).
   - pf-corrosion-api-mediciones:  read/write on the fused table + READ-ONLY
                                    on `usuarios` (same RBAC need as above).
   - pf-corrosion-api-alertas:     READ-ONLY on the fused table (the handler
@@ -20,7 +25,9 @@ IAM is scoped per function to the minimum actually used by its handler code:
                                    read/write on the images bucket + READ-ONLY
                                    on `usuarios` (RBAC: resolve empresa_id/rol
                                    of the caller uploading a medición, block
-                                   `cliente`). No Cognito admin-* actions and
+                                   `cliente`) and on `bloques` (validate the
+                                   optional bloque_id, freeze bloque_nombre
+                                   on the medición). No Cognito admin-* actions and
                                    no write access to `usuarios` — this
                                    mirrors the original security fix (the
                                    source account's inference Lambda role had
@@ -57,6 +64,7 @@ class CorriaComputeStack(Stack):
         *,
         usuarios_table: dynamodb.Table,
         empresas_table: dynamodb.Table,
+        bloques_table: dynamodb.Table,
         puntos_mediciones_table: dynamodb.Table,
         images_bucket: s3.Bucket,
         user_pool: cognito.UserPool,
@@ -83,9 +91,14 @@ class CorriaComputeStack(Stack):
                 "TABLA_EMPRESAS": empresas_table.table_name,
                 "TABLA_PUNTOS_MEDICIONES": puntos_mediciones_table.table_name,
                 "USER_POOL_ID": user_pool.user_pool_id,
+                "BUCKET_NAME": images_bucket.bucket_name,
             },
         )
         usuarios_table.grant_read_write_data(self.api_usuarios_fn)
+        # POST /empresas deja un marcador vacío `empresas/{id_empresa}/` en el
+        # bucket (carpeta lógica de la empresa). Solo PutObject y solo bajo
+        # ese prefijo — nunca lectura ni borrado del bucket.
+        images_bucket.grant_put(self.api_usuarios_fn, "empresas/*")
         # Lectura: verificar que un empresa_id exista al crear un usuario con
         # empresa explícita (super_admin). Escritura: POST /empresas (crear
         # empresas nuevas), restringido a super_admin dentro del handler.
@@ -128,6 +141,8 @@ class CorriaComputeStack(Stack):
                 "TABLA_PUNTOS": puntos_mediciones_table.table_name,
                 "TABLA_USUARIOS": usuarios_table.table_name,
                 "TABLA_EMPRESAS": empresas_table.table_name,
+                "TABLA_BLOQUES": bloques_table.table_name,
+                "BUCKET_NAME": images_bucket.bucket_name,
             },
         )
         puntos_mediciones_table.grant_read_write_data(self.api_puntos_fn)
@@ -137,6 +152,11 @@ class CorriaComputeStack(Stack):
         # Solo necesita validar que el empresa_id que manda super_admin al
         # crear un punto exista -- nunca escribe acá.
         empresas_table.grant_read_data(self.api_puntos_fn)
+        # CRUD de bloques (/bloques) vive en esta misma Lambda.
+        bloques_table.grant_read_write_data(self.api_puntos_fn)
+        # POST /bloques deja un marcador vacío `empresas/{empresa_id}/{id_bloque}/`
+        # en el bucket. Solo PutObject bajo ese prefijo.
+        images_bucket.grant_put(self.api_puntos_fn, "empresas/*")
 
         # ── api-mediciones ───────────────────────────────────────────────
         self.api_mediciones_fn = _lambda.Function(
@@ -221,6 +241,7 @@ class CorriaComputeStack(Stack):
                 "TABLA_PUNTOS": puntos_mediciones_table.table_name,
                 "TABLA_MEDICIONES": puntos_mediciones_table.table_name,
                 "TABLA_USUARIOS": usuarios_table.table_name,
+                "TABLA_BLOQUES": bloques_table.table_name,
                 "BUCKET_NAME": images_bucket.bucket_name,
                 # Intentionally NO USER_POOL_ID / Cognito admin-* actions —
                 # see security fix note in this module's docstring. Only a
@@ -231,6 +252,9 @@ class CorriaComputeStack(Stack):
         puntos_mediciones_table.grant_read_write_data(self.inference_fn)
         images_bucket.grant_read_write(self.inference_fn)
         usuarios_table.grant_read_data(self.inference_fn)
+        # Solo lee: validar el bloque_id opcional al crear un punto y
+        # congelar bloque_nombre en la medición — nunca escribe bloques.
+        bloques_table.grant_read_data(self.inference_fn)
         # Intentionally NOT granted: write access to usuarios_table, Cognito actions.
 
         # ── EventBridge cleanup rule (collaborator expiry) ──────────────────

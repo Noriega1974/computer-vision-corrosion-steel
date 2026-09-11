@@ -18,7 +18,13 @@ Structural changes vs. the source system:
    the other tables here. Holds the multi-tenant company records; every
    non-super_admin user's `empresa_id` must reference a row in this table.
 
-3. `puntos` + `mediciones` are FUSED into a single table
+3. `bloques` table (NEW): PK `id_bloque` + GSI `empresa_id-index` (HASH
+   empresa_id). One-level hierarchy empresa → bloque → punto → medición: a
+   bloque is a folder inside an empresa; puntos reference it through an
+   optional `bloque_id` attribute. Mirrored in S3 as the key prefix
+   `empresas/{empresa_id}/{bloque_id|sin-bloque}/{id_punto}/...`.
+
+4. `puntos` + `mediciones` are FUSED into a single table
    (`fused_puntos_mediciones`). Partition key `id_punto`; sort key `sk`:
      - point (parent) records use sk = "METADATA"
      - medición (child) records use sk = "MED#{timestamp}"
@@ -86,6 +92,27 @@ class CorriaStorageStack(Stack):
             partition_key=dynamodb.Attribute(name="id_empresa", type=dynamodb.AttributeType.STRING),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=RemovalPolicy.RETAIN,
+        )
+
+        # ── bloques table (NEW) ──────────────────────────────────────────
+        # Jerarquía de UN nivel: empresa → bloque → punto → medición. Un
+        # bloque es una "carpeta" dentro de una empresa; los puntos lo
+        # referencian por `bloque_id` (opcional). Sin anidamiento.
+        self.bloques_table = dynamodb.Table(
+            self,
+            "BloquesTable",
+            table_name="pf-corrosion-bloques",
+            partition_key=dynamodb.Attribute(name="id_bloque", type=dynamodb.AttributeType.STRING),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.RETAIN,
+        )
+        # Listar los bloques de una empresa sin escanear (GET /bloques para
+        # roles con alcance de empresa, y resolución de bloque_nombre en
+        # GET /puntos).
+        self.bloques_table.add_global_secondary_index(
+            index_name="empresa_id-index",
+            partition_key=dynamodb.Attribute(name="empresa_id", type=dynamodb.AttributeType.STRING),
+            projection_type=dynamodb.ProjectionType.ALL,
         )
 
         # ── fused puntos + mediciones table ─────────────────────────────

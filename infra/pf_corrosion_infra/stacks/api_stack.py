@@ -102,6 +102,16 @@ class CorriaApiStack(Stack):
         puntos_id.add_method("DELETE", puntos_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
         # Note: /puntos/buscar intentionally NOT recreated (eliminated).
 
+        # ── /bloques — carpetas dentro de una empresa (misma Lambda
+        # api-puntos; RBAC por rol/empresa en el handler) ─────────────────
+        bloques = self.api.root.add_resource("bloques")
+        bloques.add_method("GET", puntos_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
+        bloques.add_method("POST", puntos_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
+
+        bloques_id = bloques.add_resource("{id_bloque}")
+        bloques_id.add_method("PUT", puntos_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
+        bloques_id.add_method("DELETE", puntos_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
+
         # ── /mediciones ──────────────────────────────────────────────────
         mediciones = self.api.root.add_resource("mediciones")
 

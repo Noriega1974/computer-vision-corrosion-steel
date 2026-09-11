@@ -16,7 +16,9 @@ Rutas API Gateway:
   DELETE /usuarios/{id_usuario}           → deshabilitar usuario (admin/super_admin, con alcance de empresa)
   POST   /colaborador                     → crear colaborador temporal con nickname (admin/super_admin)
   GET    /empresas                        → listar empresas (solo super_admin)
-  POST   /empresas                        → crear empresa (solo super_admin)
+  POST   /empresas                        → crear empresa (solo super_admin); deja además un
+                                             marcador vacío `empresas/{id_empresa}/` en el bucket
+                                             de imágenes (no bloqueante)
   PUT    /empresas/{id_empresa}           → editar nombre y/o activar-desactivar empresa (solo super_admin)
 
 Evento directo (EventBridge cron diario):
@@ -51,6 +53,7 @@ TABLA_USUARIOS           = os.environ["TABLA_USUARIOS"]
 TABLA_EMPRESAS           = os.environ["TABLA_EMPRESAS"]
 TABLA_PUNTOS_MEDICIONES  = os.environ["TABLA_PUNTOS_MEDICIONES"]
 USER_POOL_ID             = os.environ["USER_POOL_ID"]
+BUCKET_NAME              = os.environ["BUCKET_NAME"]
 REGION                   = os.environ["REGION"]
 
 dynamodb = boto3.resource("dynamodb", region_name=REGION)
@@ -58,6 +61,9 @@ tabla    = dynamodb.Table(TABLA_USUARIOS)
 tabla_empresas = dynamodb.Table(TABLA_EMPRESAS)
 tabla_puntos_mediciones = dynamodb.Table(TABLA_PUNTOS_MEDICIONES)
 cognito  = boto3.client("cognito-idp", region_name=REGION)
+# Solo para dejar el marcador `empresas/{id_empresa}/` al crear una empresa
+# (grant acotado a PutObject bajo ese prefijo, ver CorriaComputeStack).
+s3 = boto3.client("s3", region_name=REGION)
 
 ROLES_VALIDOS = {"super_admin", "admin", "tecnico", "cliente"}
 CAMPOS_PROTEGIDOS_ME    = {"email", "rol", "id_usuario", "cognito_sub", "fecha_creacion"}
@@ -704,6 +710,15 @@ def lambda_handler(event: dict, context) -> dict:
                 "creado_por": creador.get("id_usuario", ""),
             }
             tabla_empresas.put_item(Item=item)
+            # Marcador de "carpeta" de la empresa en S3 (objeto de 0 bytes).
+            # Las mediciones se guardan bajo empresas/{empresa_id}/{bloque}/...
+            # (ver lambda_src/inference); el marcador solo hace visible la
+            # carpeta en la consola aunque todavía no tenga fotos. No es
+            # bloqueante: el ítem en DynamoDB es lo que manda.
+            try:
+                s3.put_object(Bucket=BUCKET_NAME, Key=f"empresas/{id_empresa}/", Body=b"")
+            except Exception as e:
+                logger.warning("No se pudo crear el marcador S3 de la empresa %s: %s", id_empresa, e)
             return _respuesta(201, item)
 
         # ── PUT /empresas/{id_empresa} — editar / activar-desactivar (solo
