@@ -88,6 +88,9 @@ class CorriaApiStack(Stack):
         empresas.add_method("GET", usuarios_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
         empresas.add_method("POST", usuarios_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
 
+        empresas_id = empresas.add_resource("{id_empresa}")
+        empresas_id.add_method("PUT", usuarios_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
+
         # ── /puntos ──────────────────────────────────────────────────────
         puntos = self.api.root.add_resource("puntos")
         puntos.add_method("GET", puntos_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
