@@ -280,13 +280,10 @@ export default function UploadPage() {
 
   // Enviar formulario
   //
-  // NOTA: al momento de escribir esto, el handler de inferencia
-  // (_resolver_punto en infra/.../inference/handler.py) crea el punto nuevo
-  // de "planta_nueva"/"coordenadas_libres" directo en DynamoDB -- no pasa
-  // por el POST /puntos que sí soporta bloque_id. bloque_id viaja igual en
-  // el body por si el backend lo empieza a leer ahí, pero hoy el backend lo
-  // ignora en silencio para esos dos modos (sí funciona con normalidad en
-  // "planta_existente", que reusa el punto tal cual está guardado).
+  // bloque_id viaja en la RAÍZ del body, no dentro de `ubicacion` -- así lo
+  // lee inference/handler.py (`body.get("bloque_id")`, ver _resolver_punto).
+  // Solo aplica a "planta_nueva"/"coordenadas_libres" (ahí se crea el punto);
+  // en "planta_existente" el punto ya tiene el suyo y no se manda.
   async function handleSubmit(e) {
     e.preventDefault();
     if (!imagen) { alert('Selecciona una imagen primero.'); return; }
@@ -306,7 +303,6 @@ export default function UploadPage() {
         tipo_material: tipoMaterial,
         tipo_estructura: tipoEstructura,
         coordenadas: { lat: coordNuevaLat, lng: coordNuevaLng },
-        ...(bloqueId && { bloque_id: bloqueId }),
       };
     } else {
       if (!coordLibreLat || !coordLibreLng) { alert('Marca la ubicación en el mapa.'); return; }
@@ -315,7 +311,6 @@ export default function UploadPage() {
         latitud: coordLibreLat,
         longitud: coordLibreLng,
         descripcion: descripcionLibre,
-        ...(bloqueId && { bloque_id: bloqueId }),
       };
     }
 
@@ -323,6 +318,7 @@ export default function UploadPage() {
       imagen_base64,
       fuente: 'movil',
       ubicacion,
+      ...(modo !== 'planta_existente' && bloqueId && { bloque_id: bloqueId }),
       ...(notas && { notas }),
       ...(exifGps && {
         latitud_real: exifGps.latitude,
