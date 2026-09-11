@@ -264,31 +264,30 @@ export default function ColombiaMap({
     onSelectPunto
   ]);
 
-  // Zonas de empresa: un círculo por cada {lat, lng, radio_metros} declarado
-  // en `empresas[].zonas` -- sin marcador propio, solo el círculo con un
-  // tooltip mostrando el nombre de la empresa al pasar el mouse.
+  // Zonas de empresa: un polígono por cada {puntos: [{lat,lng}, ...]}
+  // declarado en `empresas[].zonas` -- sin pin, solo el área con un tooltip
+  // mostrando el nombre de la empresa al pasar el mouse.
   useEffect(() => {
     const L = window.L;
     if (!L || !mapInstanceRef.current) return;
 
-    zonasRef.current.forEach(circle => circle.remove());
+    zonasRef.current.forEach(poligono => poligono.remove());
     zonasRef.current = [];
 
     empresas.forEach(empresa => {
       (empresa.zonas ?? []).forEach(zona => {
-        if (zona?.lat == null || zona?.lng == null || !zona?.radio_metros) return;
+        if (!Array.isArray(zona?.puntos) || zona.puntos.length < 3) return;
 
-        const circle = L.circle([zona.lat, zona.lng], {
-          radius: zona.radio_metros,
+        const poligono = L.polygon(zona.puntos.map(p => [p.lat, p.lng]), {
           color: '#00b9ff',
           weight: 1.5,
           fillColor: '#00b9ff',
           fillOpacity: 0.06,
         }).addTo(mapInstanceRef.current);
 
-        circle.bindTooltip(empresa.nombre, { sticky: true });
+        poligono.bindTooltip(empresa.nombre, { sticky: true });
 
-        zonasRef.current.push(circle);
+        zonasRef.current.push(poligono);
       });
     });
   }, [empresas]);
