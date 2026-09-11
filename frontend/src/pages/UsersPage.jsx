@@ -551,9 +551,14 @@ export default function UsersPage() {
     const { empresa, activarDespues } = confirmToggleEmpresa;
     try {
       await editarEmpresa(empresa.id_empresa, { activa: activarDespues });
-      setConfirmToggleEmpresa(null);
       setToast(activarDespues ? 'Afiliación activada correctamente.' : 'Afiliación desactivada correctamente.');
-    } catch { /* mutErrorEmpresa maneja la visualización del error */ }
+    } catch {
+      // mutErrorEmpresa muestra el error en el banner sobre la tabla; el
+      // diálogo se cierra igual para que ese banner no quede tapado por el
+      // overlay.
+    } finally {
+      setConfirmToggleEmpresa(null);
+    }
   };
 
   const handleEdit = async (payload) => {
