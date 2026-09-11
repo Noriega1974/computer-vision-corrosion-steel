@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { apiGet, apiPost } from '../lib/apiClient';
+import { apiGet, apiPost, apiPut } from '../lib/apiClient';
 import { useRefreshKey } from './RefreshKeyContext';
 
-// GET/POST /empresas -- restringido a super_admin en el backend
-// (api_usuarios/handler.py). No hay PUT/DELETE todavia: una empresa, una
-// vez creada, no se edita ni se borra desde la UI (fuera de alcance de
-// esta tarea, el backend tampoco lo expone).
+// GET/POST/PUT /empresas -- restringido a super_admin en el backend
+// (api_usuarios/handler.py). Todavía no hay DELETE: una empresa se
+// desactiva (PUT { activa: false }), nunca se borra desde la UI.
 // `enabled` evita el fetch (y el 403 esperable) para roles que no son
 // super_admin -- los hooks se llaman igual siempre (regla de React), pero
 // el efecto no dispara la request si enabled es false.
@@ -64,5 +63,22 @@ export function useGestionEmpresas(enabled = true) {
     }
   }, [refetch]);
 
-  return { empresas, loading, error, mutating, mutError, crearEmpresa, refetch };
+  // payload acepta { nombre } y/o { activa } -- el backend (PUT
+  // /empresas/{id_empresa}) actualiza solo los campos presentes.
+  const editarEmpresa = useCallback(async (idEmpresa, payload) => {
+    setMutating(true);
+    setMutError(null);
+    try {
+      const result = await apiPut(`/empresas/${idEmpresa}`, payload);
+      refetch();
+      return result;
+    } catch (err) {
+      setMutError(err.message);
+      throw err;
+    } finally {
+      setMutating(false);
+    }
+  }, [refetch]);
+
+  return { empresas, loading, error, mutating, mutError, crearEmpresa, editarEmpresa, refetch };
 }
