@@ -137,6 +137,9 @@ const labelStyle = {
 // empresa forzada en el backend, no elige). El backend no acepta cambiar la
 // empresa de un bloque ya creado, así que ese campo nunca aparece al editar.
 function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, empresasDisponibles, requiereEmpresa }) {
+  // Casi todo lo que se trabaja es galvanizado -- default a eso, con "Otro"
+  // como escape hatch a texto libre en vez de pedirlo siempre.
+  const materialInicialEsOtro = initial.tipo_material && initial.tipo_material !== 'Galvanizado';
   const [form, setForm] = useState({
     nombre: initial.nombre ?? '',
     descripcion: initial.descripcion ?? '',
@@ -145,8 +148,10 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, empresasDis
     departamento: initial.departamento ?? '',
     latitud: initial.coordenadas?.lat ?? '',
     longitud: initial.coordenadas?.lng ?? '',
-    tipo_material: initial.tipo_material ?? '',
+    tipo_material: materialInicialEsOtro ? 'otro' : 'Galvanizado',
+    tipo_material_otro: materialInicialEsOtro ? initial.tipo_material : '',
     tipo_estructura: initial.tipo_estructura ?? '',
+    grosor_mm: initial.grosor_mm ?? '',
   });
   const [validationError, setValidationError] = useState(null);
 
@@ -174,17 +179,23 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, empresasDis
       setValidationError('Marca la ubicación en el mapa.');
       return;
     }
+    if (form.tipo_material === 'otro' && !form.tipo_material_otro.trim()) {
+      setValidationError('Especifica el tipo de material.');
+      return;
+    }
 
     setValidationError(null);
 
+    const tipoMaterialFinal = form.tipo_material === 'otro' ? form.tipo_material_otro.trim() : form.tipo_material;
     const payload = {
       nombre: form.nombre,
       descripcion: form.descripcion,
       ciudad: form.ciudad,
       departamento: form.departamento,
       coordenadas: { lat: Number(form.latitud), lng: Number(form.longitud) },
-      ...(form.tipo_material && { tipo_material: form.tipo_material }),
+      ...(tipoMaterialFinal && { tipo_material: tipoMaterialFinal }),
       ...(form.tipo_estructura && { tipo_estructura: form.tipo_estructura }),
+      ...(form.grosor_mm !== '' && { grosor_mm: Number(form.grosor_mm) }),
     };
     if (requiereEmpresa) payload.empresa_id = form.empresa_id;
 
@@ -269,20 +280,22 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, empresasDis
         />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)', marginBottom: 'var(--space-3-5)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)', marginBottom: form.tipo_material === 'otro' ? 'var(--space-2)' : 'var(--space-3-5)' }}>
         <div>
           <label htmlFor="punto-tipo-material" style={labelStyle}>
-            Tipo de material
+            Tipo de material (opcional)
           </label>
-          <input
-            id="punto-tipo-material" name="tipo_material" autoComplete="off"
+          <select
+            id="punto-tipo-material" name="tipo_material" style={inputStyle}
             value={form.tipo_material} onChange={set('tipo_material')}
-            placeholder="ej: Galvanizado" style={inputStyle}
-          />
+          >
+            <option value="Galvanizado">Galvanizado</option>
+            <option value="otro">Otro (especificar)</option>
+          </select>
         </div>
         <div>
           <label htmlFor="punto-tipo-estructura" style={labelStyle}>
-            Tipo de estructura
+            Tipo de estructura (opcional)
           </label>
           <input
             id="punto-tipo-estructura" name="tipo_estructura" autoComplete="off"
@@ -292,9 +305,33 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, empresasDis
         </div>
       </div>
 
+      {form.tipo_material === 'otro' && (
+        <div style={{ marginBottom: 'var(--space-3-5)' }}>
+          <label htmlFor="punto-tipo-material-otro" style={labelStyle}>
+            Especifica el material *
+          </label>
+          <input
+            id="punto-tipo-material-otro" name="tipo_material_otro" autoComplete="off"
+            required value={form.tipo_material_otro} onChange={set('tipo_material_otro')}
+            placeholder="ej: A588" style={inputStyle}
+          />
+        </div>
+      )}
+
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
+        <label htmlFor="punto-grosor" style={labelStyle}>
+          Grosor del material en mm (opcional)
+        </label>
+        <input
+          id="punto-grosor" name="grosor_mm" type="number" inputMode="decimal" step="any" min="0"
+          value={form.grosor_mm} onChange={set('grosor_mm')}
+          placeholder="ej: 2.5" style={inputStyle}
+        />
+      </div>
+
       <div style={{ marginBottom: 'var(--space-3-5)' }}>
         <label htmlFor="punto-descripcion" style={labelStyle}>
-          Descripción
+          Descripción (opcional)
         </label>
         <input
           id="punto-descripcion" name="descripcion" autoComplete="off"
@@ -324,11 +361,13 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, empresasDis
 }
 
 // ─── BloquesPage ──────────────────────────────────────────────────────────────
-// Ruta /puntos -- solo super_admin/admin (ver RoleRoute en App.jsx; el backend
-// exige ese mismo rol para POST/PUT/DELETE /bloques, tecnico/cliente no
-// administran la lista). Página "Puntos": el "Punto" viejo (PlantsPage,
-// retirado) fue absorbido por el "Bloque" -- esta es ahora la única entidad
-// de ubicación, y agrupa además las mediciones tomadas ahí.
+// Ruta /puntos -- super_admin/admin/tecnico entran y pueden crear (el
+// backend abre POST /bloques a los 3); editar/desactivar/eliminar sigue
+// exclusivo de admin/super_admin (ver `puedeGestionar` abajo, y PUT/DELETE
+// /bloques en el backend). cliente no entra. Página "Puntos": el "Punto"
+// viejo (PlantsPage, retirado) fue absorbido por el "Bloque" -- esta es
+// ahora la única entidad de ubicación, y agrupa además las mediciones
+// tomadas ahí.
 export default function BloquesPage() {
   const { user: me } = useAuth();
   const esSuperAdmin = me?.groups?.includes('super_admin');

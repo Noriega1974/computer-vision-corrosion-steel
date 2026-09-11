@@ -26,7 +26,7 @@ Rutas:
                                     absorbió el rol del punto viejo como entidad que lleva
                                     mediciones (ver POST /medicion en lambda_src/inference)
   PUT    /bloques/{id_bloque}     → editar nombre/descripcion/activo/coordenadas/ciudad/
-                                    departamento/tipo_material/tipo_estructura (solo super_admin
+                                    departamento/tipo_material/tipo_estructura/grosor_mm (solo super_admin
                                     o admin de esa empresa -- tecnico crea pero no edita)
   DELETE /bloques/{id_bloque}     → eliminar (solo super_admin o admin de esa empresa; 409 si
                                     tiene mediciones -- tecnico no puede borrar)
@@ -381,6 +381,12 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
         if tipo_estructura is not None and not isinstance(tipo_estructura, str):
             return _respuesta(400, {"error": "tipo_estructura debe ser un texto"})
 
+        # grosor_mm: opcional, numérico -- mismo campo que tenía el punto
+        # original (sistema fuente), recuperado a pedido del usuario.
+        grosor_mm = body.get("grosor_mm")
+        if grosor_mm is not None and (not isinstance(grosor_mm, (int, float)) or isinstance(grosor_mm, bool)):
+            return _respuesta(400, {"error": "grosor_mm debe ser numérico"})
+
         # empresa_id: SOLO super_admin lo manda (y es obligatorio para él),
         # validado contra la tabla empresas — mismo patrón que POST /usuarios
         # y POST /puntos. Para admin se fuerza al suyo, nunca del body.
@@ -416,6 +422,8 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
             item["tipo_material"] = tipo_material
         if tipo_estructura is not None:
             item["tipo_estructura"] = tipo_estructura
+        if grosor_mm is not None:
+            item["grosor_mm"] = grosor_mm
         # Foto fija del nombre del creador (mismo patrón que puntos/mediciones:
         # sigue siendo legible aunque la cuenta se borre después).
         if creador.get("nombre"):
@@ -446,9 +454,10 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
         departamento = body.get("departamento")
         tipo_material = body.get("tipo_material")
         tipo_estructura = body.get("tipo_estructura")
+        grosor_mm = body.get("grosor_mm")
         if all(
             v is None
-            for v in (nombre, descripcion, activo, coordenadas, ciudad, departamento, tipo_material, tipo_estructura)
+            for v in (nombre, descripcion, activo, coordenadas, ciudad, departamento, tipo_material, tipo_estructura, grosor_mm)
         ):
             return _respuesta(400, {"error": "Debes indicar al menos un campo para actualizar"})
 
@@ -494,6 +503,10 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
             if not isinstance(tipo_estructura, str):
                 return _respuesta(400, {"error": "tipo_estructura debe ser un texto"})
             campos["tipo_estructura"] = tipo_estructura
+        if grosor_mm is not None:
+            if not isinstance(grosor_mm, (int, float)) or isinstance(grosor_mm, bool):
+                return _respuesta(400, {"error": "grosor_mm debe ser numérico"})
+            campos["grosor_mm"] = grosor_mm
 
         expr = "SET " + ", ".join(f"#{k} = :{k}" for k in campos)
         nombres = {f"#{k}": k for k in campos}
