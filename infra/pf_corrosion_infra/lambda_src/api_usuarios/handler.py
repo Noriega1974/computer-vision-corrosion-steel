@@ -17,6 +17,7 @@ Rutas API Gateway:
   POST   /colaborador                     → crear colaborador temporal con nickname (admin/super_admin)
   GET    /empresas                        → listar empresas (solo super_admin)
   POST   /empresas                        → crear empresa (solo super_admin)
+  PUT    /empresas/{id_empresa}           → editar nombre y/o activar-desactivar empresa (solo super_admin)
 
 Evento directo (EventBridge cron diario):
   Sin httpMethod → ejecuta limpieza de colaboradores vencidos
@@ -111,8 +112,8 @@ def _usuario_actual(event: dict) -> dict | None:
     cognito-sub-index. Necesario porque `id_usuario` (PK, `USR-<uuid>`
     generado por la app) NO es el mismo valor que `cognito_sub`. Devuelve
     None si no hay sub en el token o si no existe un ítem para ese sub
-    (p. ej. un usuario que nunca llamó a GET /usuarios/me para auto-
-    provisionarse)."""
+    (p. ej. una cuenta creada directo en Cognito sin pasar por POST
+    /usuarios — ya no se auto-aprovisiona, ver _respuesta_sin_registro)."""
     sub = _claims(event).get("sub", "")
     if not sub:
         return None
@@ -147,24 +148,43 @@ def _tiene_historial(cognito_sub: str) -> bool:
     )
     return bool(resp.get("Items"))
 
-def _crear_usuario_basico(email: str, claims: dict) -> dict:
-    grupos = claims.get("cognito:groups", "") or ""
-    rol = "cliente"
-    for g in grupos.split(","):
-        if g.strip() in ROLES_VALIDOS:
-            rol = g.strip()
-            break
-    id_usuario = f"USR-{uuid.uuid4()}"
-    item = {
-        "id_usuario": id_usuario,
-        "email": email,
-        "cognito_sub": claims.get("sub", ""),
-        "rol": rol,
-        "nombre": claims.get("given_name", ""),
-        "fecha_creacion": datetime.now(timezone.utc).isoformat(),
-    }
-    tabla.put_item(Item=item)
-    return item
+def _emails_super_admins_activos() -> list[str]:
+    """Correos de los super_admin activos en este momento, para el mensaje
+    de error cuando un usuario autenticado no tiene cuenta registrada en la
+    tabla (ya no se auto-aprovisiona una cuenta fantasma — alguien con ese
+    rol tiene que darlo de alta a mano). 'Activo' usa el mismo criterio que
+    _handle_cleanup: sin el campo `activo` (cuentas viejas) cuenta como
+    activo, solo `activo=False` lo excluye."""
+    resp = tabla.scan(
+        FilterExpression=Attr("rol").eq("super_admin")
+        & (Attr("activo").not_exists() | Attr("activo").eq(True))
+    )
+    return [i["email"] for i in resp.get("Items", []) if i.get("email")]
+
+def _contacto_super_admins() -> str:
+    """Cola del mensaje de bloqueo: nombra a los super_admin activos para que
+    la persona sepa a quién escribirle. Si por algún motivo no hay ninguno
+    (no debería pasar), cae a un texto genérico sin lista vacía."""
+    emails = _emails_super_admins_activos()
+    if emails:
+        return "Contacta a un administrador para que te dé acceso: " + ", ".join(emails)
+    return "Contacta a un administrador del sistema para que te dé acceso."
+
+def _respuesta_sin_registro() -> dict:
+    """403 para cuando el llamante autenticado (JWT válido) no tiene fila en
+    la tabla usuarios. Antes esto auto-aprovisionaba una cuenta fantasma
+    como `cliente` sin empresa_id — eliminado a propósito: la cuenta debe
+    darla de alta un administrador real, con la empresa correcta."""
+    return _respuesta(403, {"error": "Tu cuenta no está registrada. " + _contacto_super_admins()})
+
+def _respuesta_afiliacion_inactiva(nombre_empresa: str) -> dict:
+    """403 para cuando la afiliación del llamante fue desactivada por un
+    super_admin (PUT /empresas/{id_empresa} con activa=false). Sin este
+    chequeo, 'desactivar' solo cambiaría un badge en la tabla de empresas y
+    los usuarios de esa afiliación seguirían entrando como si nada."""
+    return _respuesta(403, {
+        "error": f"La afiliación {nombre_empresa} está desactivada. " + _contacto_super_admins()
+    })
 
 def _sanitizar_nickname(nickname: str) -> str:
     """Convierte nickname a string seguro para usar como email local."""
@@ -245,6 +265,7 @@ def lambda_handler(event: dict, context) -> dict:
     resource  = event.get("resource", "")
     path_params = event.get("pathParameters") or {}
     id_usuario  = path_params.get("id_usuario")
+    id_empresa  = path_params.get("id_empresa")
 
     try:
         # ── GET /usuarios/me ─────────────────────────────────────────────────
@@ -254,13 +275,18 @@ def lambda_handler(event: dict, context) -> dict:
                 return _respuesta(401, {"error": "No se pudo determinar el usuario"})
             usuario = _buscar_por_email(email)
             if not usuario:
-                usuario = _crear_usuario_basico(email, _claims(event))
+                return _respuesta_sin_registro()
             # Resolver el nombre legible de la afiliacion -- el frontend solo
             # conoce empresa_id (un id opaco), y no puede resolverlo por su
             # cuenta porque GET /empresas es exclusivo de super_admin. Cada
             # usuario sí puede ver el nombre de SU PROPIA afiliación acá.
             if usuario.get("empresa_id"):
                 empresa = tabla_empresas.get_item(Key={"id_empresa": usuario["empresa_id"]}).get("Item")
+                # Afiliación desactivada → el usuario no entra. super_admin
+                # nunca pasa por acá (no tiene empresa_id), así que siempre
+                # queda alguien que pueda reactivarla.
+                if empresa and empresa.get("activa") is False:
+                    return _respuesta_afiliacion_inactiva(empresa.get("nombre", usuario["empresa_id"]))
                 usuario = {**usuario, "empresa_nombre": empresa.get("nombre") if empresa else None}
             return _respuesta(200, usuario)
 
@@ -271,7 +297,7 @@ def lambda_handler(event: dict, context) -> dict:
                 return _respuesta(401, {"error": "No se pudo determinar el usuario"})
             usuario = _buscar_por_email(email)
             if not usuario:
-                usuario = _crear_usuario_basico(email, _claims(event))
+                return _respuesta_sin_registro()
             body = json.loads(event.get("body") or "{}")
             campos = {k: v for k, v in body.items() if k in CAMPOS_PERMITIDOS_ME}
             if not campos:
@@ -679,6 +705,55 @@ def lambda_handler(event: dict, context) -> dict:
             }
             tabla_empresas.put_item(Item=item)
             return _respuesta(201, item)
+
+        # ── PUT /empresas/{id_empresa} — editar / activar-desactivar (solo
+        # super_admin) ───────────────────────────────────────────────────────
+        elif metodo == "PUT" and resource == "/empresas/{id_empresa}" and id_empresa:
+            creador = _usuario_actual(event)
+            if not creador or creador.get("rol") != "super_admin":
+                return _respuesta(403, {"error": "Solo super_admin puede editar empresas"})
+            resp = tabla_empresas.get_item(Key={"id_empresa": id_empresa})
+            empresa = resp.get("Item")
+            if not empresa:
+                return _respuesta(404, {"error": f"Empresa {id_empresa} no encontrada"})
+
+            body   = json.loads(event.get("body") or "{}")
+            nombre = body.get("nombre")
+            activa = body.get("activa")
+            if nombre is None and activa is None:
+                return _respuesta(400, {"error": "Debes indicar nombre y/o activa para actualizar"})
+
+            campos = {}
+            if nombre is not None:
+                if not isinstance(nombre, str):
+                    return _respuesta(400, {"error": "nombre debe ser un texto"})
+                nombre = nombre.strip()
+                if not nombre:
+                    return _respuesta(400, {"error": "nombre no puede estar vacío"})
+                # Mismo chequeo de duplicado case-insensitive que POST
+                # /empresas, excluyendo la propia empresa que se edita.
+                existentes = tabla_empresas.scan().get("Items", [])
+                if any(
+                    e.get("nombre", "").strip().lower() == nombre.lower() and e.get("id_empresa") != id_empresa
+                    for e in existentes
+                ):
+                    return _respuesta(409, {"error": f"Ya existe una empresa llamada '{nombre}'"})
+                campos["nombre"] = nombre
+            if activa is not None:
+                if not isinstance(activa, bool):
+                    return _respuesta(400, {"error": "activa debe ser un booleano"})
+                campos["activa"] = activa
+
+            expr    = "SET " + ", ".join(f"#{k} = :{k}" for k in campos)
+            nombres = {f"#{k}": k for k in campos}
+            valores = {f":{k}": v for k, v in campos.items()}
+            tabla_empresas.update_item(
+                Key={"id_empresa": id_empresa},
+                UpdateExpression=expr,
+                ExpressionAttributeNames=nombres,
+                ExpressionAttributeValues=valores,
+            )
+            return _respuesta(200, tabla_empresas.get_item(Key={"id_empresa": id_empresa}).get("Item", {}))
 
         return _respuesta(405, {"error": f"Método {metodo} no permitido"})
 

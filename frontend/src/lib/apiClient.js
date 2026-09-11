@@ -47,7 +47,9 @@ async function request(method, path, body) {
   // 401 → emitir evento global para que AuthContext fuerce el logout
   if (res.status === 401) {
     window.dispatchEvent(new CustomEvent('auth:unauthorized'));
-    throw new Error('Sesión expirada. Por favor vuelve a iniciar sesión.');
+    const err = new Error('Sesión expirada. Por favor vuelve a iniciar sesión.');
+    err.status = 401;
+    throw err;
   }
 
   if (!res.ok) {
@@ -60,7 +62,12 @@ async function request(method, path, body) {
       if (errBody.error) message = errBody.error;
       else if (errBody.message) message = errBody.message;
     } catch { /* sin cuerpo JSON */ }
-    throw new Error(message);
+    // `status` viaja en el error para que quien llama pueda distinguir un
+    // 403 (sin permiso / sin registro) de un 500 o un fallo de red, sin
+    // tener que parsear el texto del mensaje.
+    const err = new Error(message);
+    err.status = res.status;
+    throw err;
   }
 
   // 204 No Content no tiene cuerpo
@@ -69,7 +76,26 @@ async function request(method, path, body) {
   return res.json().then(parseNumericStrings);
 }
 
-export const apiGet = (path) => request('GET', path);
+// Dedup de GETs concurrentes: si dos o más llamadas piden la misma URL casi
+// al mismo tiempo (p. ej. varios componentes del dashboard montando juntos
+// y pegándole cada uno a /mediciones/recientes), la segunda y siguientes
+// reciben la MISMA promesa en vez de disparar un fetch nuevo. Sin TTL ni
+// cache persistente: la entrada se borra apenas la promesa resuelve (éxito
+// o error), así que solo colapsa llamadas simultáneas idénticas -- nunca
+// sirve datos viejos a una llamada posterior. Nunca se aplica a
+// POST/PUT/DELETE (esas son mutaciones y jamás deben deduplicarse).
+const getsEnVuelo = new Map();
+
+export const apiGet = (path) => {
+  if (getsEnVuelo.has(path)) {
+    return getsEnVuelo.get(path);
+  }
+  const promesa = request('GET', path).finally(() => {
+    getsEnVuelo.delete(path);
+  });
+  getsEnVuelo.set(path, promesa);
+  return promesa;
+};
 export const apiPost = (path, body) => request('POST', path, body);
 export const apiPut = (path, body) => request('PUT', path, body);
 export const apiDelete = (path) => request('DELETE', path);

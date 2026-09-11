@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Plus, Edit2, X, AlertCircle, Check,
-  RefreshCw, UserX, Trash2, ChevronUp, ChevronDown, Clock,
+  RefreshCw, UserX, Trash2, ChevronUp, ChevronDown, Clock, Power,
 } from 'lucide-react';
 import { useGestionUsuarios } from '../hooks/useUsuarios';
 import { useGestionEmpresas } from '../hooks/useEmpresas';
@@ -366,8 +366,11 @@ function ColaboradorForm({ onSubmit, saving, error }) {
 }
 
 // ─── Formulario de empresa (solo super_admin) ────────────────────────────────
-function EmpresaForm({ onSubmit, saving, error }) {
-  const [nombre, setNombre] = useState('');
+// Mismo patrón que UsuarioForm: `initial`/`isEdit` para reusar el mismo
+// formulario en creación (POST /empresas) y edición (PUT
+// /empresas/{id_empresa}) en vez de duplicarlo.
+function EmpresaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
+  const [nombre, setNombre] = useState(initial.nombre ?? '');
 
   return (
     <form onSubmit={(e) => { e.preventDefault(); onSubmit({ nombre }); }}>
@@ -393,7 +396,7 @@ function EmpresaForm({ onSubmit, saving, error }) {
           fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'white',
           opacity: saving ? 0.6 : 1,
         }}>
-          {saving ? 'Creando…' : 'Crear afiliación'}
+          {saving ? 'Guardando…' : isEdit ? 'Guardar cambios' : 'Crear afiliación'}
         </button>
       </div>
     </form>
@@ -415,9 +418,11 @@ export default function UsersPage() {
   const esSuperAdmin = miRol === 'super_admin';
 
   const { usuarios, loading, mutating, mutError, crearUsuario, crearColaborador, editarUsuario, deshabilitarUsuario, habilitarUsuario, eliminarUsuario } = useGestionUsuarios();
-  const { empresas, loading: loadingEmpresas, mutating: mutandoEmpresa, mutError: mutErrorEmpresa, crearEmpresa } = useGestionEmpresas(esSuperAdmin);
+  const { empresas, loading: loadingEmpresas, mutating: mutandoEmpresa, mutError: mutErrorEmpresa, crearEmpresa, editarEmpresa } = useGestionEmpresas(esSuperAdmin);
   const [showCreateEmpresa, setShowCreateEmpresa] = useState(false);
   const [empresaFormError, setEmpresaFormError] = useState(null);
+  const [editEmpresa, setEditEmpresa] = useState(null);
+  const [confirmToggleEmpresa, setConfirmToggleEmpresa] = useState(null); // { empresa, activarDespues }
   // Perfil propio: única forma de conocer el empresa_id del usuario logueado
   // en el frontend (no viaja en el JWT/user de useAuth) — se usa solo para
   // el filtro cliente-side de abajo, defensa en profundidad.
@@ -527,6 +532,32 @@ export default function UsersPage() {
       setToast('Afiliación creada correctamente.');
     } catch (err) {
       setEmpresaFormError(err.message);
+    }
+  };
+
+  const handleEditarEmpresa = async (payload) => {
+    setEmpresaFormError(null);
+    try {
+      await editarEmpresa(editEmpresa.id_empresa, payload);
+      setEditEmpresa(null);
+      setToast('Afiliación actualizada correctamente.');
+    } catch (err) {
+      setEmpresaFormError(err.message);
+    }
+  };
+
+  const handleToggleEmpresa = async () => {
+    if (!confirmToggleEmpresa) return;
+    const { empresa, activarDespues } = confirmToggleEmpresa;
+    try {
+      await editarEmpresa(empresa.id_empresa, { activa: activarDespues });
+      setToast(activarDespues ? 'Afiliación activada correctamente.' : 'Afiliación desactivada correctamente.');
+    } catch {
+      // mutErrorEmpresa muestra el error en el banner sobre la tabla; el
+      // diálogo se cierra igual para que ese banner no quede tapado por el
+      // overlay.
+    } finally {
+      setConfirmToggleEmpresa(null);
     }
   };
 
@@ -806,13 +837,14 @@ export default function UsersPage() {
                       <th style={thBase}>Afiliación</th>
                       <th style={thBase}>Creada</th>
                       <th style={thBase}>Estado</th>
+                      <th style={thBase}>Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
                     {loadingEmpresas
                       ? Array.from({ length: 2 }).map((_, i) => (
                           <tr key={i}>
-                            {[70, 40, 30].map((w, j) => (
+                            {[70, 40, 30, 30].map((w, j) => (
                               <td key={j} style={{ padding: '10px 14px' }}>
                                 <div style={{ height: 13, borderRadius: 4, background: 'var(--border)', width: `${w}%`, animation: 'shimmer 1.5s infinite' }} />
                               </td>
@@ -836,11 +868,29 @@ export default function UsersPage() {
                                 {e.activa === false ? 'Inactiva' : 'Activa'}
                               </span>
                             </td>
+                            <td style={{ padding: '10px 14px' }}>
+                              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                                <button
+                                  onClick={() => { setEditEmpresa(e); setEmpresaFormError(null); }}
+                                  title="Editar nombre"
+                                  style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text-muted)' }}
+                                >
+                                  <Edit2 size={13} />
+                                </button>
+                                <button
+                                  onClick={() => setConfirmToggleEmpresa({ empresa: e, activarDespues: e.activa === false })}
+                                  title={e.activa === false ? 'Activar' : 'Desactivar'}
+                                  style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', color: e.activa === false ? '#16a34a' : '#dc2626' }}
+                                >
+                                  <Power size={13} />
+                                </button>
+                              </div>
+                            </td>
                           </tr>
                         ))
                     }
                     {!loadingEmpresas && empresas.length === 0 && (
-                      <tr><td colSpan={3} style={{ padding: 'var(--space-6)', textAlign: 'center', color: 'var(--text-faint)', fontSize: 'var(--text-sm)' }}>
+                      <tr><td colSpan={4} style={{ padding: 'var(--space-6)', textAlign: 'center', color: 'var(--text-faint)', fontSize: 'var(--text-sm)' }}>
                         No hay afiliaciones registradas
                       </td></tr>
                     )}
@@ -857,6 +907,29 @@ export default function UsersPage() {
         <Modal title="Nueva afiliación" onClose={() => setShowCreateEmpresa(false)}>
           <EmpresaForm onSubmit={handleCrearEmpresa} saving={mutandoEmpresa} error={empresaFormError} />
         </Modal>
+      )}
+
+      {/* ── Modal: Editar empresa ── */}
+      {editEmpresa && (
+        <Modal title="Editar afiliación" onClose={() => setEditEmpresa(null)}>
+          <EmpresaForm initial={editEmpresa} isEdit onSubmit={handleEditarEmpresa} saving={mutandoEmpresa} error={empresaFormError} />
+        </Modal>
+      )}
+
+      {/* ── Confirm: activar / desactivar empresa ── */}
+      {confirmToggleEmpresa && (
+        <ConfirmDialog
+          message={
+            confirmToggleEmpresa.activarDespues
+              ? `¿Activar la afiliación ${confirmToggleEmpresa.empresa.nombre}?`
+              : `¿Desactivar la afiliación ${confirmToggleEmpresa.empresa.nombre}?`
+          }
+          confirmLabel={confirmToggleEmpresa.activarDespues ? 'Activar' : 'Desactivar'}
+          danger={!confirmToggleEmpresa.activarDespues}
+          onConfirm={handleToggleEmpresa}
+          onCancel={() => setConfirmToggleEmpresa(null)}
+          loading={mutandoEmpresa}
+        />
       )}
 
       {/* ── Modal: Editar usuario ── */}
