@@ -8,6 +8,7 @@ import { useGestionEmpresas } from '../hooks/useEmpresas';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
 import { Building2 } from 'lucide-react';
+import ZonaMapPicker from '../components/ZonaMapPicker';
 
 // ─── RBAC multi-empresa ────────────────────────────────────────────────────
 // Jerarquía de creación de usuarios, espejo de CREATABLE_ROLES en
@@ -94,7 +95,7 @@ function SortableHeader({ label, col, sortCol, sortDir, onSort }) {
 }
 
 // ─── Modal wrapper ───────────────────────────────────────────────────────────
-function Modal({ title, onClose, children }) {
+function Modal({ title, onClose, children, maxWidth = 500 }) {
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 400,
@@ -106,7 +107,7 @@ function Modal({ title, onClose, children }) {
         // con ese fondo deja leerse lo de atrás -- --bg-card-solid es la
         // variante opaca para este caso.
         background: 'var(--bg-card-solid)', border: '1px solid var(--border)',
-        borderRadius: 12, width: '100%', maxWidth: 500,
+        borderRadius: 12, width: '100%', maxWidth,
         maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
@@ -403,9 +404,12 @@ function ColaboradorForm({ onSubmit, saving, error }) {
 // /empresas/{id_empresa}) en vez de duplicarlo.
 function EmpresaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
   const [nombre, setNombre] = useState(initial.nombre ?? '');
+  // Zonas: opcionales, van al final del formulario -- una empresa se puede
+  // crear sin dibujar su área todavía y agregarla después editando.
+  const [zonas, setZonas] = useState(initial.zonas ?? []);
 
   return (
-    <form onSubmit={(e) => { e.preventDefault(); onSubmit({ nombre }); }}>
+    <form onSubmit={(e) => { e.preventDefault(); onSubmit({ nombre, zonas }); }}>
       <div style={{ marginBottom: 'var(--space-3-5)' }}>
         <label htmlFor="empresa-nombre" style={labelStyle}>
           Nombre de la afiliación *
@@ -416,6 +420,14 @@ function EmpresaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
           placeholder="ej: Universidad del Norte" style={inputStyle}
         />
       </div>
+
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
+        <span style={{ ...labelStyle, display: 'block' }}>
+          Zona en el mapa (opcional)
+        </span>
+        <ZonaMapPicker zonas={zonas} onChange={setZonas} />
+      </div>
+
       {error && (
         <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, color: '#dc2626', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3-5)', display: 'flex', alignItems: 'center', gap: 6 }}>
           <AlertCircle size={13} /> {error}
@@ -936,14 +948,14 @@ export default function UsersPage() {
 
       {/* ── Modal: Crear empresa ── */}
       {showCreateEmpresa && (
-        <Modal title="Nueva afiliación" onClose={() => setShowCreateEmpresa(false)}>
+        <Modal title="Nueva afiliación" onClose={() => setShowCreateEmpresa(false)} maxWidth={620}>
           <EmpresaForm onSubmit={handleCrearEmpresa} saving={mutandoEmpresa} error={empresaFormError} />
         </Modal>
       )}
 
       {/* ── Modal: Editar empresa ── */}
       {editEmpresa && (
-        <Modal title="Editar afiliación" onClose={() => setEditEmpresa(null)}>
+        <Modal title="Editar afiliación" onClose={() => setEditEmpresa(null)} maxWidth={620}>
           <EmpresaForm initial={editEmpresa} isEdit onSubmit={handleEditarEmpresa} saving={mutandoEmpresa} error={empresaFormError} />
         </Modal>
       )}
