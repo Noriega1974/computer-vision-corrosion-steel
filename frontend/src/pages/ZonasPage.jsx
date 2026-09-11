@@ -152,11 +152,6 @@ function ZonaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // El botón "Dibujar zona" solo aparece (y el mapa solo se monta) una vez
-  // que hay una coordenada de referencia -- así el mapa arranca centrado ahí
-  // en vez de en un punto arbitrario de Colombia. Si ya venía con zonas
-  // guardadas (editar), el picker arranca visible de una.
-  const [mostrarMapaZona, setMostrarMapaZona] = useState((initial.zonas ?? []).length > 0);
   const [zonas, setZonas] = useState(initial.zonas ?? []);
   const hayCoordenadas = latitud !== '' && longitud !== '';
   const [validationError, setValidationError] = useState(null);
@@ -173,6 +168,10 @@ function ZonaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
     }
     if (tipoMaterial === 'otro' && !tipoMaterialOtro.trim()) {
       setValidationError('Especifica el tipo de material.');
+      return;
+    }
+    if (zonas.length === 0) {
+      setValidationError('Dibuja al menos una zona en el mapa.');
       return;
     }
     setValidationError(null);
@@ -310,35 +309,19 @@ function ZonaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
         )}
       </div>
 
-      {/* Dibujar zona: recién aparece con una coordenada de referencia -- el
-          mapa arranca centrado ahí en vez de en cualquier punto de Colombia.
-          Opcional: se puede crear la afiliación sin zona y agregarla
-          después editando. */}
+      {/* Zona: obligatoria. El mapa arranca centrado en la ubicación de
+          referencia de arriba. */}
       <div style={{ marginBottom: 'var(--space-3-5)' }}>
-        {!mostrarMapaZona ? (
-          <button
-            type="button"
-            onClick={() => setMostrarMapaZona(true)}
-            disabled={!hayCoordenadas}
-            title={!hayCoordenadas ? 'Marca una ubicación de referencia primero' : undefined}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '7px 14px', background: 'var(--bg-inset)', border: '1px solid var(--border)',
-              borderRadius: 7, cursor: hayCoordenadas ? 'pointer' : 'not-allowed',
-              opacity: hayCoordenadas ? 1 : 0.5,
-              fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)', color: 'var(--accent-amber)',
-            }}
-          >
-            Dibujar zona (opcional)
-          </button>
+        <span style={{ ...labelStyle, display: 'block' }}>Zona en el mapa *</span>
+        {hayCoordenadas ? (
+          <ZonaMapPicker
+            zonas={zonas} onChange={setZonas}
+            puntoReferencia={{ lat: Number(latitud), lng: Number(longitud) }}
+          />
         ) : (
-          <>
-            <span style={{ ...labelStyle, display: 'block' }}>Zona en el mapa</span>
-            <ZonaMapPicker
-              zonas={zonas} onChange={setZonas}
-              puntoReferencia={hayCoordenadas ? { lat: Number(latitud), lng: Number(longitud) } : null}
-            />
-          </>
+          <div style={{ padding: '10px 12px', background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>
+            Marca una ubicación de referencia arriba para dibujar la zona.
+          </div>
         )}
       </div>
 

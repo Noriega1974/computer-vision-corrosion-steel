@@ -20,12 +20,12 @@ Rutas API Gateway:
   POST   /colaborador                     → crear colaborador temporal con nickname (admin/super_admin)
   GET    /empresas                        → listar empresas (solo super_admin)
   POST   /empresas                        → crear empresa (solo super_admin); requiere
-                                             `departamento`/`ciudad`; acepta `tipo_material`
-                                             opcional (propiedad del sitio completo, no de cada
-                                             punto) y `zonas` opcional (lista de círculos
-                                             {lat,lng,radio_metros} que delimitan su área
-                                             geográfica); deja además un marcador vacío
-                                             `empresas/{id_empresa}/` en el bucket de imágenes
+                                             `departamento`/`ciudad` y `zonas` (1+ polígonos
+                                             {puntos: [{lat,lng}, ...]}, 3+ puntos cada uno);
+                                             acepta `tipo_material` opcional (propiedad del
+                                             sitio completo, no de cada punto); deja además un
+                                             marcador vacío `empresas/{id_empresa}/` en el
+                                             bucket de imágenes
                                              (no bloqueante)
   PUT    /empresas/{id_empresa}           → editar nombre, activar-desactivar, departamento,
                                              ciudad, tipo_material y/o `zonas` (solo super_admin)
@@ -124,20 +124,24 @@ def floats_to_decimal(obj):
 
 
 def _validar_zonas(zonas) -> tuple[int, str] | None:
-    """Valida `zonas` (lista opcional de círculos `{lat, lng, radio_metros}`
-    que delimitan el área geográfica de la empresa -- puede tener 0 o más,
-    para el caso de varias "manchas" separadas del mismo campus, mismo
-    patrón que `radio` en BLOQUES_CAMPUS de la app móvil). Devuelve
-    (codigo_http, mensaje) si NO es válido, o None si está todo bien."""
-    if not isinstance(zonas, list):
-        return 400, "zonas debe ser una lista de objetos {lat, lng, radio_metros}"
+    """Valida `zonas`: lista de polígonos {puntos: [{lat,lng}, ...]},
+    3+ puntos cada uno (mínimo para cerrar un área), 1+ polígonos (varias
+    "manchas" separadas si el campus está partido). Requerido, no opcional."""
+    if not isinstance(zonas, list) or not zonas:
+        return 400, "zonas debe tener al menos un polígono dibujado"
     for zona in zonas:
-        if not isinstance(zona, dict):
-            return 400, "cada zona debe ser un objeto {lat, lng, radio_metros}"
-        lat, lng, radio = zona.get("lat"), zona.get("lng"), zona.get("radio_metros")
-        for campo, valor in (("lat", lat), ("lng", lng), ("radio_metros", radio)):
-            if not isinstance(valor, (int, float)) or isinstance(valor, bool):
-                return 400, f"zonas[].{campo} debe ser numérico"
+        if not isinstance(zona, dict) or not isinstance(zona.get("puntos"), list):
+            return 400, "cada zona debe ser un objeto {puntos: [{lat,lng}, ...]}"
+        puntos = zona["puntos"]
+        if len(puntos) < 3:
+            return 400, "cada zona necesita al menos 3 puntos"
+        for p in puntos:
+            if not isinstance(p, dict):
+                return 400, "cada punto debe ser un objeto {lat, lng}"
+            for campo in ("lat", "lng"):
+                valor = p.get(campo)
+                if not isinstance(valor, (int, float)) or isinstance(valor, bool):
+                    return 400, f"puntos[].{campo} debe ser numérico"
     return None
 
 def _claims(event: dict) -> dict:
@@ -771,13 +775,11 @@ def lambda_handler(event: dict, context) -> dict:
             tipo_material = body.get("tipo_material")
             if tipo_material is not None and not isinstance(tipo_material, str):
                 return _respuesta(400, {"error": "tipo_material debe ser un texto"})
-            # zonas: opcional -- una empresa puede no tener zona dibujada
-            # todavía (lista vacía o ausente).
+            # zonas: requerido -- toda empresa necesita su área dibujada.
             zonas = body.get("zonas")
-            if zonas is not None:
-                error_zonas = _validar_zonas(zonas)
-                if error_zonas:
-                    return _respuesta(error_zonas[0], {"error": error_zonas[1]})
+            error_zonas = _validar_zonas(zonas)
+            if error_zonas:
+                return _respuesta(error_zonas[0], {"error": error_zonas[1]})
             # Evitar duplicados obvios por nombre (case-insensitive) — un
             # scan es aceptable acá: se espera un puñado de empresas, no miles.
             existentes = tabla_empresas.scan().get("Items", [])
@@ -795,9 +797,8 @@ def lambda_handler(event: dict, context) -> dict:
             }
             if tipo_material is not None:
                 item["tipo_material"] = tipo_material
-            if zonas is not None:
-                item["zonas"] = zonas
-            # lat/lng/radio_metros de zonas vienen como float desde el
+            item["zonas"] = zonas
+            # lat/lng de zonas vienen como float desde el
             # frontend — DynamoDB requiere Decimal.
             item = floats_to_decimal(item)
             tabla_empresas.put_item(Item=item)
@@ -873,7 +874,7 @@ def lambda_handler(event: dict, context) -> dict:
 
             expr    = "SET " + ", ".join(f"#{k} = :{k}" for k in campos)
             nombres = {f"#{k}": k for k in campos}
-            # lat/lng/radio_metros de zonas vienen como float desde el
+            # lat/lng de zonas vienen como float desde el
             # frontend — DynamoDB requiere Decimal.
             valores = floats_to_decimal({f":{k}": v for k, v in campos.items()})
             tabla_empresas.update_item(
