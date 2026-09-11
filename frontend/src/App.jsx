@@ -18,7 +18,6 @@ const DashboardPage       = lazy(() => import('./pages/DashboardPage'));
 const UploadPage          = lazy(() => import('./pages/UploadPage'));
 const GaleriaPage         = lazy(() => import('./pages/GaleriaPage'));
 const MedicionDetailPage  = lazy(() => import('./pages/MedicionDetailPage'));
-const PlantsPage          = lazy(() => import('./pages/PlantsPage'));
 const BloquesPage         = lazy(() => import('./pages/BloquesPage'));
 const UsersPage           = lazy(() => import('./pages/UsersPage'));
 const ProfilePage         = lazy(() => import('./pages/ProfilePage'));
@@ -54,13 +53,12 @@ export default function App() {
                 <Route path="/upload" element={
                   <RoleRoute roles={['super_admin', 'admin', 'tecnico']}><UploadPage /></RoleRoute>
                 } />
-                <Route path="/plantas" element={
-                  <RoleRoute roles={['super_admin', 'admin', 'tecnico']}><PlantsPage /></RoleRoute>
-                } />
-                {/* Bloques (carpetas dentro de una empresa): gestión exclusiva de
-                    admin/super_admin -- tecnico/cliente solo los ven resueltos como
-                    bloque_nombre en puntos/mediciones, no administran la lista. */}
-                <Route path="/bloques" element={
+                {/* Puntos de monitoreo (antes "Bloques"/"Ubicaciones", fusionados en
+                    una sola entidad): gestión exclusiva de admin/super_admin --
+                    tecnico/cliente solo los ven resueltos como bloque_nombre en
+                    mediciones, no administran la lista (el backend exige
+                    admin/super_admin para POST/PUT/DELETE /bloques). */}
+                <Route path="/puntos" element={
                   <RoleRoute roles={['super_admin', 'admin']}><BloquesPage /></RoleRoute>
                 } />
                 {/* tecnico entra para dar de alta un cliente (ver CREATABLE_ROLES) aunque

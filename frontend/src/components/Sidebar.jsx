@@ -4,7 +4,6 @@ import {
   LayoutDashboard,
   LayoutGrid,
   MapPin,
-  Boxes,
   Users,
   Settings,
   LogOut,
@@ -48,16 +47,9 @@ const NAV_ITEMS = [
   { divider: true },
 
   {
-    path: '/plantas',
+    path: '/puntos',
     icon: MapPin,
-    label: 'Ubicaciones',
-    roles: ['super_admin', 'admin', 'tecnico'],
-  },
-
-  {
-    path: '/bloques',
-    icon: Boxes,
-    label: 'Bloques',
+    label: 'Puntos',
     roles: ['super_admin', 'admin'],
   },
 

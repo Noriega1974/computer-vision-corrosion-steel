@@ -8,7 +8,7 @@ const ROUTE_TITLES = {
   '/dashboard':    'Dashboard',
   '/upload':       'Nueva Medición',
   '/galeria':      'Galería',
-  '/plantas':      'Plantas',
+  '/puntos':       'Puntos',
   '/usuarios':     'Usuarios',
   '/configuracion':'Configuración',
   '/deteccion-ia': 'Detección IA',

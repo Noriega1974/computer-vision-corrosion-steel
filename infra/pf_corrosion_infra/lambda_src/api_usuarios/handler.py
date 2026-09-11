@@ -16,10 +16,13 @@ Rutas API Gateway:
   DELETE /usuarios/{id_usuario}           → deshabilitar usuario (admin/super_admin, con alcance de empresa)
   POST   /colaborador                     → crear colaborador temporal con nickname (admin/super_admin)
   GET    /empresas                        → listar empresas (solo super_admin)
-  POST   /empresas                        → crear empresa (solo super_admin); deja además un
+  POST   /empresas                        → crear empresa (solo super_admin); acepta `zonas`
+                                             opcional (lista de círculos {lat,lng,radio_metros}
+                                             que delimitan su área geográfica); deja además un
                                              marcador vacío `empresas/{id_empresa}/` en el bucket
                                              de imágenes (no bloqueante)
-  PUT    /empresas/{id_empresa}           → editar nombre y/o activar-desactivar empresa (solo super_admin)
+  PUT    /empresas/{id_empresa}           → editar nombre, activar-desactivar y/o `zonas` (solo
+                                             super_admin)
 
 Evento directo (EventBridge cron diario):
   Sin httpMethod → ejecuta limpieza de colaboradores vencidos
@@ -41,6 +44,7 @@ import logging
 import os
 import re
 import uuid
+from decimal import Decimal
 from datetime import datetime, timezone, timedelta
 
 import boto3
@@ -82,12 +86,53 @@ CREATABLE_ROLES = {
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
+def _json_default(obj):
+    """Serializador de respaldo para json.dumps: los Decimal (p. ej. los de
+    `zonas` en empresas) se devuelven como número, todo lo demás sigue
+    cayendo a str() como antes."""
+    if isinstance(obj, Decimal):
+        return float(obj)
+    return str(obj)
+
+
 def _respuesta(codigo: int, cuerpo) -> dict:
     return {
         "statusCode": codigo,
         "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
-        "body": json.dumps(cuerpo, ensure_ascii=False, default=str),
+        "body": json.dumps(cuerpo, ensure_ascii=False, default=_json_default),
     }
+
+
+def floats_to_decimal(obj):
+    """Convierte recursivamente floats a Decimal para compatibilidad con
+    DynamoDB (usado para `zonas` en empresas). Mismo helper que ya existe en
+    api_puntos/handler.py y lambda_src/inference/handler.py -- no hay módulo
+    compartido entre lambdas en este proyecto."""
+    if isinstance(obj, list):
+        return [floats_to_decimal(x) for x in obj]
+    elif isinstance(obj, dict):
+        return {k: floats_to_decimal(v) for k, v in obj.items()}
+    elif isinstance(obj, float):
+        return Decimal(str(obj))
+    return obj
+
+
+def _validar_zonas(zonas) -> tuple[int, str] | None:
+    """Valida `zonas` (lista opcional de círculos `{lat, lng, radio_metros}`
+    que delimitan el área geográfica de la empresa -- puede tener 0 o más,
+    para el caso de varias "manchas" separadas del mismo campus, mismo
+    patrón que `radio` en BLOQUES_CAMPUS de la app móvil). Devuelve
+    (codigo_http, mensaje) si NO es válido, o None si está todo bien."""
+    if not isinstance(zonas, list):
+        return 400, "zonas debe ser una lista de objetos {lat, lng, radio_metros}"
+    for zona in zonas:
+        if not isinstance(zona, dict):
+            return 400, "cada zona debe ser un objeto {lat, lng, radio_metros}"
+        lat, lng, radio = zona.get("lat"), zona.get("lng"), zona.get("radio_metros")
+        for campo, valor in (("lat", lat), ("lng", lng), ("radio_metros", radio)):
+            if not isinstance(valor, (int, float)) or isinstance(valor, bool):
+                return 400, f"zonas[].{campo} debe ser numérico"
+    return None
 
 def _claims(event: dict) -> dict:
     return event.get("requestContext", {}).get("authorizer", {}).get("claims", {})
@@ -696,6 +741,13 @@ def lambda_handler(event: dict, context) -> dict:
             nombre = (body.get("nombre") or "").strip()
             if not nombre:
                 return _respuesta(400, {"error": "nombre es requerido"})
+            # zonas: opcional -- una empresa puede no tener zona dibujada
+            # todavía (lista vacía o ausente).
+            zonas = body.get("zonas")
+            if zonas is not None:
+                error_zonas = _validar_zonas(zonas)
+                if error_zonas:
+                    return _respuesta(error_zonas[0], {"error": error_zonas[1]})
             # Evitar duplicados obvios por nombre (case-insensitive) — un
             # scan es aceptable acá: se espera un puñado de empresas, no miles.
             existentes = tabla_empresas.scan().get("Items", [])
@@ -709,6 +761,11 @@ def lambda_handler(event: dict, context) -> dict:
                 "fecha_creacion": datetime.now(timezone.utc).isoformat(),
                 "creado_por": creador.get("id_usuario", ""),
             }
+            if zonas is not None:
+                item["zonas"] = zonas
+            # lat/lng/radio_metros de zonas vienen como float desde el
+            # frontend — DynamoDB requiere Decimal.
+            item = floats_to_decimal(item)
             tabla_empresas.put_item(Item=item)
             # Marcador de "carpeta" de la empresa en S3 (objeto de 0 bytes).
             # Las mediciones se guardan bajo empresas/{empresa_id}/{bloque}/...
@@ -735,8 +792,9 @@ def lambda_handler(event: dict, context) -> dict:
             body   = json.loads(event.get("body") or "{}")
             nombre = body.get("nombre")
             activa = body.get("activa")
-            if nombre is None and activa is None:
-                return _respuesta(400, {"error": "Debes indicar nombre y/o activa para actualizar"})
+            zonas  = body.get("zonas")
+            if nombre is None and activa is None and zonas is None:
+                return _respuesta(400, {"error": "Debes indicar nombre, activa y/o zonas para actualizar"})
 
             campos = {}
             if nombre is not None:
@@ -758,10 +816,17 @@ def lambda_handler(event: dict, context) -> dict:
                 if not isinstance(activa, bool):
                     return _respuesta(400, {"error": "activa debe ser un booleano"})
                 campos["activa"] = activa
+            if zonas is not None:
+                error_zonas = _validar_zonas(zonas)
+                if error_zonas:
+                    return _respuesta(error_zonas[0], {"error": error_zonas[1]})
+                campos["zonas"] = zonas
 
             expr    = "SET " + ", ".join(f"#{k} = :{k}" for k in campos)
             nombres = {f"#{k}": k for k in campos}
-            valores = {f":{k}": v for k, v in campos.items()}
+            # lat/lng/radio_metros de zonas vienen como float desde el
+            # frontend — DynamoDB requiere Decimal.
+            valores = floats_to_decimal({f":{k}": v for k, v in campos.items()})
             tabla_empresas.update_item(
                 Key={"id_empresa": id_empresa},
                 UpdateExpression=expr,

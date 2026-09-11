@@ -1,37 +1,34 @@
 """
 pf-corrosion - Lambda de inferencia YOLOv8-seg ONNX.
 
-Recibe una imagen en base64 + información de ubicación, resuelve o crea el
-punto de medición automáticamente (flujo bottom-up), corre inferencia ONNX,
-guarda imagen + resultado en S3 y registra la medición en DynamoDB.
+Recibe una imagen en base64 + el `bloque_id` de un bloque YA EXISTENTE
+(elegido por el usuario de una lista), corre inferencia ONNX, guarda imagen
++ resultado en S3 y registra la medición en DynamoDB. Ya no se crea (ni se
+resuelve por clave lógica) ningún punto/bloque al subir una foto -- el
+bloque tiene que existir de antes (ver POST/PUT /bloques en
+api_puntos/handler.py).
 
 Almacenamiento: tabla fusionada puntos+mediciones (ver CorriaStorageStack).
-El registro del punto usa sort key constante "METADATA"; la medición usa
-"MED#{timestamp}".
+Cada medición se escribe con `id_punto` = el `id_bloque` validado (mismo
+atributo de siempre, ahora con forma `BLQ-...` en vez de `PT-...` -- la
+tabla no le da ningún significado especial a ese valor, es solo un string)
+y `sk = "MED#{timestamp}"`. Ya no se escribe ningún ítem con `sk="METADATA"`
+desde esta Lambda -- esa fila vive en la tabla `bloques`, no acá.
 
 Seguridad: esta función tiene permisos sobre la tabla fusionada y el bucket
 S3 de imágenes, más un grant de SOLO LECTURA sobre la tabla de usuarios
 (RBAC multi-empresa: necesita resolver el rol/empresa_id de quien sube la
-medición) — sigue sin tener ningún permiso de Cognito ni de escritura sobre
-`usuarios` (a diferencia del sistema original, que le otorgaba permisos de
-más).
+medición) y sobre la tabla `bloques` (validar el bloque elegido) — sigue sin
+tener ningún permiso de Cognito ni de escritura sobre `usuarios` (a
+diferencia del sistema original, que le otorgaba permisos de más).
 
-RBAC multi-empresa: `empresa_id` de cada punto/medición se resuelve SIEMPRE
-del usuario autenticado (`_usuario_actual`, replicado de
-api_usuarios/handler.py — no hay módulo compartido entre lambdas), nunca de
-un campo del body. El rol `cliente` no puede subir mediciones (403) — solo
-super_admin/admin/tecnico. La búsqueda de puntos por clave lógica también
-filtra por empresa (ver _buscar_por_clave_logica) — sin eso, una sede con el
-mismo nombre en dos empresas hacía que la medición cayera en el punto de la
-empresa equivocada.
+RBAC multi-empresa: `empresa_id` de cada medición se resuelve SIEMPRE del
+bloque validado (nunca de un campo del body). El rol `cliente` no puede
+subir mediciones (403) — solo super_admin/admin/tecnico. El bloque elegido
+debe pertenecer a la empresa de quien sube (o el que sube es super_admin) y
+estar activo (ver _validar_bloque).
 
-Bloques: el body acepta `bloque_id` opcional; solo se usa cuando hay que
-crear un punto nuevo (modos planta_nueva / coordenadas_libres) y se valida
-contra la tabla `bloques` (existe, misma empresa, activo) ANTES de subir
-nada a S3. La medición denormaliza `bloque_id` + `bloque_nombre` (congelado)
-del punto.
-
-Layout S3: `empresas/{empresa_id}/{bloque_id|sin-bloque}/{id_punto}/{id_medicion}[_thumb].jpg|.json`.
+Layout S3: `empresas/{empresa_id}/{bloque_id}/{id_medicion}[_thumb].jpg|.json`.
 Reemplaza el viejo `raw/{id_punto}/...` + `resultados/{id_punto}/...`; las
 keys anteriores NO se migran — cada medición guarda las suyas en DynamoDB y
 ningún consumidor deriva una key de otra por string.
@@ -49,7 +46,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import boto3
-from boto3.dynamodb.conditions import Attr, Key
+from boto3.dynamodb.conditions import Key
 from PIL import Image
 import numpy as np
 import onnxruntime as ort
@@ -58,7 +55,6 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 BUCKET_NAME = os.environ["BUCKET_NAME"]
-TABLA_PUNTOS = os.environ["TABLA_PUNTOS"]
 TABLA_MEDICIONES = os.environ["TABLA_MEDICIONES"]
 TABLA_USUARIOS = os.environ["TABLA_USUARIOS"]
 TABLA_BLOQUES = os.environ["TABLA_BLOQUES"]
@@ -70,13 +66,11 @@ CONF_MINIMA = 0.4
 # entrenado y validado a 1024px -- antes era 640. Todo lo que sigue en este
 # archivo deriva el tamano de IMGSZ, asi que no hay mas literales que tocar.
 IMGSZ = 1024
-SK_METADATA = "METADATA"
 
 _sesion_onnx: ort.InferenceSession | None = None
 
 s3 = boto3.client("s3", region_name=REGION)
 dynamodb = boto3.resource("dynamodb", region_name=REGION)
-tabla_puntos = dynamodb.Table(TABLA_PUNTOS)
 tabla_mediciones = dynamodb.Table(TABLA_MEDICIONES)
 tabla_usuarios = dynamodb.Table(TABLA_USUARIOS)
 tabla_bloques = dynamodb.Table(TABLA_BLOQUES)
@@ -134,191 +128,27 @@ def _usuario_actual(event: dict) -> dict | None:
     return items[0] if items else None
 
 
-# ── Resolución de punto ──────────────────────────────────────────────────────
+# ── Validación de bloque ─────────────────────────────────────────────────────
 
-def _buscar_por_clave_logica(clave_logica: str, empresa_id: str | None, es_super_admin: bool = False) -> dict | None:
-    """Busca un punto existente por su clave lógica (sede-ciudad, o
-    libre-lat-lng) DENTRO de la empresa indicada.
-
-    Leak que cierra el filtro por empresa: `clave_logica` no es única entre
-    empresas — dos empresas distintas pueden tener una sede "Planta 1" en la
-    misma ciudad. Sin filtrar, los modos planta_nueva/coordenadas_libres
-    reusaban el primer punto con esa clave aunque fuera de OTRA empresa, y
-    como la medición denormaliza el `empresa_id` del punto (ver
-    lambda_handler), terminaba escribiendo datos de un tenant dentro de
-    otro — y quedaban visibles para esa otra empresa en GET /mediciones.
-
-    super_admin (empresa_id None + es_super_admin True) conserva el
-    comportamiento global de antes: no tiene empresa propia con la cual
-    filtrar.
-    """
-    kwargs = dict(
-        IndexName="ClaveLogicaIndex",
-        KeyConditionExpression=Key("clave_logica").eq(clave_logica),
-        Limit=1,
-    )
-    if not es_super_admin:
-        # Ojo: con FilterExpression, `Limit` se aplica ANTES del filtro, así
-        # que hay que paginar hasta encontrar uno de la empresa correcta en
-        # vez de quedarse con la primera página vacía.
-        del kwargs["Limit"]
-        kwargs["FilterExpression"] = Attr("empresa_id").eq(empresa_id)
-    while True:
-        resp = tabla_puntos.query(**kwargs)
-        items = resp.get("Items", [])
-        if items:
-            return items[0]
-        if "LastEvaluatedKey" not in resp:
-            return None
-        kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
-
-
-def _crear_punto(datos: dict) -> dict:
-    item = floats_to_decimal(datos)
-    tabla_puntos.put_item(Item=item)
-    logger.info("Punto creado: %s (%s)", datos["id_punto"], datos.get("clave_logica"))
-    return datos
-
-
-def _validar_bloque(bloque_id, empresa_id: str | None) -> None:
-    """Valida el `bloque_id` opcional antes de crear un punto: debe ser
-    string, existir, pertenecer a `empresa_id` y estar activo. Lanza
-    LookupError (→404) si no existe, ValueError (→400) en el resto — mismo
-    mapeo de excepciones que usa _resolver_punto."""
+def _validar_bloque(bloque_id, empresa_id_creador: str | None, es_super_admin: bool = False) -> dict:
+    """Valida el `bloque_id` (requerido) de POST /medicion: debe ser string,
+    existir (404), pertenecer a la empresa de quien sube -- salvo
+    super_admin, que puede subir a nombre de cualquier empresa -- (400) y
+    estar activo (400). Lanza LookupError (→404) si no existe, ValueError
+    (→400) en el resto -- mismo mapeo de excepciones que usa el resto del
+    handler. Devuelve el ítem del bloque (lo necesita el caller para
+    denormalizar empresa_id/bloque_nombre en la medición y resolver
+    coordenadas para el clima)."""
     if not isinstance(bloque_id, str) or not bloque_id.strip():
         raise ValueError("bloque_id debe ser un texto no vacío")
     bloque = tabla_bloques.get_item(Key={"id_bloque": bloque_id}).get("Item")
     if not bloque:
         raise LookupError(f"Bloque {bloque_id} no encontrado")
-    if bloque.get("empresa_id") != empresa_id:
+    if not es_super_admin and bloque.get("empresa_id") != empresa_id_creador:
         raise ValueError("El bloque pertenece a otra empresa")
     if bloque.get("activo") is False:
-        raise ValueError("El bloque está inactivo. Actívalo antes de asignarle puntos")
-
-
-def _resolver_punto(
-    ubicacion: dict, ts: str, tomado_por_id: str, empresa_id: str | None,
-    es_super_admin: bool = False, tomado_por_nombre: str = "",
-    bloque_id: str | None = None,
-) -> tuple[str, dict]:
-    """Resuelve (o crea) el punto al que pertenece la medición.
-
-    `empresa_id` es el de quien sube; `es_super_admin` lo habilita a operar
-    fuera de una empresa propia. Ambos alcanzan también a la búsqueda por
-    clave lógica (ver _buscar_por_clave_logica), que sin ese filtro reusaba
-    puntos de otras empresas.
-
-    `bloque_id` (opcional) solo aplica cuando se CREA un punto nuevo
-    (planta_nueva / coordenadas_libres); en planta_existente, y cuando se
-    reusa un punto ya existente por clave lógica, el punto ya tiene el suyo
-    y el del body se ignora.
-    """
-    modo = ubicacion.get("modo")
-
-    if modo == "planta_existente":
-        id_punto = ubicacion.get("id_punto")
-        if not id_punto:
-            raise ValueError("modo=planta_existente requiere id_punto")
-        resp = tabla_puntos.get_item(Key={"id_punto": id_punto, "sk": SK_METADATA})
-        punto = resp.get("Item")
-        if not punto:
-            raise LookupError(f"Punto {id_punto} no encontrado")
-        # Ver/usar datos de otra empresa es exclusivo de super_admin — un
-        # 404 (no un 403) para no revelar que el punto existe.
-        if not es_super_admin and punto.get("empresa_id") != empresa_id:
-            raise LookupError(f"Punto {id_punto} no encontrado")
-        return id_punto, punto
-
-    elif modo == "planta_nueva":
-        sede = ubicacion.get("sede", "")
-        ciudad = ubicacion.get("ciudad", "")
-        if not sede or not ciudad:
-            raise ValueError("modo=planta_nueva requiere sede y ciudad")
-
-        clave_logica = f"{sede}-{ciudad}"
-        existente = _buscar_por_clave_logica(clave_logica, empresa_id, es_super_admin)
-        if existente:
-            return existente["id_punto"], existente
-
-        if bloque_id is not None:
-            _validar_bloque(bloque_id, empresa_id)
-
-        coordenadas = ubicacion.get("coordenadas", {})
-        nuevo = {
-            "id_punto": f"PT-{uuid.uuid4()}",
-            "sk": SK_METADATA,
-            "clave_logica": clave_logica,
-            "coordenadas": coordenadas,
-            "ciudad": ciudad,
-            "departamento": ubicacion.get("departamento", ""),
-            "tipo_material": ubicacion.get("tipo_material", ""),
-            "tipo_estructura": ubicacion.get("tipo_estructura", "otro"),
-            "sede": sede,
-            "fecha_creacion": ts,
-            "timestamp": ts,
-        }
-        # GSI de búsqueda inversa por usuario (usuario_id/timestamp) — ver
-        # CorriaStorageStack. DynamoDB rechaza strings vacíos como clave de
-        # GSI, así que "usuario_id" solo se agrega cuando hay un usuario
-        # real (sparse index); si tomado_por_id viene vacío, el punto
-        # simplemente no aparece en ese índice, pero el resto del ítem se
-        # guarda igual.
-        if tomado_por_id:
-            nuevo["creado_por_id"] = tomado_por_id
-            nuevo["usuario_id"] = tomado_por_id
-            if tomado_por_nombre:
-                nuevo["creado_por_nombre"] = tomado_por_nombre
-        # empresa_id del recurso SIEMPRE se resuelve del creador autenticado
-        # (ver lambda_handler), nunca de un campo del body/ubicacion.
-        if empresa_id:
-            nuevo["empresa_id"] = empresa_id
-        if bloque_id is not None:
-            nuevo["bloque_id"] = bloque_id
-        _crear_punto(nuevo)
-        return nuevo["id_punto"], nuevo
-
-    elif modo == "coordenadas_libres":
-        lat = ubicacion.get("latitud")
-        lng = ubicacion.get("longitud")
-        if lat is None or lng is None:
-            raise ValueError("modo=coordenadas_libres requiere latitud y longitud")
-
-        descripcion = ubicacion.get("descripcion", f"Punto {lat},{lng}")
-        clave_logica = f"libre-{round(lat, 4)}-{round(lng, 4)}"
-        existente = _buscar_por_clave_logica(clave_logica, empresa_id, es_super_admin)
-        if existente:
-            return existente["id_punto"], existente
-
-        if bloque_id is not None:
-            _validar_bloque(bloque_id, empresa_id)
-
-        nuevo = {
-            "id_punto": f"PT-{uuid.uuid4()}",
-            "sk": SK_METADATA,
-            "clave_logica": clave_logica,
-            "coordenadas": {"lat": lat, "lng": lng},
-            "ciudad": "",
-            "departamento": "",
-            "tipo_material": "",
-            "tipo_estructura": "otro",
-            "sede": descripcion,
-            "fecha_creacion": ts,
-            "timestamp": ts,
-        }
-        if tomado_por_id:
-            nuevo["creado_por_id"] = tomado_por_id
-            nuevo["usuario_id"] = tomado_por_id
-            if tomado_por_nombre:
-                nuevo["creado_por_nombre"] = tomado_por_nombre
-        if empresa_id:
-            nuevo["empresa_id"] = empresa_id
-        if bloque_id is not None:
-            nuevo["bloque_id"] = bloque_id
-        _crear_punto(nuevo)
-        return nuevo["id_punto"], nuevo
-
-    else:
-        raise ValueError(f"modo de ubicación inválido: '{modo}'")
+        raise ValueError("El bloque está inactivo. Actívalo antes de subir mediciones")
+    return bloque
 
 
 # ── Inferencia ONNX ──────────────────────────────────────────────────────────
@@ -629,21 +459,17 @@ def lambda_handler(event: dict, context) -> dict:
 
         imagen_b64       = body.get("imagen_base64")
         fuente           = body.get("fuente", "movil")
-        ubicacion        = body.get("ubicacion")
+        bloque_id_body   = body.get("bloque_id")
         inferencia_local = body.get("inferencia_local", None)
         latitud_real     = body.get("latitud_real")
         longitud_real    = body.get("longitud_real")
         notas            = body.get("notas", "")
         timestamp_custom = body.get("timestamp_medicion")  # YYYY-MM-DD, opcional
-        # Solo se usa si hay que CREAR un punto (planta_nueva /
-        # coordenadas_libres); con planta_existente el punto ya tiene su
-        # bloque y este campo se ignora.
-        bloque_id_body   = body.get("bloque_id")
 
         if not imagen_b64:
             return _respuesta(400, {"error": "imagen_base64 es requerido"})
-        if not ubicacion or not ubicacion.get("modo"):
-            return _respuesta(400, {"error": "ubicacion.modo es requerido"})
+        if not bloque_id_body:
+            return _respuesta(400, {"error": "bloque_id es requerido"})
 
         if timestamp_custom:
             try:
@@ -661,22 +487,16 @@ def lambda_handler(event: dict, context) -> dict:
         tomado_por_nombre = creador.get("nombre", "") if creador else ""
 
         try:
-            id_punto, info_punto = _resolver_punto(
-                ubicacion, ts, tomado_por_id, empresa_id_creador, es_super_admin,
-                tomado_por_nombre=tomado_por_nombre,
-                bloque_id=bloque_id_body if ubicacion.get("modo") != "planta_existente" else None,
-            )
+            bloque = _validar_bloque(bloque_id_body, empresa_id_creador, es_super_admin)
         except LookupError as e:
             return _respuesta(404, {"error": str(e)})
         except ValueError as e:
             return _respuesta(400, {"error": str(e)})
 
-        coords = info_punto.get("coordenadas", {})
+        coords = bloque.get("coordenadas", {})
         # OJO: chequeo por None, no por "truthy" — lat=0.0 (línea del
         # ecuador) es una coordenada válida y con `if coords.get("lat")`
         # Python la trata como falsy y se salta el clima en silencio.
-        if coords.get("lat") is None and info_punto.get("latitud") is not None:
-            coords = {"lat": float(info_punto["latitud"]), "lng": float(info_punto.get("longitud", 0))}
         fecha_clima = timestamp_custom if timestamp_custom else None
         clima = _obtener_clima(coords.get("lat"), coords.get("lng"), fecha_clima) if coords.get("lat") is not None else None
 
@@ -687,16 +507,15 @@ def lambda_handler(event: dict, context) -> dict:
 
         id_medicion       = f"MED-{uuid.uuid4()}"
         # Layout S3 por empresa/bloque: los objetos quedan agrupados igual
-        # que la jerarquía de la app (empresa → bloque → punto → medición),
-        # así una carpeta de S3 se puede acotar por tenant. El empresa_id es
-        # el del PUNTO, no el del uploader (un super_admin puede subir a
-        # nombre de otra empresa). Las keys viejas (`raw/`, `resultados/`) NO
-        # se migran: cada medición guarda las suyas en DynamoDB y se leen de
-        # ahí (ver api_mediciones/_agregar_url_imagen, que nunca deriva una
-        # key de otra por string).
-        empresa_key = info_punto.get("empresa_id") or "sin-empresa"
-        bloque_key  = info_punto.get("bloque_id") or "sin-bloque"
-        prefijo_s3        = f"empresas/{empresa_key}/{bloque_key}/{id_punto}"
+        # que la jerarquía de la app (empresa → bloque → medición), así una
+        # carpeta de S3 se puede acotar por tenant. El empresa_id es el del
+        # BLOQUE, no el del uploader (un super_admin puede subir a nombre de
+        # otra empresa). Las keys viejas (`raw/`, `resultados/`) NO se
+        # migran: cada medición guarda las suyas en DynamoDB y se leen de ahí
+        # (ver api_mediciones/_agregar_url_imagen, que nunca deriva una key
+        # de otra por string).
+        empresa_key = bloque.get("empresa_id") or "sin-empresa"
+        prefijo_s3        = f"empresas/{empresa_key}/{bloque_id_body}"
         s3_key_imagen     = f"{prefijo_s3}/{id_medicion}.jpg"
         s3_key_thumbnail  = f"{prefijo_s3}/{id_medicion}_thumb.jpg"
         s3_key_resultado  = f"{prefijo_s3}/{id_medicion}.json"
@@ -741,7 +560,7 @@ def lambda_handler(event: dict, context) -> dict:
 
             resultado_completo = {
                 "id_medicion":    id_medicion,
-                "id_punto":       id_punto,
+                "id_punto":       bloque_id_body,
                 "timestamp":      ts,
                 "fuente":         fuente,
                 **resultado_ml,
@@ -763,8 +582,11 @@ def lambda_handler(event: dict, context) -> dict:
             )
             s3_resultado_escrito = True
 
+            # `id_punto` sigue siendo el nombre del atributo de siempre en
+            # esta tabla (no se toca el schema) -- ahora vale el `id_bloque`
+            # validado arriba, con forma `BLQ-...` en vez de `PT-...`.
             item_db = {
-                "id_punto":         id_punto,
+                "id_punto":         bloque_id_body,
                 "sk":               f"MED#{ts}",
                 "timestamp":        ts,
                 "tipo_registro":    "medicion",
@@ -795,25 +617,19 @@ def lambda_handler(event: dict, context) -> dict:
                 item_db["longitud_real"] = Decimal(str(longitud_real))
             if clima:
                 item_db["clima"] = floats_to_decimal(clima)
-            # Denormalize punto info for display without extra lookup
-            item_db["sede"]    = info_punto.get("sede", "")
-            item_db["ciudad"]  = info_punto.get("ciudad", "")
-            # empresa_id de la medición: la del punto al que pertenece (no
+            # empresa_id de la medición: la del bloque al que pertenece (no
             # la del uploader — relevante si un super_admin sube a nombre de
             # una empresa ajena) — denormalizado para que api_mediciones/
-            # api_alertas puedan filtrar sin un lookup extra al punto.
-            if info_punto.get("empresa_id"):
-                item_db["empresa_id"] = info_punto.get("empresa_id")
-            # Igual que empresa_id: bloque del PUNTO, denormalizado en la
-            # medición. `bloque_nombre` queda congelado (como
-            # creado_por_nombre) — si después renombran el bloque, el
-            # histórico sigue mostrando cómo se llamaba entonces. Si el punto
-            # no tiene bloque, no se escribe ninguno de los dos campos.
-            if info_punto.get("bloque_id"):
-                item_db["bloque_id"] = info_punto["bloque_id"]
-                bloque = tabla_bloques.get_item(Key={"id_bloque": info_punto["bloque_id"]}).get("Item")
-                if bloque and bloque.get("nombre"):
-                    item_db["bloque_nombre"] = bloque["nombre"]
+            # api_alertas puedan filtrar sin un lookup extra al bloque.
+            if bloque.get("empresa_id"):
+                item_db["empresa_id"] = bloque.get("empresa_id")
+            # bloque_id + bloque_nombre denormalizados en la medición.
+            # `bloque_nombre` queda congelado (como creado_por_nombre) — si
+            # después renombran el bloque, el histórico sigue mostrando cómo
+            # se llamaba entonces.
+            item_db["bloque_id"] = bloque_id_body
+            if bloque.get("nombre"):
+                item_db["bloque_nombre"] = bloque["nombre"]
 
             tabla_mediciones.put_item(Item=item_db)
         except Exception as e:
@@ -835,8 +651,8 @@ def lambda_handler(event: dict, context) -> dict:
             raise
 
         logger.info(
-            "Medición %s registrada: punto=%s, nivel=%d, área=%.1f%%, detecciones=%d",
-            id_medicion, id_punto,
+            "Medición %s registrada: bloque=%s, nivel=%d, área=%.1f%%, detecciones=%d",
+            id_medicion, bloque_id_body,
             resultado_ml["nivel_corrosion"],
             resultado_ml["area_corroida_pct"],
             len(resultado_ml["detecciones"]),
@@ -844,12 +660,11 @@ def lambda_handler(event: dict, context) -> dict:
 
         return _respuesta(200, {
             **resultado_completo,
-            "punto_info": {
-                "id_punto":    id_punto,
-                "sede":        info_punto.get("sede", ""),
-                "ciudad":      info_punto.get("ciudad", ""),
-                "coordenadas": info_punto.get("coordenadas", {}),
-                "clave_logica": info_punto.get("clave_logica", ""),
+            "bloque_info": {
+                "id_bloque":   bloque_id_body,
+                "nombre":      bloque.get("nombre", ""),
+                "ciudad":      bloque.get("ciudad", ""),
+                "coordenadas": bloque.get("coordenadas", {}),
             },
         })
 

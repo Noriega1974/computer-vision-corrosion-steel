@@ -1,19 +1,22 @@
 import React, { useEffect, useRef } from 'react';
-import { usePuntos } from '../hooks/usePuntos';
+import { useBloques } from '../hooks/useBloques';
 import { useMediciones } from '../hooks/useMediciones';
+import { useEmpresas } from '../hooks/useEmpresas';
+import { useAuth } from '../auth/AuthContext';
 import {
   nivelColor,
   nivelToStatus,
   getStatusLabel
 } from '../lib/statusUtils';
 
-// Construye un mapa {id_punto → nivel_corrosion_mas_reciente}
+// Construye un mapa {id_bloque → nivel_corrosion_mas_reciente}. El "Punto"
+// viejo fue absorbido por el "Bloque"; cada medición trae `bloque_id`.
 function buildNivelMap(mediciones) {
   const map = {};
 
   mediciones.forEach(m => {
-    if (!(m.id_punto in map)) {
-      map[m.id_punto] = m.nivel_corrosion ?? 0;
+    if (!(m.bloque_id in map)) {
+      map[m.bloque_id] = m.nivel_corrosion ?? 0;
     }
   });
 
@@ -25,15 +28,27 @@ export default function ColombiaMap({
   onSelectPunto
 }) {
   const {
-    puntos,
+    bloques: puntos,
     loading: loadingPuntos
-  } = usePuntos();
+  } = useBloques();
 
   const { mediciones } = useMediciones(100);
+
+  // Zonas de empresa (círculos que delimitan su área en el mapa) -- solo
+  // disponibles vía GET /empresas, restringido a super_admin en el backend.
+  // Para el resto de los roles no hay hoy ningún hook que exponga la zona de
+  // la propia empresa (el perfil de usuario -- useUsuarioPerfil -- no la
+  // trae), así que por ahora las zonas solo se dibujan para super_admin;
+  // completar esto para los demás roles requiere que el backend/perfil
+  // exponga la zona de la empresa propia.
+  const { user } = useAuth();
+  const esSuperAdmin = user?.groups?.includes('super_admin');
+  const { empresas } = useEmpresas(esSuperAdmin);
 
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersRef = useRef([]);
+  const zonasRef = useRef([]);
 
   // Inicializar mapa Leaflet una sola vez
   useEffect(() => {
@@ -80,7 +95,7 @@ export default function ColombiaMap({
 
       if (lat == null || lng == null) return;
 
-      const nivel = nivelMap[punto.id_punto] ?? -1;
+      const nivel = nivelMap[punto.id_bloque] ?? -1;
 
       const color =
         nivel >= 0
@@ -88,7 +103,7 @@ export default function ColombiaMap({
           : '#64748b';
 
       const isSelected =
-        selectedPunto?.id_punto === punto.id_punto;
+        selectedPunto?.id_bloque === punto.id_bloque;
 
       const isCritical = nivel === 3;
 
@@ -248,6 +263,35 @@ export default function ColombiaMap({
     selectedPunto,
     onSelectPunto
   ]);
+
+  // Zonas de empresa: un círculo por cada {lat, lng, radio_metros} declarado
+  // en `empresas[].zonas` -- sin marcador propio, solo el círculo con un
+  // tooltip mostrando el nombre de la empresa al pasar el mouse.
+  useEffect(() => {
+    const L = window.L;
+    if (!L || !mapInstanceRef.current) return;
+
+    zonasRef.current.forEach(circle => circle.remove());
+    zonasRef.current = [];
+
+    empresas.forEach(empresa => {
+      (empresa.zonas ?? []).forEach(zona => {
+        if (zona?.lat == null || zona?.lng == null || !zona?.radio_metros) return;
+
+        const circle = L.circle([zona.lat, zona.lng], {
+          radius: zona.radio_metros,
+          color: '#00b9ff',
+          weight: 1.5,
+          fillColor: '#00b9ff',
+          fillOpacity: 0.06,
+        }).addTo(mapInstanceRef.current);
+
+        circle.bindTooltip(empresa.nombre, { sticky: true });
+
+        zonasRef.current.push(circle);
+      });
+    });
+  }, [empresas]);
 
   // Llevar el mapa hasta la ubicación seleccionada
   useEffect(() => {

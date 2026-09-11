@@ -224,7 +224,7 @@ export default function KPIBar() {
   const ubicacionesUnicas =
     new Set(
       mediciones.map(
-        m => m.id_punto
+        m => m.bloque_id
       )
     ).size;
 

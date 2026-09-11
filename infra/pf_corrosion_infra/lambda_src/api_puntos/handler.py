@@ -19,18 +19,31 @@ Rutas:
                                     admin solo puede borrar bloques dentro de ella)
 
   GET    /bloques                 → listar bloques de la empresa del caller (super_admin: todos,
-                                    o los de ?empresa_id=); cada uno con cantidad_puntos
-  POST   /bloques                 → crear bloque (admin/super_admin; super_admin debe mandar empresa_id)
-  PUT    /bloques/{id_bloque}     → editar nombre/descripcion/activo (super_admin o admin de esa empresa)
+                                    o los de ?empresa_id=); cada uno con cantidad_mediciones
+  POST   /bloques                 → crear bloque (admin/super_admin; super_admin debe mandar empresa_id);
+                                    requiere coordenadas, ciudad y departamento -- el bloque
+                                    absorbió el rol del punto viejo como entidad que lleva
+                                    mediciones (ver POST /medicion en lambda_src/inference)
+  PUT    /bloques/{id_bloque}     → editar nombre/descripcion/activo/coordenadas/ciudad/
+                                    departamento/tipo_material/tipo_estructura (super_admin o
+                                    admin de esa empresa)
   DELETE /bloques/{id_bloque}     → eliminar (super_admin o admin de esa empresa; 409 si tiene puntos)
 
-Bloques: jerarquía de UN nivel, empresa → bloque → punto → medición, sin
+Bloques: jerarquía de UN nivel, empresa → bloque → medición, sin
 anidamiento. Un bloque es una "carpeta" dentro de una empresa (tabla
-`bloques`, GSI `empresa_id-index`); los puntos lo referencian con el
-atributo opcional `bloque_id`. Al crear un bloque se deja un marcador vacío
-`empresas/{empresa_id}/{id_bloque}/` en el bucket de imágenes — es solo
-cosmético (hace visible la carpeta en la consola), el ítem en DynamoDB es
-la fuente de verdad.
+`bloques`, GSI `empresa_id-index`). Al crear un bloque se deja un marcador
+vacío `empresas/{empresa_id}/{id_bloque}/` en el bucket de imágenes — es
+solo cosmético (hace visible la carpeta en la consola), el ítem en
+DynamoDB es la fuente de verdad.
+
+Fusión punto→bloque: el bloque absorbió el rol del punto viejo como
+entidad que lleva coordenadas y mediciones (POST /medicion en
+lambda_src/inference ya no crea ni referencia ningún punto, solo un
+bloque existente). Por eso POST/PUT /bloques ahora también aceptan
+`coordenadas`, `ciudad`, `departamento`, `tipo_material` y
+`tipo_estructura`. Las rutas /puntos de abajo quedaron sin consumidor
+desde el frontend tras esta fusión — ver el comentario arriba de esas
+rutas en `lambda_handler`.
 
 Nota: la ruta GET /puntos/buscar del sistema original fue eliminada en esta
 migración (ver README del proyecto).
@@ -212,16 +225,19 @@ def _todos_los_bloques() -> list[dict]:
         kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
 
 
-def _contar_puntos_de_bloque(id_bloque: str) -> int:
-    """Cuenta los puntos (sk=METADATA) asignados a un bloque. Un scan
-    filtrado alcanza: la tabla es chica y no hay GSI por bloque_id."""
+def _contar_mediciones_de_bloque(id_bloque: str) -> int:
+    """Cuenta las mediciones colgadas de un bloque. Tras la fusión
+    punto→bloque, `POST /medicion` escribe la medición con `id_punto =
+    id_bloque` (mismo atributo de siempre en la tabla fusionada, ahora con
+    forma BLQ-...) y `sk = "MED#{timestamp}"` -- eso es justo el PK+prefijo
+    de sk, así que esto es una Query directa por partición, no un scan."""
     total = 0
     kwargs = dict(
-        FilterExpression=Attr("sk").eq(SK_METADATA) & Attr("bloque_id").eq(id_bloque),
+        KeyConditionExpression=Key("id_punto").eq(id_bloque) & Key("sk").begins_with("MED#"),
         Select="COUNT",
     )
     while True:
-        resp = tabla.scan(**kwargs)
+        resp = tabla.query(**kwargs)
         total += resp.get("Count", 0)
         if "LastEvaluatedKey" not in resp:
             return total
@@ -273,6 +289,17 @@ def _anexar_bloque_nombre(puntos: list[dict], nombres: dict[str, str]) -> list[d
     return puntos
 
 
+def _validar_coordenadas(coordenadas) -> tuple[int, str] | None:
+    """Valida `coordenadas` como `{lat, lng}` con ambos numéricos. Devuelve
+    (codigo_http, mensaje) si NO es válido, o None si está todo bien."""
+    if not isinstance(coordenadas, dict):
+        return 400, "coordenadas debe ser un objeto {lat, lng}"
+    lat, lng = coordenadas.get("lat"), coordenadas.get("lng")
+    if not isinstance(lat, (int, float)) or isinstance(lat, bool) or not isinstance(lng, (int, float)) or isinstance(lng, bool):
+        return 400, "coordenadas.lat y coordenadas.lng deben ser numéricos"
+    return None
+
+
 def _crear_marcador_s3_bloque(empresa_id: str, id_bloque: str) -> None:
     """Objeto vacío `empresas/{empresa_id}/{id_bloque}/` para que la carpeta
     exista en S3 aunque todavía no tenga mediciones. No bloqueante: si S3
@@ -299,7 +326,7 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
             # Ver bloques de otra empresa es exclusivo de super_admin.
             bloques = _bloques_de_empresa(creador.get("empresa_id") if creador else None)
         for b in bloques:
-            b["cantidad_puntos"] = _contar_puntos_de_bloque(b["id_bloque"])
+            b["cantidad_mediciones"] = _contar_mediciones_de_bloque(b["id_bloque"])
         return _respuesta(200, {"bloques": bloques})
 
     # Todo lo que sigue muta: solo admin/super_admin.
@@ -316,6 +343,33 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
         descripcion = body.get("descripcion")
         if descripcion is not None and not isinstance(descripcion, str):
             return _respuesta(400, {"error": "descripcion debe ser un texto"})
+
+        # coordenadas/ciudad/departamento: requeridos -- el bloque absorbió
+        # el rol del punto viejo como entidad que lleva mediciones, y sin
+        # coordenadas un punto de monitoreo no tiene sentido.
+        error_coords = _validar_coordenadas(body.get("coordenadas"))
+        if error_coords:
+            return _respuesta(error_coords[0], {"error": error_coords[1]})
+        coordenadas = body.get("coordenadas")
+
+        ciudad = body.get("ciudad")
+        if not isinstance(ciudad, str) or not ciudad.strip():
+            return _respuesta(400, {"error": "ciudad es requerida"})
+        ciudad = ciudad.strip()
+
+        departamento = body.get("departamento")
+        if not isinstance(departamento, str) or not departamento.strip():
+            return _respuesta(400, {"error": "departamento es requerido"})
+        departamento = departamento.strip()
+
+        # tipo_material/tipo_estructura: opcionales, texto libre -- mismo
+        # criterio que tenía POST /puntos (sin validar contra una lista fija).
+        tipo_material = body.get("tipo_material")
+        if tipo_material is not None and not isinstance(tipo_material, str):
+            return _respuesta(400, {"error": "tipo_material debe ser un texto"})
+        tipo_estructura = body.get("tipo_estructura")
+        if tipo_estructura is not None and not isinstance(tipo_estructura, str):
+            return _respuesta(400, {"error": "tipo_estructura debe ser un texto"})
 
         # empresa_id: SOLO super_admin lo manda (y es obligatorio para él),
         # validado contra la tabla empresas — mismo patrón que POST /usuarios
@@ -339,16 +393,25 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
             "id_bloque": id_bloque_nuevo,
             "empresa_id": empresa_id,
             "nombre": nombre,
+            "coordenadas": coordenadas,
+            "ciudad": ciudad,
+            "departamento": departamento,
             "activo": True,
             "fecha_creacion": datetime.now(timezone.utc).isoformat(),
             "creado_por_id": creador.get("id_usuario", ""),
         }
         if descripcion is not None:
             item["descripcion"] = descripcion
+        if tipo_material is not None:
+            item["tipo_material"] = tipo_material
+        if tipo_estructura is not None:
+            item["tipo_estructura"] = tipo_estructura
         # Foto fija del nombre del creador (mismo patrón que puntos/mediciones:
         # sigue siendo legible aunque la cuenta se borre después).
         if creador.get("nombre"):
             item["creado_por_nombre"] = creador.get("nombre")
+        # lat/lng vienen como float desde el frontend — DynamoDB requiere Decimal.
+        item = floats_to_decimal(item)
         tabla_bloques.put_item(Item=item)
         _crear_marcador_s3_bloque(empresa_id, id_bloque_nuevo)
         return _respuesta(201, item)
@@ -368,8 +431,16 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
         nombre = body.get("nombre")
         descripcion = body.get("descripcion")
         activo = body.get("activo")
-        if nombre is None and descripcion is None and activo is None:
-            return _respuesta(400, {"error": "Debes indicar nombre, descripcion y/o activo para actualizar"})
+        coordenadas = body.get("coordenadas")
+        ciudad = body.get("ciudad")
+        departamento = body.get("departamento")
+        tipo_material = body.get("tipo_material")
+        tipo_estructura = body.get("tipo_estructura")
+        if all(
+            v is None
+            for v in (nombre, descripcion, activo, coordenadas, ciudad, departamento, tipo_material, tipo_estructura)
+        ):
+            return _respuesta(400, {"error": "Debes indicar al menos un campo para actualizar"})
 
         campos = {}
         if nombre is not None:
@@ -389,10 +460,35 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
             if not isinstance(activo, bool):
                 return _respuesta(400, {"error": "activo debe ser un booleano"})
             campos["activo"] = activo
+        # coordenadas/ciudad/departamento/tipo_material/tipo_estructura:
+        # opcionales en PUT (a diferencia de POST, donde son requeridos) --
+        # un bloque ya existente puede editarse campo por campo.
+        if coordenadas is not None:
+            error_coords = _validar_coordenadas(coordenadas)
+            if error_coords:
+                return _respuesta(error_coords[0], {"error": error_coords[1]})
+            campos["coordenadas"] = coordenadas
+        if ciudad is not None:
+            if not isinstance(ciudad, str) or not ciudad.strip():
+                return _respuesta(400, {"error": "ciudad debe ser un texto no vacío"})
+            campos["ciudad"] = ciudad.strip()
+        if departamento is not None:
+            if not isinstance(departamento, str) or not departamento.strip():
+                return _respuesta(400, {"error": "departamento debe ser un texto no vacío"})
+            campos["departamento"] = departamento.strip()
+        if tipo_material is not None:
+            if not isinstance(tipo_material, str):
+                return _respuesta(400, {"error": "tipo_material debe ser un texto"})
+            campos["tipo_material"] = tipo_material
+        if tipo_estructura is not None:
+            if not isinstance(tipo_estructura, str):
+                return _respuesta(400, {"error": "tipo_estructura debe ser un texto"})
+            campos["tipo_estructura"] = tipo_estructura
 
         expr = "SET " + ", ".join(f"#{k} = :{k}" for k in campos)
         nombres = {f"#{k}": k for k in campos}
-        valores = {f":{k}": v for k, v in campos.items()}
+        # lat/lng vienen como float desde el frontend — DynamoDB requiere Decimal.
+        valores = floats_to_decimal({f":{k}": v for k, v in campos.items()})
         tabla_bloques.update_item(
             Key={"id_bloque": id_bloque},
             UpdateExpression=expr,
@@ -403,11 +499,11 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
 
     # ── DELETE /bloques/{id_bloque} ──────────────────────────────────────
     if metodo == "DELETE":
-        # Borrar un bloque con puntos adentro los dejaría apuntando a un
-        # bloque_id inexistente. Bloqueamos en vez de desasignar en cascada.
-        # El marcador S3 no se toca: puede quedar, es inocuo.
-        if _contar_puntos_de_bloque(id_bloque) > 0:
-            return _respuesta(409, {"error": "No se puede eliminar: el bloque tiene puntos asociados. Desasigna o elimina sus puntos primero"})
+        # Borrar un bloque con mediciones adentro las dejaría apuntando a un
+        # bloque_id inexistente (huérfanas). Bloqueamos en vez de borrar en
+        # cascada. El marcador S3 no se toca: puede quedar, es inocuo.
+        if _contar_mediciones_de_bloque(id_bloque) > 0:
+            return _respuesta(409, {"error": "No se puede eliminar: el bloque tiene mediciones asociadas"})
         tabla_bloques.delete_item(Key={"id_bloque": id_bloque})
         return _respuesta(204, None)
 
@@ -426,6 +522,13 @@ def lambda_handler(event: dict, context) -> dict:
         # ── /bloques y /bloques/{id_bloque} — misma Lambda, rutas aparte ─────
         if resource.startswith("/bloques"):
             return _handle_bloques(event, metodo, path_params.get("id_bloque"))
+
+        # ── Rutas /puntos (desde acá hasta el final de este handler) ─────────
+        # Sin consumidor desde el frontend: la fusión punto→bloque hizo que
+        # el "punto" (coordenadas + mediciones) pasara a ser el "bloque"
+        # (ver docstring del módulo y POST /medicion en lambda_src/inference,
+        # que ya no crea ni referencia ningún punto). Se dejan tal cual,
+        # intencionalmente sin borrar, por si hiciera falta revertir algo.
 
         # ── GET /puntos — listar todos, filtrado por empresa ─────────────────
         if metodo == "GET" and not id_punto:
