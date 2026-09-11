@@ -20,14 +20,16 @@ Rutas:
 
   GET    /bloques                 → listar bloques de la empresa del caller (super_admin: todos,
                                     o los de ?empresa_id=); cada uno con cantidad_mediciones
-  POST   /bloques                 → crear bloque (admin/super_admin; super_admin debe mandar empresa_id);
+  POST   /bloques                 → crear bloque (tecnico/admin/super_admin; super_admin debe
+                                    mandar empresa_id, tecnico/admin quedan forzados a la suya);
                                     requiere coordenadas, ciudad y departamento -- el bloque
                                     absorbió el rol del punto viejo como entidad que lleva
                                     mediciones (ver POST /medicion en lambda_src/inference)
   PUT    /bloques/{id_bloque}     → editar nombre/descripcion/activo/coordenadas/ciudad/
-                                    departamento/tipo_material/tipo_estructura (super_admin o
-                                    admin de esa empresa)
-  DELETE /bloques/{id_bloque}     → eliminar (super_admin o admin de esa empresa; 409 si tiene puntos)
+                                    departamento/tipo_material/tipo_estructura (solo super_admin
+                                    o admin de esa empresa -- tecnico crea pero no edita)
+  DELETE /bloques/{id_bloque}     → eliminar (solo super_admin o admin de esa empresa; 409 si
+                                    tiene mediciones -- tecnico no puede borrar)
 
 Bloques: jerarquía de UN nivel, empresa → bloque → medición, sin
 anidamiento. Un bloque es una "carpeta" dentro de una empresa (tabla
@@ -329,8 +331,16 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
             b["cantidad_mediciones"] = _contar_mediciones_de_bloque(b["id_bloque"])
         return _respuesta(200, {"bloques": bloques})
 
-    # Todo lo que sigue muta: solo admin/super_admin.
-    if rol not in ("admin", "super_admin"):
+    # POST (crear un punto): también tecnico, además de admin/super_admin --
+    # pedido explícito del usuario ("en Puntos... esta sección sí le saldrá
+    # a admin y super_admin y técnico"). tecnico queda forzado a su propia
+    # empresa igual que admin (ver más abajo, rama `else` de empresa_id) --
+    # nunca puede elegir otra.
+    if metodo == "POST" and not id_bloque and rol not in ("tecnico", "admin", "super_admin"):
+        return _respuesta(403, {"error": "No tienes permiso para crear puntos"})
+    # PUT/DELETE (editar/eliminar un punto ya existente): solo admin/
+    # super_admin -- tecnico puede crear pero no modificar ni borrar.
+    if metodo in ("PUT", "DELETE") and rol not in ("admin", "super_admin"):
         return _respuesta(403, {"error": "Solo administradores pueden gestionar bloques"})
 
     # ── POST /bloques ────────────────────────────────────────────────────

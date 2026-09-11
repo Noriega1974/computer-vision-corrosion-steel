@@ -54,12 +54,12 @@ export default function App() {
                   <RoleRoute roles={['super_admin', 'admin', 'tecnico']}><UploadPage /></RoleRoute>
                 } />
                 {/* Puntos de monitoreo (antes "Bloques"/"Ubicaciones", fusionados en
-                    una sola entidad): gestión exclusiva de admin/super_admin --
-                    tecnico/cliente solo los ven resueltos como bloque_nombre en
-                    mediciones, no administran la lista (el backend exige
-                    admin/super_admin para POST/PUT/DELETE /bloques). */}
+                    una sola entidad): super_admin/admin/tecnico pueden entrar y CREAR
+                    puntos (el backend abre POST /bloques a los 3); editar/desactivar/
+                    eliminar sigue exclusivo de admin/super_admin -- BloquesPage oculta
+                    esas acciones para tecnico. cliente no entra. */}
                 <Route path="/puntos" element={
-                  <RoleRoute roles={['super_admin', 'admin']}><BloquesPage /></RoleRoute>
+                  <RoleRoute roles={['super_admin', 'admin', 'tecnico']}><BloquesPage /></RoleRoute>
                 } />
                 {/* tecnico entra para dar de alta un cliente (ver CREATABLE_ROLES) aunque
                     no vea el listado -- eso ya lo devuelve 403 el backend en GET /usuarios */}
