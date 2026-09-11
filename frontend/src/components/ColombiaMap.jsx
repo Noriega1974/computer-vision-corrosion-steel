@@ -313,6 +313,10 @@ export default function ColombiaMap({
   }, [selectedPunto]);
 
   const puntosCount = puntos.length;
+  // El cartel de "sin ubicaciones" tapaba el mapa entero (zIndex sobre el
+  // mapa) aunque ya hubiera una zona dibujada -- ahora solo aparece si
+  // tampoco hay ninguna zona que mostrar.
+  const hayZonas = empresas.some(e => (e.zonas ?? []).length > 0);
 
   return (
     <div
@@ -430,7 +434,7 @@ export default function ColombiaMap({
           }}
         />
 
-        {!loadingPuntos && puntosCount === 0 && (
+        {!loadingPuntos && puntosCount === 0 && !hayZonas && (
           <div
             style={{
               position: 'absolute',
