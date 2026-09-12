@@ -214,7 +214,7 @@ export default function DashboardPage() {
 
               gap: 'var(--space-3)',
 
-              minHeight: 430,
+              minHeight: 520,
 
               overflow: 'hidden',
             }}
@@ -290,7 +290,7 @@ export default function DashboardPage() {
 
               gap: 'var(--space-3)',
 
-              minHeight: 430,
+              minHeight: 520,
             }}
           >
 
@@ -404,7 +404,7 @@ export default function DashboardPage() {
 
               gap: 'var(--space-3)',
 
-              minHeight: 430,
+              minHeight: 520,
 
               overflow: 'hidden',
             }}
@@ -450,6 +450,8 @@ export default function DashboardPage() {
 
         {/* ========================================================
             ANALYSIS
+            TENTATIVA DE ELIMINACIÓN -- el usuario planea sacar esta
+            sección, no tocar/mejorar por ahora.
             ======================================================== */}
 
         <section

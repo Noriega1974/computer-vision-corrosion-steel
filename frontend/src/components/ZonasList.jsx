@@ -3,9 +3,12 @@ import { Globe } from 'lucide-react';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useAuth } from '../auth/AuthContext';
 
-// Lista de zonas dibujadas -- clic centra el mapa en esa zona (ver
-// ColombiaMap, prop `selectedZona`). Solo super_admin ve zonas de empresa
-// (mismo límite que el mapa: GET /empresas es exclusivo de ese rol).
+// Lista de afiliaciones con zonas dibujadas -- una fila por afiliación, no
+// por polígono individual (una empresa puede tener varias manchas). Clic
+// centra el mapa en el conjunto de todas sus zonas (ver ColombiaMap, prop
+// `selectedZona`, que recibe la empresa entera). Solo super_admin ve zonas
+// de empresa (mismo límite que el mapa: GET /empresas es exclusivo de ese
+// rol).
 export default function ZonasList({ selectedZona, onSelectZona }) {
   const { user } = useAuth();
   const esSuperAdmin = user?.groups?.includes('super_admin');
@@ -13,14 +16,7 @@ export default function ZonasList({ selectedZona, onSelectZona }) {
 
   if (!esSuperAdmin) return null;
 
-  const filas = empresas.flatMap(e =>
-    (e.zonas ?? []).map((zona, i) => ({
-      key: `${e.id_empresa}-${i}`,
-      empresa: e.nombre,
-      etiqueta: `Zona ${i + 1}`,
-      zona,
-    }))
-  );
+  const filas = empresas.filter(e => (e.zonas ?? []).length > 0);
 
   return (
     <div style={{
@@ -33,7 +29,7 @@ export default function ZonasList({ selectedZona, onSelectZona }) {
           <Globe size={13} /> ZONAS
         </div>
         <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)', letterSpacing: '0.1em', marginTop: 2 }}>
-          {loading ? 'Cargando…' : `${filas.length} ZONAS`}
+          {loading ? 'Cargando…' : `${filas.length} AFILIACIONES`}
         </div>
       </div>
 
@@ -44,24 +40,31 @@ export default function ZonasList({ selectedZona, onSelectZona }) {
           </div>
         )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-          {filas.map(f => (
-            <button
-              key={f.key}
-              type="button"
-              onClick={() => onSelectZona(f.zona)}
-              aria-pressed={selectedZona === f.zona}
-              style={{
-                display: 'block', width: '100%', textAlign: 'left',
-                padding: '8px 10px', font: 'inherit', cursor: 'pointer',
-                background: selectedZona === f.zona ? 'rgba(0,185,255,0.1)' : 'var(--bg-page)',
-                border: `1px solid ${selectedZona === f.zona ? '#00b9ff' : 'var(--border)'}`,
-                borderLeft: `3px solid ${selectedZona === f.zona ? '#00b9ff' : 'var(--border-bright)'}`,
-              }}
-            >
-              <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-primary)' }}>{f.empresa}</div>
-              <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)' }}>{f.etiqueta} · {f.zona.puntos.length} puntos</div>
-            </button>
-          ))}
+          {filas.map(e => {
+            const totalManchas = e.zonas.length;
+            const totalPuntos = e.zonas.reduce((s, z) => s + z.puntos.length, 0);
+            const seleccionada = selectedZona === e;
+            return (
+              <button
+                key={e.id_empresa}
+                type="button"
+                onClick={() => onSelectZona(e)}
+                aria-pressed={seleccionada}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  padding: '8px 10px', font: 'inherit', cursor: 'pointer',
+                  background: seleccionada ? 'rgba(0,185,255,0.1)' : 'var(--bg-page)',
+                  border: `1px solid ${seleccionada ? '#00b9ff' : 'var(--border)'}`,
+                  borderLeft: `3px solid ${seleccionada ? '#00b9ff' : 'var(--border-bright)'}`,
+                }}
+              >
+                <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-primary)' }}>{e.nombre}</div>
+                <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)' }}>
+                  {totalManchas > 1 ? `${totalManchas} zonas · ` : ''}{totalPuntos} puntos
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
