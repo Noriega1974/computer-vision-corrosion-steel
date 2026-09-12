@@ -3,6 +3,8 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Download, Share2, Trash2, MapPin, AlertCircle, Thermometer, Droplets, Wind } from 'lucide-react';
 import { useMedicion } from '../hooks/useMedicion';
 import { useBloques } from '../hooks/useBloques';
+import { useEmpresas } from '../hooks/useEmpresas';
+import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
 import { nivelColor, nivelBg, nivelLabel, nivelToStatus } from '../lib/statusUtils';
 import { apiDelete } from '../lib/apiClient';
@@ -145,6 +147,12 @@ export default function MedicionDetailPage() {
   const isAdmin =
     user?.groups?.includes('super_admin') ||
     user?.groups?.includes('admin');
+  const esSuperAdmin = user?.groups?.includes('super_admin');
+  // Zona: nombre de la afiliación dueña de la medición. Un no-super_admin
+  // solo ve mediciones de su propia empresa (scopeado por el backend), así
+  // que su perfil ya alcanza; super_admin resuelve contra la lista completa.
+  const { perfil } = useUsuarioPerfil();
+  const { empresas } = useEmpresas(esSuperAdmin);
 
   // Volver a galería preservando filtros si vienen del state de navegación
   function handleBack() {
@@ -323,6 +331,9 @@ export default function MedicionDetailPage() {
   };
   const lat = punto.coordenadas?.lat;
   const lng = punto.coordenadas?.lng;
+  const zonaNombre = esSuperAdmin
+    ? (empresas.find(e => e.id_empresa === medicion.empresa_id)?.nombre ?? '—')
+    : (perfil?.empresa_nombre ?? '—');
 
   const TABS = [
     { key: 'original', label: 'Original' },
@@ -562,7 +573,7 @@ export default function MedicionDetailPage() {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2-5)' }}>
-              <MetaItem label="ID medición" value={medicion.id_medicion ?? '—'} wrap />
+              <MetaItem label="Zona" value={zonaNombre} />
               <MetaItem label="Punto" value={punto.sede ?? '—'} />
               <MetaItem label="Ciudad" value={punto.ciudad ?? '—'} />
             </div>
