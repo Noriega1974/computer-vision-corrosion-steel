@@ -8,7 +8,10 @@ Rutas API Gateway:
                                              empresa_nombre/empresa_departamento/empresa_ciudad
                                              resueltos de su afiliación, para que admin/tecnico
                                              auto-completen esos datos al crear un punto
-  PUT    /usuarios/me                     → actualizar perfil propio (cualquier rol)
+  PUT    /usuarios/me                     → actualizar perfil propio (cualquier rol; nombre,
+                                             telefono, cargo, avatar_color, foto_perfil --
+                                             base64, máx ~150KB); devuelve el usuario
+                                             actualizado completo, no solo un mensaje
   PUT    /usuarios/{id_usuario}           → actualizar usuario (admin/super_admin, con alcance de empresa)
   DELETE /usuarios/{id_usuario}/eliminar  → eliminar usuario permanentemente (admin/super_admin, con alcance de
                                              empresa; bloqueado con 409 si el usuario tiene puntos/mediciones
@@ -77,7 +80,10 @@ s3 = boto3.client("s3", region_name=REGION)
 
 ROLES_VALIDOS = {"super_admin", "admin", "tecnico", "cliente"}
 CAMPOS_PROTEGIDOS_ME    = {"email", "rol", "id_usuario", "cognito_sub", "fecha_creacion"}
-CAMPOS_PERMITIDOS_ME    = {"nombre", "telefono", "cargo", "avatar_color", "fecha_ultimo_login"}
+CAMPOS_PERMITIDOS_ME    = {"nombre", "telefono", "cargo", "avatar_color", "foto_perfil", "fecha_ultimo_login"}
+# ~150KB de texto base64 -- de sobra para una foto de perfil recortada a
+# tamaño chico (200-300px), lejos del límite de 400KB por ítem de DynamoDB.
+FOTO_PERFIL_MAX_CHARS   = 150_000
 CAMPOS_PERMITIDOS_ADMIN = {"nombre", "rol", "telefono", "cargo"}
 
 # Jerarquía explícita de creación de usuarios (NO por nivel numérico —
@@ -371,6 +377,8 @@ def lambda_handler(event: dict, context) -> dict:
             campos = {k: v for k, v in body.items() if k in CAMPOS_PERMITIDOS_ME}
             if not campos:
                 return _respuesta(400, {"error": "No hay campos válidos para actualizar"})
+            if "foto_perfil" in campos and len(campos["foto_perfil"] or "") > FOTO_PERFIL_MAX_CHARS:
+                return _respuesta(400, {"error": "La foto de perfil es demasiado grande"})
             expr    = "SET " + ", ".join(f"#{k} = :{k}" for k in campos)
             nombres = {f"#{k}": k for k in campos}
             valores = {f":{k}": v for k, v in campos.items()}
@@ -380,7 +388,19 @@ def lambda_handler(event: dict, context) -> dict:
                 ExpressionAttributeNames=nombres,
                 ExpressionAttributeValues=valores,
             )
-            return _respuesta(200, {"mensaje": "Perfil actualizado"})
+            # Devolver el usuario actualizado (no solo un mensaje) -- el
+            # frontend reemplaza su perfil en memoria con esta respuesta;
+            # antes perdía nombre/empresa_nombre hasta recargar la página.
+            actualizado = tabla.get_item(Key={"id_usuario": usuario["id_usuario"]}).get("Item", {})
+            if actualizado.get("empresa_id"):
+                empresa = tabla_empresas.get_item(Key={"id_empresa": actualizado["empresa_id"]}).get("Item")
+                actualizado = {
+                    **actualizado,
+                    "empresa_nombre": empresa.get("nombre") if empresa else None,
+                    "empresa_departamento": empresa.get("departamento") if empresa else None,
+                    "empresa_ciudad": empresa.get("ciudad") if empresa else None,
+                }
+            return _respuesta(200, actualizado)
 
         # ── GET /usuarios ─────────────────────────────────────────────────────
         elif metodo == "GET" and resource == "/usuarios":
