@@ -2,12 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { updatePassword } from 'aws-amplify/auth';
 import {
   Settings,
-  Monitor,
   RefreshCw,
-  CalendarDays,
   ShieldCheck,
   Brain,
-  Save,
   Check,
   User,
   Lock,
@@ -17,6 +14,8 @@ import {
 } from 'lucide-react';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
+import { useRefreshKey } from '../hooks/RefreshKeyContext';
+import { getDateFormat, setDateFormat as guardarFormatoFecha } from '../utils/dateFormat';
 import AvatarCropper from '../components/AvatarCropper';
 
 const AVATAR_COLORS = [
@@ -266,12 +265,31 @@ export default function ConfiguracionPage() {
   const [pwMsg, setPwMsg] = useState(null);
   const [pwError, setPwError] = useState(null);
 
-  const [darkMode, setDarkMode] = useState(false);
-  const [autoRefresh, setAutoRefresh] = useState(true);
+  // Modo oscuro: el estado real vive en AppLayout (aplica el atributo al
+  // documento). Acá solo se refleja vía localStorage + evento, mismo patrón
+  // que el color/foto de avatar.
+  const [darkMode, setDarkModeLocal] = useState(
+    () => localStorage.getItem('corria-darkmode') === 'true'
+  );
+  const { autoRefresh, setAutoRefresh } = useRefreshKey();
+  const [dateFormat, setDateFormatLocal] = useState(() => getDateFormat());
 
-  const [dateFormat, setDateFormat] = useState('DD/MM/AAAA');
+  useEffect(() => {
+    const handler = (e) => setDarkModeLocal(e.detail);
+    window.addEventListener('corria-darkmode', handler);
+    return () => window.removeEventListener('corria-darkmode', handler);
+  }, []);
 
-  const [saved, setSaved] = useState(false);
+  const handleDarkModeChange = (value) => {
+    setDarkModeLocal(value);
+    localStorage.setItem('corria-darkmode', String(value));
+    window.dispatchEvent(new CustomEvent('corria-darkmode', { detail: value }));
+  };
+
+  const handleDateFormatChange = (value) => {
+    setDateFormatLocal(value);
+    guardarFormatoFecha(value);
+  };
 
   useEffect(() => {
     if (perfil) setNombre(perfil.nombre ?? perfil.name ?? user?.name ?? '');
@@ -349,14 +367,6 @@ export default function ConfiguracionPage() {
   const displayName = nombre || perfil?.nombre || user?.name || user?.email || '';
   const pwErrors = pwNew ? validatePassword(pwNew) : [];
 
-  const handleSave = () => {
-    setSaved(true);
-
-    setTimeout(() => {
-      setSaved(false);
-    }, 2500);
-  };
-
   return (
     <>
       <style>{`
@@ -431,39 +441,6 @@ export default function ConfiguracionPage() {
               Tu perfil, las preferencias y la información del sistema.
             </div>
           </div>
-
-          <button
-            onClick={handleSave}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 7,
-              padding: '8px 15px',
-              background: saved
-                ? 'var(--accent-green)'
-                : 'var(--accent-blue)',
-              border: 'none',
-              borderRadius: 8,
-              cursor: 'pointer',
-              fontFamily: 'var(--font-ui)',
-              fontWeight: 600,
-              fontSize: 'var(--text-xs)',
-              color: 'white',
-              transition: 'background 0.15s ease',
-            }}
-          >
-            {saved ? (
-              <>
-                <Check size={14} />
-                Cambios guardados
-              </>
-            ) : (
-              <>
-                <Save size={14} />
-                Guardar cambios
-              </>
-            )}
-          </button>
         </div>
 
 
@@ -673,7 +650,7 @@ export default function ConfiguracionPage() {
             <select
               className="config-select"
               value={darkMode ? 'oscuro' : 'claro'}
-              onChange={e => setDarkMode(e.target.value === 'oscuro')}
+              onChange={e => handleDarkModeChange(e.target.value === 'oscuro')}
               style={{
                 padding: '7px 30px 7px 10px',
                 borderRadius: 7,
@@ -708,7 +685,7 @@ export default function ConfiguracionPage() {
             <select
               className="config-select"
               value={dateFormat}
-              onChange={e => setDateFormat(e.target.value)}
+              onChange={e => handleDateFormatChange(e.target.value)}
               style={{
                 padding: '7px 30px 7px 10px',
                 borderRadius: 7,

@@ -7,6 +7,7 @@ import { useEmpresas } from '../hooks/useEmpresas';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
 import { nivelColor, nivelBg, nivelLabel, nivelToStatus } from '../lib/statusUtils';
+import { formatFecha } from '../utils/dateFormat';
 import { apiDelete } from '../lib/apiClient';
 import BoundingBoxOverlay from '../components/BoundingBoxOverlay';
 import SegmentationOverlay from '../components/SegmentationOverlay';
@@ -583,10 +584,7 @@ export default function MedicionDetailPage() {
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 20px' }}>
             <SectionTitle>Fecha y hora</SectionTitle>
             <div style={{ fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', marginBottom: 3 }}>
-              {medicion.timestamp ? new Date(medicion.timestamp).toLocaleString('es-CO', {
-                day: '2-digit', month: 'long', year: 'numeric',
-                hour: '2-digit', minute: '2-digit', second: '2-digit',
-              }) : '—'}
+              {formatFecha(medicion.timestamp, { conHora: true, conSegundos: true })}
             </div>
             <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
               {tiempoRelativo(medicion.timestamp)}
