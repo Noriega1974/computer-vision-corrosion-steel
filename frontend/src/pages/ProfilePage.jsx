@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { updatePassword } from 'aws-amplify/auth';
-import { User, Lock, Check, AlertCircle } from 'lucide-react';
+import { User, Lock, Check, AlertCircle, Camera, X } from 'lucide-react';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
+import AvatarCropper from '../components/AvatarCropper';
 
 const AVATAR_COLORS = [
   { value: '#1432A3', label: 'Navy' },
@@ -16,6 +17,7 @@ const AVATAR_COLORS = [
 ];
 
 const STORAGE_KEY = 'corria-avatar-color';
+const FOTO_STORAGE_KEY = 'corria-avatar-foto';
 
 function getInitials(name = '') {
   const parts = name.trim().split(/\s+/);
@@ -79,6 +81,8 @@ export default function ProfilePage() {
   const { perfil, loading, saving, saveError, actualizarPerfil } = useUsuarioPerfil();
 
   const [avatarColor, setAvatarColor] = useState(() => localStorage.getItem(STORAGE_KEY) ?? '#1432A3');
+  const [avatarFoto, setAvatarFoto] = useState(() => localStorage.getItem(FOTO_STORAGE_KEY) ?? '');
+  const [mostrarCropper, setMostrarCropper] = useState(false);
   const [nombre, setNombre] = useState('');
   const [infoMsg, setInfoMsg] = useState(null);
   const [infoError, setInfoError] = useState(null);
@@ -92,12 +96,44 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (perfil) setNombre(perfil.nombre ?? perfil.name ?? user?.name ?? '');
+    // foto_perfil viene del backend -- localStorage es solo un caché para
+    // que el sidebar no parpadee sin foto antes de que cargue el perfil.
+    if (perfil && typeof perfil.foto_perfil === 'string') {
+      setAvatarFoto(perfil.foto_perfil);
+      localStorage.setItem(FOTO_STORAGE_KEY, perfil.foto_perfil);
+    }
   }, [perfil, user]);
 
   const handleAvatarColor = (color) => {
     setAvatarColor(color);
     localStorage.setItem(STORAGE_KEY, color);
     window.dispatchEvent(new CustomEvent('corria-avatar-color', { detail: color }));
+  };
+
+  const handleFotoConfirmada = async (dataUrl) => {
+    setInfoError(null);
+    try {
+      await actualizarPerfil({ foto_perfil: dataUrl });
+      setAvatarFoto(dataUrl);
+      localStorage.setItem(FOTO_STORAGE_KEY, dataUrl);
+      window.dispatchEvent(new CustomEvent('corria-avatar-foto', { detail: dataUrl }));
+      setMostrarCropper(false);
+      setInfoMsg('Foto de perfil actualizada.');
+    } catch (err) {
+      setInfoError(err.message);
+    }
+  };
+
+  const handleQuitarFoto = async () => {
+    setInfoError(null);
+    try {
+      await actualizarPerfil({ foto_perfil: '' });
+      setAvatarFoto('');
+      localStorage.removeItem(FOTO_STORAGE_KEY);
+      window.dispatchEvent(new CustomEvent('corria-avatar-foto', { detail: '' }));
+    } catch (err) {
+      setInfoError(err.message);
+    }
   };
 
   const handleSaveInfo = async () => {
@@ -146,17 +182,21 @@ export default function ProfilePage() {
       </div>
 
       {/* Avatar preview */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', marginBottom: 20, padding: '16px 20px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10 }}>
-        <div style={{
-          width: 56, height: 56, borderRadius: 14,
-          background: avatarColor,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 20, color: 'white',
-          flexShrink: 0,
-        }}>
-          {getInitials(displayName || user?.email || '')}
-        </div>
-        <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', marginBottom: 20, padding: '16px 20px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, flexWrap: 'wrap' }}>
+        {avatarFoto ? (
+          <img src={avatarFoto} alt="" style={{ width: 56, height: 56, borderRadius: 14, objectFit: 'cover', flexShrink: 0 }} />
+        ) : (
+          <div style={{
+            width: 56, height: 56, borderRadius: 14,
+            background: avatarColor,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 20, color: 'white',
+            flexShrink: 0,
+          }}>
+            {getInitials(displayName || user?.email || '')}
+          </div>
+        )}
+        <div style={{ flex: 1, minWidth: 160 }}>
           <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 'var(--text-md)', color: 'var(--text-primary)' }}>
             {displayName || user?.email}
           </div>
@@ -164,6 +204,31 @@ export default function ProfilePage() {
             {user?.email}
           </div>
         </div>
+        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+          <button
+            type="button" onClick={() => setMostrarCropper(v => !v)}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '7px 14px', background: 'var(--bg-inset)', border: '1px solid var(--border)',
+              borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)', color: 'var(--accent-amber)',
+            }}
+          >
+            <Camera size={14} /> {mostrarCropper ? 'Cerrar' : 'Cambiar foto'}
+          </button>
+          {avatarFoto && (
+            <button
+              type="button" onClick={handleQuitarFoto} title="Quitar foto"
+              style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 9px', cursor: 'pointer', color: '#dc2626', display: 'flex' }}
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+        {mostrarCropper && (
+          <div style={{ width: '100%', paddingTop: 'var(--space-3)', borderTop: '1px solid var(--border)', marginTop: 'var(--space-2)' }}>
+            <AvatarCropper onConfirm={handleFotoConfirmada} onCancel={() => setMostrarCropper(false)} />
+          </div>
+        )}
       </div>
 
       {/* Información personal */}
