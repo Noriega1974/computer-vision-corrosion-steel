@@ -6,6 +6,7 @@ import KPIBar from '../components/KPIBar';
 import ColombiaMap from '../components/ColombiaMap';
 import PlantDetail from '../components/PlantDetail';
 import PlantsTable from '../components/PlantsTable';
+import ZonasList from '../components/ZonasList';
 import ChartsRow from '../components/ChartsRow';
 
 import { useBloques } from '../hooks/useBloques';
@@ -55,6 +56,8 @@ export default function DashboardPage() {
     selectedPunto,
     setSelectedPunto
   ] = useState(null);
+
+  const [selectedZona, setSelectedZona] = useState(null);
 
   const leafletReady =
     useLeaflet();
@@ -254,6 +257,12 @@ export default function DashboardPage() {
 
             </div>
 
+            {/* Zonas dibujadas -- clic centra el mapa en esa zona */}
+            <ZonasList
+              selectedZona={selectedZona}
+              onSelectZona={setSelectedZona}
+            />
+
           </section>
 
 
@@ -339,6 +348,7 @@ export default function DashboardPage() {
                 <ColombiaMap
                   selectedPunto={selectedPunto}
                   onSelectPunto={setSelectedPunto}
+                  selectedZona={selectedZona}
                 />
 
               ) : (
