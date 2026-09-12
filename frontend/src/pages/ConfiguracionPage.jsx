@@ -1,17 +1,59 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { updatePassword } from 'aws-amplify/auth';
 import {
   Settings,
-  Bell,
-  SlidersHorizontal,
   Monitor,
   RefreshCw,
   CalendarDays,
   ShieldCheck,
   Brain,
-  Activity,
   Save,
   Check,
+  User,
+  Lock,
+  AlertCircle,
+  Camera,
+  X,
 } from 'lucide-react';
+import { useUsuarioPerfil } from '../hooks/useUsuario';
+import { useAuth } from '../auth/AuthContext';
+import AvatarCropper from '../components/AvatarCropper';
+
+const AVATAR_COLORS = [
+  { value: '#1432A3', label: 'Navy' },
+  { value: '#2563eb', label: 'Azul' },
+  { value: '#16a34a', label: 'Verde' },
+  { value: '#dc2626', label: 'Rojo' },
+  { value: '#7c3aed', label: 'Violeta' },
+  { value: '#0891b2', label: 'Cian' },
+  { value: '#db2777', label: 'Rosa' },
+  { value: '#64748b', label: 'Gris' },
+];
+
+const AVATAR_STORAGE_KEY = 'corria-avatar-color';
+const FOTO_STORAGE_KEY = 'corria-avatar-foto';
+
+function getInitials(name = '') {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+
+function validatePassword(pw) {
+  const errors = [];
+  if (pw.length < 8) errors.push('Mínimo 8 caracteres');
+  if (!/[A-Z]/.test(pw)) errors.push('Al menos una mayúscula');
+  if (!/[0-9]/.test(pw)) errors.push('Al menos un número');
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pw)) errors.push('Al menos un símbolo');
+  return errors;
+}
+
+const inputStyle = {
+  width: '100%', padding: '8px 12px', borderRadius: 8,
+  border: '1px solid var(--border)', background: 'var(--bg-page)',
+  color: 'var(--text-primary)', fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)',
+  boxSizing: 'border-box',
+};
 
 
 // ─── Estilos reutilizables ───────────────────────────────────────────────────
@@ -188,31 +230,124 @@ function SectionHeader({ icon: Icon, title, description }) {
 }
 
 
+// ─── Campo de formulario (label + control) ──────────────────────────────────
+// `htmlFor` es obligatorio: sin el, el label queda de hermano suelto del control
+// y un lector de pantalla no lo anuncia al enfocarlo.
+function Field({ label, htmlFor, children }) {
+  return (
+    <div style={{ marginBottom: 'var(--space-4)' }}>
+      <label htmlFor={htmlFor} style={labelStyle}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+
 // ─── Página de configuración ─────────────────────────────────────────────────
+// Antes "Mi perfil" (/perfil) y "Configuración" (/configuracion) eran dos
+// pestañas separadas -- se unieron en una sola porque no había razón real
+// para partir "mis datos" de "mis preferencias".
 
 export default function ConfiguracionPage() {
+  const { user } = useAuth();
+  const { perfil, loading, saving, saveError, actualizarPerfil } = useUsuarioPerfil();
+
+  const [avatarColor, setAvatarColor] = useState(() => localStorage.getItem(AVATAR_STORAGE_KEY) ?? '#1432A3');
+  const [avatarFoto, setAvatarFoto] = useState(() => localStorage.getItem(FOTO_STORAGE_KEY) ?? '');
+  const [mostrarCropper, setMostrarCropper] = useState(false);
+  const [nombre, setNombre] = useState('');
+  const [infoMsg, setInfoMsg] = useState(null);
+  const [infoError, setInfoError] = useState(null);
+
+  const [pwOld, setPwOld] = useState('');
+  const [pwNew, setPwNew] = useState('');
+  const [pwConfirm, setPwConfirm] = useState('');
+  const [pwLoading, setPwLoading] = useState(false);
+  const [pwMsg, setPwMsg] = useState(null);
+  const [pwError, setPwError] = useState(null);
+
   const [darkMode, setDarkMode] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [notifications, setNotifications] = useState(true);
-  const [severeAlerts, setSevereAlerts] = useState(true);
-  const [measurementSummary, setMeasurementSummary] = useState(false);
 
   const [dateFormat, setDateFormat] = useState('DD/MM/AAAA');
 
-  const [thresholds, setThresholds] = useState({
-    leve: 20,
-    moderada: 50,
-    severa: 50,
-  });
-
   const [saved, setSaved] = useState(false);
 
-  const handleThresholdChange = (field, value) => {
-    setThresholds(prev => ({
-      ...prev,
-      [field]: value,
-    }));
+  useEffect(() => {
+    if (perfil) setNombre(perfil.nombre ?? perfil.name ?? user?.name ?? '');
+    // foto_perfil viene del backend -- localStorage es solo un caché para
+    // que el sidebar no parpadee sin foto antes de que cargue el perfil.
+    if (perfil && typeof perfil.foto_perfil === 'string') {
+      setAvatarFoto(perfil.foto_perfil);
+      localStorage.setItem(FOTO_STORAGE_KEY, perfil.foto_perfil);
+    }
+  }, [perfil, user]);
+
+  const handleAvatarColor = (color) => {
+    setAvatarColor(color);
+    localStorage.setItem(AVATAR_STORAGE_KEY, color);
+    window.dispatchEvent(new CustomEvent('corria-avatar-color', { detail: color }));
   };
+
+  const handleFotoConfirmada = async (dataUrl) => {
+    setInfoError(null);
+    try {
+      await actualizarPerfil({ foto_perfil: dataUrl });
+      setAvatarFoto(dataUrl);
+      localStorage.setItem(FOTO_STORAGE_KEY, dataUrl);
+      window.dispatchEvent(new CustomEvent('corria-avatar-foto', { detail: dataUrl }));
+      setMostrarCropper(false);
+      setInfoMsg('Foto de perfil actualizada.');
+    } catch (err) {
+      setInfoError(err.message);
+    }
+  };
+
+  const handleQuitarFoto = async () => {
+    setInfoError(null);
+    try {
+      await actualizarPerfil({ foto_perfil: '' });
+      setAvatarFoto('');
+      localStorage.removeItem(FOTO_STORAGE_KEY);
+      window.dispatchEvent(new CustomEvent('corria-avatar-foto', { detail: '' }));
+    } catch (err) {
+      setInfoError(err.message);
+    }
+  };
+
+  const handleSaveInfo = async () => {
+    setInfoMsg(null);
+    setInfoError(null);
+    try {
+      await actualizarPerfil({ nombre });
+      localStorage.setItem('corria-display-name', nombre);
+      window.dispatchEvent(new CustomEvent('corria-user-name', { detail: nombre }));
+      setInfoMsg('Perfil actualizado correctamente.');
+    } catch (err) {
+      setInfoError(err.message);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    setPwMsg(null);
+    setPwError(null);
+    const errors = validatePassword(pwNew);
+    if (errors.length > 0) { setPwError(errors.join(' · ')); return; }
+    if (pwNew !== pwConfirm) { setPwError('Las contraseñas nuevas no coinciden.'); return; }
+    setPwLoading(true);
+    try {
+      await updatePassword({ oldPassword: pwOld, newPassword: pwNew });
+      setPwMsg('Contraseña actualizada correctamente.');
+      setPwOld(''); setPwNew(''); setPwConfirm('');
+    } catch (err) {
+      setPwError(err.message ?? 'Error al cambiar la contraseña.');
+    } finally {
+      setPwLoading(false);
+    }
+  };
+
+  const displayName = nombre || perfil?.nombre || user?.name || user?.email || '';
+  const pwErrors = pwNew ? validatePassword(pwNew) : [];
 
   const handleSave = () => {
     setSaved(true);
@@ -235,6 +370,8 @@ export default function ConfiguracionPage() {
           border-color: var(--accent-blue) !important;
           box-shadow: 0 0 0 2px rgba(156,54,16,0.08);
         }
+
+        @keyframes shimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
       `}</style>
 
       <div style={{ padding: 'var(--space-5)', maxWidth: 1000, margin: '0 auto' }}>
@@ -291,7 +428,7 @@ export default function ConfiguracionPage() {
                 paddingLeft: 13,
               }}
             >
-              Personaliza las preferencias y parámetros del sistema.
+              Tu perfil, las preferencias y la información del sistema.
             </div>
           </div>
 
@@ -327,6 +464,196 @@ export default function ConfiguracionPage() {
               </>
             )}
           </button>
+        </div>
+
+
+        {/* ── Mi perfil: avatar ── */}
+
+        <div style={sectionStyle}>
+          <SectionHeader
+            icon={User}
+            title="Mi perfil"
+            description="Foto, nombre y datos de tu cuenta."
+          />
+
+          <div style={{ padding: 18, display: 'flex', alignItems: 'center', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
+            {avatarFoto ? (
+              <img src={avatarFoto} alt="" style={{ width: 56, height: 56, borderRadius: 14, objectFit: 'cover', flexShrink: 0 }} />
+            ) : (
+              <div style={{
+                width: 56, height: 56, borderRadius: 14,
+                background: avatarColor,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 20, color: 'white',
+                flexShrink: 0,
+              }}>
+                {getInitials(displayName || user?.email || '')}
+              </div>
+            )}
+            <div style={{ flex: 1, minWidth: 160 }}>
+              <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 'var(--text-md)', color: 'var(--text-primary)' }}>
+                {displayName || user?.email}
+              </div>
+              <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-faint)', marginTop: 2 }}>
+                {user?.email}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+              <button
+                type="button" onClick={() => setMostrarCropper(v => !v)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '7px 14px', background: 'var(--bg-inset)', border: '1px solid var(--border)',
+                  borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)', color: 'var(--accent-amber)',
+                }}
+              >
+                <Camera size={14} /> {mostrarCropper ? 'Cerrar' : 'Cambiar foto'}
+              </button>
+              {avatarFoto && (
+                <button
+                  type="button" onClick={handleQuitarFoto} title="Quitar foto"
+                  style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 9px', cursor: 'pointer', color: '#dc2626', display: 'flex' }}
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+            {mostrarCropper && (
+              <div style={{ width: '100%', paddingTop: 'var(--space-3)', borderTop: '1px solid var(--border)', marginTop: 'var(--space-2)' }}>
+                <AvatarCropper onConfirm={handleFotoConfirmada} onCancel={() => setMostrarCropper(false)} />
+              </div>
+            )}
+          </div>
+        </div>
+
+
+        {/* ── Mi perfil: información personal ── */}
+
+        <div style={sectionStyle}>
+          <SectionHeader
+            icon={User}
+            title="Información personal"
+            description="Nombre, correo y color de avatar."
+          />
+
+          <div style={{ padding: 18 }}>
+            {loading ? (
+              <div style={{ height: 60, background: 'var(--border)', borderRadius: 6, animation: 'shimmer 1.5s infinite' }} />
+            ) : (
+              <>
+                <Field label="Nombre completo" htmlFor="perfil-nombre">
+                  <input
+                    id="perfil-nombre" name="name" autoComplete="name"
+                    value={nombre} onChange={e => setNombre(e.target.value)}
+                    className="config-input"
+                    style={inputStyle} placeholder="Tu nombre"
+                  />
+                </Field>
+                <Field label="Correo electrónico" htmlFor="perfil-email">
+                  <input
+                    id="perfil-email" name="email" type="email" autoComplete="email"
+                    value={user?.email ?? ''} disabled
+                    style={{ ...inputStyle, opacity: 0.6, cursor: 'not-allowed' }}
+                  />
+                </Field>
+
+                <div style={{ marginBottom: 'var(--space-4)' }}>
+                  {/* span y no label: encabeza un grupo de botones, no un control unico. */}
+                  <span id="avatar-color-titulo" style={{ ...labelStyle, display: 'block', marginBottom: 'var(--space-2)' }}>
+                    Color de avatar
+                  </span>
+                  {/* Los botones solo muestran color: sin aria-label no tienen nombre
+                      accesible, y `title` no alcanza como sustituto. */}
+                  <div role="group" aria-labelledby="avatar-color-titulo" style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                    {AVATAR_COLORS.map(c => (
+                      <button key={c.value} type="button" title={c.label}
+                        aria-label={`Color ${c.label}`}
+                        aria-pressed={avatarColor === c.value}
+                        onClick={() => handleAvatarColor(c.value)} style={{
+                        width: 28, height: 28, borderRadius: 7, background: c.value, border: 'none',
+                        cursor: 'pointer', position: 'relative',
+                        outline: avatarColor === c.value ? `2px solid ${c.value}` : 'none',
+                        outlineOffset: 2,
+                      }}>
+                        {avatarColor === c.value && (
+                          <Check size={14} style={{ color: 'white', position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }} />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {infoMsg && (
+                  <div style={{ padding: '8px 12px', background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.25)', borderRadius: 7, color: '#16a34a', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Check size={13} /> {infoMsg}
+                  </div>
+                )}
+                {(infoError || saveError) && (
+                  <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, color: '#dc2626', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <AlertCircle size={13} /> {infoError || saveError}
+                  </div>
+                )}
+                <button onClick={handleSaveInfo} disabled={saving} style={{
+                  padding: '8px 20px', background: 'var(--accent-amber)', border: 'none',
+                  borderRadius: 8, cursor: saving ? 'not-allowed' : 'pointer',
+                  fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'white',
+                  opacity: saving ? 0.6 : 1,
+                }}>
+                  {saving ? 'Guardando…' : 'Guardar cambios'}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+
+        {/* ── Mi perfil: contraseña ── */}
+
+        <div style={sectionStyle}>
+          <SectionHeader
+            icon={Lock}
+            title="Cambiar contraseña"
+          />
+
+          <div style={{ padding: 18 }}>
+            <Field label="Contraseña actual" htmlFor="perfil-pw-actual">
+              <input id="perfil-pw-actual" name="current-password" type="password" value={pwOld} onChange={e => setPwOld(e.target.value)} className="config-input" style={inputStyle} autoComplete="current-password" />
+            </Field>
+            <Field label="Nueva contraseña" htmlFor="perfil-pw-nueva">
+              <input id="perfil-pw-nueva" name="new-password" type="password" value={pwNew} onChange={e => setPwNew(e.target.value)} className="config-input" style={inputStyle} autoComplete="new-password" />
+              {pwNew && pwErrors.length > 0 && (
+                <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 'var(--space-1)' }}>
+                  {pwErrors.map(e => (
+                    <span key={e} style={{ fontSize: 'var(--text-3xs)', padding: '2px 7px', borderRadius: 4, background: 'rgba(220,38,38,0.08)', color: '#dc2626', fontFamily: 'var(--font-data)' }}>
+                      {e}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </Field>
+            <Field label="Confirmar nueva contraseña" htmlFor="perfil-pw-confirmar">
+              <input id="perfil-pw-confirmar" name="confirm-password" type="password" value={pwConfirm} onChange={e => setPwConfirm(e.target.value)} className="config-input" style={inputStyle} autoComplete="new-password" />
+            </Field>
+
+            {pwMsg && (
+              <div style={{ padding: '8px 12px', background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.25)', borderRadius: 7, color: '#16a34a', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Check size={13} /> {pwMsg}
+              </div>
+            )}
+            {pwError && (
+              <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, color: '#dc2626', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <AlertCircle size={13} /> {pwError}
+              </div>
+            )}
+            <button onClick={handleChangePassword} disabled={pwLoading || !pwOld || !pwNew || !pwConfirm} style={{
+              padding: '8px 20px', background: 'var(--accent-amber)', border: 'none',
+              borderRadius: 8, cursor: pwLoading || !pwOld || !pwNew || !pwConfirm ? 'not-allowed' : 'pointer',
+              fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'white',
+              opacity: pwLoading || !pwOld || !pwNew || !pwConfirm ? 0.5 : 1,
+            }}>
+              {pwLoading ? 'Actualizando…' : 'Cambiar contraseña'}
+            </button>
+          </div>
         </div>
 
 
@@ -398,281 +725,6 @@ export default function ConfiguracionPage() {
               <option value="AAAA-MM-DD">AAAA-MM-DD</option>
             </select>
           </SettingRow>
-        </div>
-
-
-        {/* ── Notificaciones ── */}
-
-        <div style={sectionStyle}>
-          <SectionHeader
-            icon={Bell}
-            title="Notificaciones"
-            description="Controla las notificaciones relacionadas con las mediciones."
-          />
-
-          <SettingRow
-            title="Notificaciones de nuevas mediciones"
-            description="Recibir avisos cuando se registre una nueva medición."
-          >
-            <Switch
-              checked={notifications}
-              onChange={setNotifications}
-            />
-          </SettingRow>
-
-          <SettingRow
-            title="Alertas de corrosión severa"
-            description="Mostrar una alerta cuando una medición sea clasificada como severa."
-          >
-            <Switch
-              checked={severeAlerts}
-              onChange={setSevereAlerts}
-            />
-          </SettingRow>
-
-          <SettingRow
-            title="Resumen de mediciones"
-            description="Recibir un resumen periódico del comportamiento de las mediciones."
-            last
-          >
-            <Switch
-              checked={measurementSummary}
-              onChange={setMeasurementSummary}
-            />
-          </SettingRow>
-        </div>
-
-
-        {/* ── Parámetros de análisis ── */}
-
-        <div style={sectionStyle}>
-          <SectionHeader
-            icon={SlidersHorizontal}
-            title="Parámetros de análisis"
-            description="Valores utilizados como referencia para clasificar el nivel de corrosión."
-          />
-
-          <div style={{ padding: 18 }}>
-
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: 'var(--space-3-5)',
-              }}
-            >
-
-              {/* Leve */}
-              <div>
-                <label htmlFor="umbral-leve" style={labelStyle}>
-                  Corrosión leve
-                </label>
-
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 7,
-                  }}
-                >
-                  <input
-                    id="umbral-leve"
-                    name="umbral-leve"
-                    className="config-input"
-                    type="number"
-                    inputMode="numeric"
-                    min="0"
-                    max="100"
-                    value={thresholds.leve}
-                    onChange={e =>
-                      handleThresholdChange(
-                        'leve',
-                        Number(e.target.value)
-                      )
-                    }
-                    style={{
-                      width: '100%',
-                      padding: '8px 10px',
-                      borderRadius: 7,
-                      border: '1px solid var(--border)',
-                      background: 'var(--bg-page)',
-                      color: 'var(--text-primary)',
-                      fontFamily: 'var(--font-data)',
-                      fontSize: 'var(--text-xs)',
-                      boxSizing: 'border-box',
-                    }}
-                  />
-
-                  <span
-                    style={{
-                      fontFamily: 'var(--font-data)',
-                      fontSize: 'var(--text-xs)',
-                      color: 'var(--text-muted)',
-                    }}
-                  >
-                    %
-                  </span>
-                </div>
-
-                <div style={{ ...descriptionStyle, marginTop: 5 }}>
-                  Hasta este porcentaje de área afectada.
-                </div>
-              </div>
-
-
-              {/* Moderada */}
-              <div>
-                <label htmlFor="umbral-moderada" style={labelStyle}>
-                  Corrosión moderada
-                </label>
-
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 7,
-                  }}
-                >
-                  <input
-                    id="umbral-moderada"
-                    name="umbral-moderada"
-                    className="config-input"
-                    type="number"
-                    inputMode="numeric"
-                    min="0"
-                    max="100"
-                    value={thresholds.moderada}
-                    onChange={e =>
-                      handleThresholdChange(
-                        'moderada',
-                        Number(e.target.value)
-                      )
-                    }
-                    style={{
-                      width: '100%',
-                      padding: '8px 10px',
-                      borderRadius: 7,
-                      border: '1px solid var(--border)',
-                      background: 'var(--bg-page)',
-                      color: 'var(--text-primary)',
-                      fontFamily: 'var(--font-data)',
-                      fontSize: 'var(--text-xs)',
-                      boxSizing: 'border-box',
-                    }}
-                  />
-
-                  <span
-                    style={{
-                      fontFamily: 'var(--font-data)',
-                      fontSize: 'var(--text-xs)',
-                      color: 'var(--text-muted)',
-                    }}
-                  >
-                    %
-                  </span>
-                </div>
-
-                <div style={{ ...descriptionStyle, marginTop: 5 }}>
-                  Límite superior para la clasificación moderada.
-                </div>
-              </div>
-
-
-              {/* Severa */}
-              <div>
-                <label htmlFor="umbral-severa" style={labelStyle}>
-                  Corrosión severa
-                </label>
-
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 7,
-                  }}
-                >
-                  <input
-                    id="umbral-severa"
-                    name="umbral-severa"
-                    className="config-input"
-                    type="number"
-                    inputMode="numeric"
-                    min="0"
-                    max="100"
-                    value={thresholds.severa}
-                    onChange={e =>
-                      handleThresholdChange(
-                        'severa',
-                        Number(e.target.value)
-                      )
-                    }
-                    style={{
-                      width: '100%',
-                      padding: '8px 10px',
-                      borderRadius: 7,
-                      border: '1px solid var(--border)',
-                      background: 'var(--bg-page)',
-                      color: 'var(--text-primary)',
-                      fontFamily: 'var(--font-data)',
-                      fontSize: 'var(--text-xs)',
-                      boxSizing: 'border-box',
-                    }}
-                  />
-
-                  <span
-                    style={{
-                      fontFamily: 'var(--font-data)',
-                      fontSize: 'var(--text-xs)',
-                      color: 'var(--text-muted)',
-                    }}
-                  >
-                    %
-                  </span>
-                </div>
-
-                <div style={{ ...descriptionStyle, marginTop: 5 }}>
-                  A partir de este porcentaje se considera severa.
-                </div>
-              </div>
-
-            </div>
-
-            {/* Nota */}
-            <div
-              style={{
-                marginTop: 'var(--space-4)',
-                padding: '10px 12px',
-                background: 'rgba(156,54,16,0.05)',
-                border: '1px solid rgba(156,54,16,0.12)',
-                borderRadius: 7,
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: 'var(--space-2)',
-              }}
-            >
-              <Activity
-                size={14}
-                style={{
-                  color: 'var(--accent-blue)',
-                  marginTop: 1,
-                  flexShrink: 0,
-                }}
-              />
-
-              <div
-                style={{
-                  fontFamily: 'var(--font-ui)',
-                  fontSize: 'var(--text-2xs)',
-                  lineHeight: 1.5,
-                  color: 'var(--text-muted)',
-                }}
-              >
-                Estos valores permiten establecer los rangos de referencia
-                utilizados para interpretar el porcentaje de área corroída.
-              </div>
-            </div>
-
-          </div>
         </div>
 
 

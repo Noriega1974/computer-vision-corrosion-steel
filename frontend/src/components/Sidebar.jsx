@@ -11,7 +11,6 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
-  User,
   Upload,
 } from 'lucide-react';
 
@@ -72,16 +71,11 @@ const NAV_ITEMS = [
   { divider: true },
 
   {
-    path: '/perfil',
-    icon: User,
-    label: 'Mi perfil',
-  },
-
-  {
+    // Incluye "Mi perfil" (foto, nombre, contraseña) -- ya no es pestaña
+    // aparte, así que sin `roles` queda visible para los 4 roles.
     path: '/configuracion',
     icon: Settings,
     label: 'Configuración',
-    roles: ['super_admin', 'admin'],
   },
 ];
 
@@ -735,7 +729,7 @@ export default function Sidebar({
           user && (
             <div
               onClick={() =>
-                navigate('/perfil')
+                navigate('/configuracion')
               }
               title="Mi perfil"
               style={{
@@ -896,7 +890,7 @@ export default function Sidebar({
           user && (
             <div
               onClick={() =>
-                navigate('/perfil')
+                navigate('/configuracion')
               }
               title="Mi perfil"
               style={{
