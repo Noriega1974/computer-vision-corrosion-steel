@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Upload } from 'lucide-react';
 
 import KPIBar from '../components/KPIBar';
@@ -70,6 +70,16 @@ export default function DashboardPage() {
     loading: loadingPuntos,
     error: errorPuntos
   } = useBloques();
+
+  // "Ver punto en dashboard" (MedicionDetailPage) navega a /dashboard?punto=X
+  // -- nadie leía ese parámetro. Selecciona el punto apenas carga la lista.
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    const idPunto = searchParams.get('punto');
+    if (!idPunto || puntos.length === 0) return;
+    const match = puntos.find(p => p.id_bloque === idPunto);
+    if (match) setSelectedPunto(match);
+  }, [searchParams, puntos]);
 
 
   return (
@@ -204,7 +214,7 @@ export default function DashboardPage() {
 
               gap: 'var(--space-3)',
 
-              minHeight: 430,
+              minHeight: 520,
 
               overflow: 'hidden',
             }}
@@ -280,7 +290,7 @@ export default function DashboardPage() {
 
               gap: 'var(--space-3)',
 
-              minHeight: 430,
+              minHeight: 520,
             }}
           >
 
@@ -394,7 +404,7 @@ export default function DashboardPage() {
 
               gap: 'var(--space-3)',
 
-              minHeight: 430,
+              minHeight: 520,
 
               overflow: 'hidden',
             }}
@@ -440,6 +450,8 @@ export default function DashboardPage() {
 
         {/* ========================================================
             ANALYSIS
+            TENTATIVA DE ELIMINACIÓN -- el usuario planea sacar esta
+            sección, no tocar/mejorar por ahora.
             ======================================================== */}
 
         <section

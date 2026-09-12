@@ -3,6 +3,7 @@ import { useMedicionesPunto } from '../hooks/useMedicionesPunto';
 import {
   nivelColor, nivelBg, nivelLabel, nivelToStatus,
 } from '../lib/statusUtils';
+import { formatFecha } from '../utils/dateFormat';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 const CustomTooltip = ({ active, payload, label }) => {
@@ -198,9 +199,7 @@ export default function PlantDetail({ punto }) {
 function MedicionRow({ medicion }) {
   const nivel = medicion.nivel_corrosion ?? 0;
   const color = nivelColor(nivel);
-  const fecha = medicion.timestamp
-    ? new Date(medicion.timestamp).toLocaleString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-    : '—';
+  const fecha = formatFecha(medicion.timestamp, { conHora: true });
 
   return (
     <div style={{

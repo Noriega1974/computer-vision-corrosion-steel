@@ -21,7 +21,6 @@ const MedicionDetailPage  = lazy(() => import('./pages/MedicionDetailPage'));
 const BloquesPage         = lazy(() => import('./pages/BloquesPage'));
 const ZonasPage           = lazy(() => import('./pages/ZonasPage'));
 const UsersPage           = lazy(() => import('./pages/UsersPage'));
-const ProfilePage         = lazy(() => import('./pages/ProfilePage'));
 const ConfiguracionPage   = lazy(() => import('./pages/ConfiguracionPage'));
 const NotFoundPage        = lazy(() => import('./pages/NotFoundPage'));
 const PrivacidadPage      = lazy(() => import('./pages/PrivacidadPage'));
@@ -48,7 +47,9 @@ export default function App() {
                 <Route path="/dashboard"           element={<DashboardPage />} />
                 <Route path="/galeria"             element={<GaleriaPage />} />
                 <Route path="/galeria/:idMedicion" element={<MedicionDetailPage />} />
-                <Route path="/perfil"              element={<ProfilePage />} />
+                {/* "Mi perfil" se fusionó dentro de Configuración -- se deja un
+                    redirect para no romper enlaces/marcadores viejos a /perfil. */}
+                <Route path="/perfil"              element={<Navigate to="/configuracion" replace />} />
                 <Route path="/privacidad"          element={<PrivacidadPage />} />
 
                 <Route path="/upload" element={

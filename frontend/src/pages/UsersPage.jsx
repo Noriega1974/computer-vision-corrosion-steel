@@ -8,6 +8,7 @@ import { useEmpresas } from '../hooks/useEmpresas';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
 import { Building2 } from 'lucide-react';
+import { formatFecha } from '../utils/dateFormat';
 
 // ─── RBAC multi-empresa ────────────────────────────────────────────────────
 // Jerarquía de creación de usuarios, espejo de CREATABLE_ROLES en
@@ -793,7 +794,7 @@ export default function UsersPage() {
               {colaboradorResult.nickname}
             </div>
             <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', marginBottom: 20 }}>
-              Vence el {new Date(colaboradorResult.vence_en).toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' })}
+              Vence el {formatFecha(colaboradorResult.vence_en)}
             </div>
             <div style={{ background: 'var(--bg-inset)', borderRadius: 8, padding: '14px 20px', textAlign: 'left', marginBottom: 'var(--space-4)' }}>
               <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', fontFamily: 'var(--font-data)', letterSpacing: '0.1em', marginBottom: 'var(--space-2)' }}>CREDENCIALES DE ACCESO</div>

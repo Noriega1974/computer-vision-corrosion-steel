@@ -33,7 +33,16 @@ export default function AppLayout() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
     localStorage.setItem('corria-darkmode', darkMode);
+    window.dispatchEvent(new CustomEvent('corria-darkmode', { detail: darkMode }));
   }, [darkMode]);
+
+  // El selector "Modo de visualización" en Configuración cambia el tema
+  // desde ahí -- se escucha el mismo evento que se dispara arriba.
+  useEffect(() => {
+    const handler = (e) => setDarkMode(e.detail);
+    window.addEventListener('corria-darkmode', handler);
+    return () => window.removeEventListener('corria-darkmode', handler);
+  }, []);
 
   // Persistir estado del sidebar
   useEffect(() => {

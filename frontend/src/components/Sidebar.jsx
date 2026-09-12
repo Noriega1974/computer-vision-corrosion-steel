@@ -11,7 +11,6 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
-  User,
   Upload,
 } from 'lucide-react';
 
@@ -20,6 +19,7 @@ import pixelrustLogo from '../assets/pixelrust-logo.png';
 
 const AVATAR_STORAGE_KEY = 'corria-avatar-color';
 const NAME_STORAGE_KEY = 'corria-display-name';
+const FOTO_STORAGE_KEY = 'corria-avatar-foto';
 
 // ─────────────────────────────────────────────────────────────
 // ITEMS DE NAVEGACIÓN
@@ -71,16 +71,11 @@ const NAV_ITEMS = [
   { divider: true },
 
   {
-    path: '/perfil',
-    icon: User,
-    label: 'Mi perfil',
-  },
-
-  {
+    // Incluye "Mi perfil" (foto, nombre, contraseña) -- ya no es pestaña
+    // aparte, así que sin `roles` queda visible para los 4 roles.
     path: '/configuracion',
     icon: Settings,
     label: 'Configuración',
-    roles: ['super_admin', 'admin'],
   },
 ];
 
@@ -259,6 +254,14 @@ export default function Sidebar({
         ) ?? '#1432A3'
     );
 
+  const [avatarFoto, setAvatarFoto] =
+    React.useState(
+      () =>
+        localStorage.getItem(
+          FOTO_STORAGE_KEY
+        ) ?? ''
+    );
+
   // ───────────────────────────────────────────────────────────
   // NOMBRE
   // ───────────────────────────────────────────────────────────
@@ -288,6 +291,24 @@ export default function Sidebar({
     return () => {
       window.removeEventListener(
         'corria-avatar-color',
+        handler
+      );
+    };
+  }, []);
+
+  React.useEffect(() => {
+    const handler = e => {
+      setAvatarFoto(e.detail);
+    };
+
+    window.addEventListener(
+      'corria-avatar-foto',
+      handler
+    );
+
+    return () => {
+      window.removeEventListener(
+        'corria-avatar-foto',
         handler
       );
     };
@@ -708,7 +729,7 @@ export default function Sidebar({
           user && (
             <div
               onClick={() =>
-                navigate('/perfil')
+                navigate('/configuracion')
               }
               title="Mi perfil"
               style={{
@@ -750,43 +771,53 @@ export default function Sidebar({
               }}
             >
               {/* Avatar */}
-              <div
-                style={{
-                  width: 35,
-                  height: 35,
+              {avatarFoto ? (
+                <img
+                  src={avatarFoto} alt=""
+                  style={{
+                    width: 35, height: 35, borderRadius: 10, objectFit: 'cover',
+                    flexShrink: 0, boxShadow: '0 4px 12px rgba(20,50,163,0.18)',
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: 35,
+                    height: 35,
 
-                  borderRadius: 10,
+                    borderRadius: 10,
 
-                  background:
-                    `linear-gradient(135deg, ${avatarColor}, var(--accent-amber))`,
+                    background:
+                      `linear-gradient(135deg, ${avatarColor}, var(--accent-amber))`,
 
-                  display: 'flex',
+                    display: 'flex',
 
-                  alignItems: 'center',
+                    alignItems: 'center',
 
-                  justifyContent: 'center',
+                    justifyContent: 'center',
 
-                  fontFamily:
-                    'var(--font-data)',
+                    fontFamily:
+                      'var(--font-data)',
 
-                  fontWeight: 700,
+                    fontWeight: 700,
 
-                  fontSize: 'var(--text-xs)',
+                    fontSize: 'var(--text-xs)',
 
-                  color: 'white',
+                    color: 'white',
 
-                  flexShrink: 0,
+                    flexShrink: 0,
 
-                  boxShadow:
-                    '0 4px 12px rgba(20,50,163,0.18)',
-                }}
-              >
-                {getInitials(
-                  displayName ||
-                    user.name ||
-                    user.email
-                )}
-              </div>
+                    boxShadow:
+                      '0 4px 12px rgba(20,50,163,0.18)',
+                  }}
+                >
+                  {getInitials(
+                    displayName ||
+                      user.name ||
+                      user.email
+                  )}
+                </div>
+              )}
 
               {/* Información */}
               <div
@@ -859,46 +890,60 @@ export default function Sidebar({
           user && (
             <div
               onClick={() =>
-                navigate('/perfil')
+                navigate('/configuracion')
               }
               title="Mi perfil"
               style={{
                 width: 35,
                 height: 35,
-
-                borderRadius: 10,
-
-                background:
-                  `linear-gradient(135deg, ${avatarColor}, var(--accent-amber))`,
-
-                display: 'flex',
-
-                alignItems: 'center',
-
-                justifyContent: 'center',
-
-                fontFamily:
-                  'var(--font-data)',
-
-                fontWeight: 700,
-
-                fontSize: 'var(--text-xs)',
-
-                color: 'white',
-
-                margin:
-                  '0 auto 6px',
-
+                margin: '0 auto 6px',
                 cursor: 'pointer',
-
-                boxShadow:
-                  '0 4px 12px rgba(20,50,163,0.18)',
               }}
             >
-              {getInitials(
-                displayName ||
-                  user.name ||
-                  user.email
+              {avatarFoto ? (
+                <img
+                  src={avatarFoto} alt=""
+                  style={{
+                    width: 35, height: 35, borderRadius: 10, objectFit: 'cover',
+                    boxShadow: '0 4px 12px rgba(20,50,163,0.18)',
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: 35,
+                    height: 35,
+
+                    borderRadius: 10,
+
+                    background:
+                      `linear-gradient(135deg, ${avatarColor}, var(--accent-amber))`,
+
+                    display: 'flex',
+
+                    alignItems: 'center',
+
+                    justifyContent: 'center',
+
+                    fontFamily:
+                      'var(--font-data)',
+
+                    fontWeight: 700,
+
+                    fontSize: 'var(--text-xs)',
+
+                    color: 'white',
+
+                    boxShadow:
+                      '0 4px 12px rgba(20,50,163,0.18)',
+                  }}
+                >
+                  {getInitials(
+                    displayName ||
+                      user.name ||
+                      user.email
+                  )}
+                </div>
               )}
             </div>
           )}

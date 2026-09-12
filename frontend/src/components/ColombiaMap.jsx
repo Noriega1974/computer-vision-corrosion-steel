@@ -313,11 +313,17 @@ export default function ColombiaMap({
     );
   }, [selectedPunto]);
 
-  // Centrar el mapa en una zona elegida desde ZonasList.
+  // Centrar el mapa en una afiliación elegida desde ZonasList -- encuadra
+  // TODAS sus zonas juntas (una empresa puede tener varias manchas).
   useEffect(() => {
     const L = window.L;
-    if (!L || !mapInstanceRef.current || !selectedZona?.puntos?.length) return;
-    const bounds = L.polygon(selectedZona.puntos.map(p => [p.lat, p.lng])).getBounds();
+    const zonas = selectedZona?.zonas ?? [];
+    if (!L || !mapInstanceRef.current || zonas.length === 0) return;
+    const poligonos = zonas
+      .filter(z => z.puntos?.length >= 3)
+      .map(z => L.polygon(z.puntos.map(p => [p.lat, p.lng])));
+    if (poligonos.length === 0) return;
+    const bounds = L.featureGroup(poligonos).getBounds();
     mapInstanceRef.current.flyToBounds(bounds, { padding: [40, 40], duration: 0.8 });
   }, [selectedZona]);
 

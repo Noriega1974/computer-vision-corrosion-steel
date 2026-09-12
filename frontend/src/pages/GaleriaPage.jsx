@@ -5,6 +5,7 @@ import { useMediciones } from '../hooks/useMediciones';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useAuth } from '../auth/AuthContext';
 import { nivelColor, nivelLabel, nivelToStatus } from '../lib/statusUtils';
+import { formatFecha } from '../utils/dateFormat';
 
 // ─── Helper: tiempo relativo ─────────────────────────────────────────────────
 function tiempoRelativo(timestamp) {
@@ -17,7 +18,7 @@ function tiempoRelativo(timestamp) {
   if (hrs < 24) return `hace ${hrs} h`;
   const days = Math.floor(hrs / 24);
   if (days < 30) return `hace ${days} días`;
-  return new Date(timestamp).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+  return formatFecha(timestamp);
 }
 
 // ─── Card de galería ─────────────────────────────────────────────────────────
