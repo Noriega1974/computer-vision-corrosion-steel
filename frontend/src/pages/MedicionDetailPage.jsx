@@ -47,8 +47,8 @@ function MiniMapa({ lat, lng, latReal, lngReal }) {
     const L = window.L;
     const map = L.map(mapRef.current, {
       center: [lat, lng], zoom: 13,
-      zoomControl: false, attributionControl: false,
-      scrollWheelZoom: false, dragging: false,
+      zoomControl: true, attributionControl: false,
+      scrollWheelZoom: true, dragging: true,
     });
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map);
 
