@@ -31,6 +31,13 @@ const AVATAR_COLORS = [
 
 const AVATAR_STORAGE_KEY = 'corria-avatar-color';
 const FOTO_STORAGE_KEY = 'corria-avatar-foto';
+const NAME_STORAGE_KEY = 'corria-display-name';
+
+// Mismo fix que Sidebar.jsx: estas claves eran globales, asi que dos
+// usuarios distintos en el mismo navegador se pisaban la foto/nombre.
+function claveDeUsuario(base, email) {
+  return email ? `${base}:${email}` : base;
+}
 
 function getInitials(name = '') {
   const parts = name.trim().split(/\s+/);
@@ -251,8 +258,12 @@ export default function ConfiguracionPage() {
   const { user } = useAuth();
   const { perfil, loading, saving, saveError, actualizarPerfil } = useUsuarioPerfil();
 
-  const [avatarColor, setAvatarColor] = useState(() => localStorage.getItem(AVATAR_STORAGE_KEY) ?? '#1432A3');
-  const [avatarFoto, setAvatarFoto] = useState(() => localStorage.getItem(FOTO_STORAGE_KEY) ?? '');
+  const colorKey = claveDeUsuario(AVATAR_STORAGE_KEY, user?.email);
+  const fotoKey = claveDeUsuario(FOTO_STORAGE_KEY, user?.email);
+  const nameKey = claveDeUsuario(NAME_STORAGE_KEY, user?.email);
+
+  const [avatarColor, setAvatarColor] = useState(() => localStorage.getItem(colorKey) ?? '#1432A3');
+  const [avatarFoto, setAvatarFoto] = useState(() => localStorage.getItem(fotoKey) ?? '');
   const [mostrarCropper, setMostrarCropper] = useState(false);
   const [nombre, setNombre] = useState('');
   const [infoMsg, setInfoMsg] = useState(null);
@@ -297,13 +308,13 @@ export default function ConfiguracionPage() {
     // que el sidebar no parpadee sin foto antes de que cargue el perfil.
     if (perfil && typeof perfil.foto_perfil === 'string') {
       setAvatarFoto(perfil.foto_perfil);
-      localStorage.setItem(FOTO_STORAGE_KEY, perfil.foto_perfil);
+      localStorage.setItem(fotoKey, perfil.foto_perfil);
     }
-  }, [perfil, user]);
+  }, [perfil, user, fotoKey]);
 
   const handleAvatarColor = (color) => {
     setAvatarColor(color);
-    localStorage.setItem(AVATAR_STORAGE_KEY, color);
+    localStorage.setItem(colorKey, color);
     window.dispatchEvent(new CustomEvent('corria-avatar-color', { detail: color }));
   };
 
@@ -312,7 +323,7 @@ export default function ConfiguracionPage() {
     try {
       await actualizarPerfil({ foto_perfil: dataUrl });
       setAvatarFoto(dataUrl);
-      localStorage.setItem(FOTO_STORAGE_KEY, dataUrl);
+      localStorage.setItem(fotoKey, dataUrl);
       window.dispatchEvent(new CustomEvent('corria-avatar-foto', { detail: dataUrl }));
       setMostrarCropper(false);
       setInfoMsg('Foto de perfil actualizada.');
@@ -326,7 +337,7 @@ export default function ConfiguracionPage() {
     try {
       await actualizarPerfil({ foto_perfil: '' });
       setAvatarFoto('');
-      localStorage.removeItem(FOTO_STORAGE_KEY);
+      localStorage.removeItem(fotoKey);
       window.dispatchEvent(new CustomEvent('corria-avatar-foto', { detail: '' }));
     } catch (err) {
       setInfoError(err.message);
@@ -338,7 +349,7 @@ export default function ConfiguracionPage() {
     setInfoError(null);
     try {
       await actualizarPerfil({ nombre });
-      localStorage.setItem('corria-display-name', nombre);
+      localStorage.setItem(nameKey, nombre);
       window.dispatchEvent(new CustomEvent('corria-user-name', { detail: nombre }));
       setInfoMsg('Perfil actualizado correctamente.');
     } catch (err) {
