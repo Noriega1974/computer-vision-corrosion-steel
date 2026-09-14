@@ -540,7 +540,13 @@ def lambda_handler(event: dict, context) -> dict:
             # creador — nunca se toma del body — salvo que el creador sea
             # super_admin, el único rol que puede pasar un empresa_id
             # explícito (y debe hacerlo, validado contra la tabla empresas).
-            if rol_creador == "super_admin":
+            # Excepción dentro de la excepción: si el usuario NUEVO es a su
+            # vez super_admin, no tiene empresa_id — un super_admin no
+            # pertenece a ninguna afiliación (ve todo, cross-empresa) — así
+            # que no hay que pedirlo ni validarlo, sin importar quién lo cree.
+            if rol == "super_admin":
+                empresa_id = None
+            elif rol_creador == "super_admin":
                 empresa_id = body.get("empresa_id")
                 if not empresa_id:
                     return _respuesta(400, {"error": "empresa_id es requerido"})

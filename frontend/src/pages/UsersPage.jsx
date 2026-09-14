@@ -150,6 +150,10 @@ const labelStyle = {
 // requerido" si super_admin no la manda). admin/tecnico creando un usuario
 // no ven este campo: el backend ya la fuerza a la suya, mandarla del body
 // no tendría efecto y solo confundiría.
+// Excepción dentro de la excepción: si el ROL ELEGIDO en el propio form es
+// super_admin, tampoco hay que pedir afiliación -- un super_admin no
+// pertenece a ninguna empresa (ve todo, cross-empresa), así que `mostrarEmpresa`
+// depende de `requiereEmpresa` Y de que el rol seleccionado no sea super_admin.
 function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error, rolesPermitidos, empresasDisponibles, requiereEmpresa }) {
   const opcionesRol = isEdit
     ? TODOS_ROLES
@@ -163,17 +167,19 @@ function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error, rolesPermi
   });
   const [validationError, setValidationError] = useState(null);
 
+  const mostrarEmpresa = requiereEmpresa && form.rol !== 'super_admin';
+
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (requiereEmpresa && !form.empresa_id) {
+    if (mostrarEmpresa && !form.empresa_id) {
       setValidationError('Selecciona a qué afiliación pertenece este usuario.');
       return;
     }
     setValidationError(null);
     const payload = { email: form.email, nombre: form.nombre, rol: form.rol };
-    if (requiereEmpresa) payload.empresa_id = form.empresa_id;
+    if (mostrarEmpresa) payload.empresa_id = form.empresa_id;
     // Al crear, el backend genera y envía la contraseña temporal automáticamente
     onSubmit(payload);
   };
@@ -210,7 +216,7 @@ function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error, rolesPermi
           ))}
         </select>
       </div>
-      {requiereEmpresa && (
+      {mostrarEmpresa && (
         <div style={{ marginBottom: 'var(--space-3-5)' }}>
           <label htmlFor="usuario-empresa" style={labelStyle}>
             Afiliación *
