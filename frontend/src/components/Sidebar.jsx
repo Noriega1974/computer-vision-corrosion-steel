@@ -15,11 +15,22 @@ import {
 } from 'lucide-react';
 
 import { useAuth } from '../auth/AuthContext';
+import { useUsuarioPerfil } from '../hooks/useUsuario';
 import pixelrustLogo from '../assets/pixelrust-logo.png';
 
 const AVATAR_STORAGE_KEY = 'corria-avatar-color';
 const NAME_STORAGE_KEY = 'corria-display-name';
 const FOTO_STORAGE_KEY = 'corria-avatar-foto';
+
+// Las claves de localStorage eran globales (sin el email de por medio), asi
+// que el Sidebar mostraba la foto/nombre/color del ULTIMO usuario que los
+// habia guardado en ese navegador -- si el Usuario A subia una foto y
+// despues el Usuario B iniciaba sesion en la misma maquina, veia la foto de
+// A hasta que entrara a Configuracion (unico lugar que si corregia contra
+// el backend). Cada clave ahora incluye el email de la sesion activa.
+function claveDeUsuario(base, email) {
+  return email ? `${base}:${email}` : base;
+}
 
 // ─────────────────────────────────────────────────────────────
 // ITEMS DE NAVEGACIÓN
@@ -241,6 +252,11 @@ export default function Sidebar({
 }) {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { perfil } = useUsuarioPerfil();
+
+  const colorKey = claveDeUsuario(AVATAR_STORAGE_KEY, user?.email);
+  const fotoKey = claveDeUsuario(FOTO_STORAGE_KEY, user?.email);
+  const nameKey = claveDeUsuario(NAME_STORAGE_KEY, user?.email);
 
   // ───────────────────────────────────────────────────────────
   // AVATAR
@@ -250,7 +266,7 @@ export default function Sidebar({
     React.useState(
       () =>
         localStorage.getItem(
-          AVATAR_STORAGE_KEY
+          colorKey
         ) ?? '#1432A3'
     );
 
@@ -258,7 +274,7 @@ export default function Sidebar({
     React.useState(
       () =>
         localStorage.getItem(
-          FOTO_STORAGE_KEY
+          fotoKey
         ) ?? ''
     );
 
@@ -270,9 +286,27 @@ export default function Sidebar({
     React.useState(
       () =>
         localStorage.getItem(
-          NAME_STORAGE_KEY
+          nameKey
         ) || ''
     );
+
+  // Fuente de verdad real: el perfil del backend (por usuario), no el
+  // cache de localStorage -- corrige de entrada aunque la persona nunca
+  // haya entrado a Configuracion en este navegador.
+  React.useEffect(() => {
+    if (!perfil) return;
+
+    if (typeof perfil.foto_perfil === 'string') {
+      setAvatarFoto(perfil.foto_perfil);
+      localStorage.setItem(fotoKey, perfil.foto_perfil);
+    }
+
+    const nombre = perfil.nombre ?? perfil.name ?? user?.name;
+    if (nombre) {
+      setDisplayName(nombre);
+      localStorage.setItem(nameKey, nombre);
+    }
+  }, [perfil, user?.name, fotoKey, nameKey]);
 
   // ───────────────────────────────────────────────────────────
   // ESCUCHAR CAMBIOS DEL AVATAR
@@ -336,15 +370,16 @@ export default function Sidebar({
     };
   }, []);
 
-  // Si no hay nombre guardado, utilizar el nombre del usuario
+  // Si no hay nombre guardado (para ESTE usuario), utilizar el nombre de
+  // Cognito mientras se resuelve el perfil real de arriba.
   React.useEffect(() => {
     if (
-      !localStorage.getItem(NAME_STORAGE_KEY) &&
+      !localStorage.getItem(nameKey) &&
       user?.name
     ) {
       setDisplayName(user.name);
     }
-  }, [user?.name]);
+  }, [user?.name, nameKey]);
 
   // ───────────────────────────────────────────────────────────
   // ROL
