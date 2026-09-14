@@ -29,12 +29,19 @@ function buildNivelMap(mediciones) {
 // el tamaño base es más chico y escala geométricamente con el zoom (cada
 // nivel de zoom multiplica el tamaño), acotado entre MIN/MAX_ESCALA para que
 // no desaparezca al alejar del todo ni tape el mapa al acercar al máximo.
+// El factor/tope anteriores (1.16 y 2.1x) saturaban el tope de crecimiento
+// apenas 5 niveles de zoom por encima del base -- es decir, desde "vista de
+// ciudad" en adelante el pin YA estaba en su tamaño máximo (26px -> 55px,
+// 34px -> 71px seleccionado), por eso se veían gigantes y se pisaban entre
+// sí al acercar a nivel de calle/cuadra. El crecimiento ahora es más lento
+// y el tope mucho más bajo, para que nunca deje de verse como un pin y
+// empiece a tapar el mapa.
 const ZOOM_BASE = 6; // mismo zoom inicial del mapa -- ahí la escala es 1x
-const FACTOR_POR_NIVEL = 1.16;
-const MIN_ESCALA = 0.55;
-const MAX_ESCALA = 2.1;
-const TAMANO_BASE = 26;
-const TAMANO_BASE_SELECCIONADO = 34;
+const FACTOR_POR_NIVEL = 1.10;
+const MIN_ESCALA = 0.6;
+const MAX_ESCALA = 1.35;
+const TAMANO_BASE = 22;
+const TAMANO_BASE_SELECCIONADO = 28;
 
 function escalaParaZoom(zoom) {
   const cruda = Math.pow(FACTOR_POR_NIVEL, zoom - ZOOM_BASE);
