@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useBloques } from '../hooks/useBloques';
 import { useMediciones } from '../hooks/useMediciones';
 import { useEmpresas } from '../hooks/useEmpresas';
+import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
 import {
   nivelColor,
@@ -60,16 +61,23 @@ export default function ColombiaMap({
 
   const { mediciones } = useMediciones(100);
 
-  // Zonas de empresa (círculos que delimitan su área en el mapa) -- solo
-  // disponibles vía GET /empresas, restringido a super_admin en el backend.
-  // Para el resto de los roles no hay hoy ningún hook que exponga la zona de
-  // la propia empresa (el perfil de usuario -- useUsuarioPerfil -- no la
-  // trae), así que por ahora las zonas solo se dibujan para super_admin;
-  // completar esto para los demás roles requiere que el backend/perfil
-  // exponga la zona de la empresa propia.
+  // Zonas de empresa (polígonos que delimitan su área en el mapa). Para
+  // super_admin vienen de GET /empresas (todas). Para admin/tecnico/cliente
+  // ese endpoint es exclusivo de super_admin, así que se arma un array de
+  // una sola "empresa" con la zona propia expuesta en GET /usuarios/me
+  // (`empresa_zonas`, ver commit del botón "Centrar en mi zona") -- mismo
+  // shape ({nombre, zonas}) para que el efecto de dibujo de abajo no tenga
+  // que distinguir el caso.
   const { user } = useAuth();
   const esSuperAdmin = user?.groups?.includes('super_admin');
-  const { empresas } = useEmpresas(esSuperAdmin);
+  const { empresas: empresasTodas } = useEmpresas(esSuperAdmin);
+  const { perfil } = useUsuarioPerfil();
+
+  const empresas = esSuperAdmin
+    ? empresasTodas
+    : (perfil?.empresa_zonas?.length
+        ? [{ id_empresa: 'propia', nombre: perfil.empresa_nombre, zonas: perfil.empresa_zonas }]
+        : []);
 
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
