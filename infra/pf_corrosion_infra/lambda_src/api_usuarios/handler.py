@@ -349,7 +349,11 @@ def lambda_handler(event: dict, context) -> dict:
             # usuario sí puede ver los de SU PROPIA afiliación acá. Además de
             # empresa_nombre, admin/tecnico necesitan departamento/ciudad para
             # que su Punto se auto-complete con la ubicación de su zona (no
-            # las eligen ellos, solo super_admin administra zonas).
+            # las eligen ellos, solo super_admin administra zonas). También se
+            # incluye `empresa_zonas` (los polígonos dibujados) para que el
+            # dashboard pueda ofrecer un botón "Centrar en mi zona" a
+            # admin/tecnico/cliente, que no tienen forma propia de conocerlos
+            # (GET /empresas sigue siendo exclusivo de super_admin).
             if usuario.get("empresa_id"):
                 empresa = tabla_empresas.get_item(Key={"id_empresa": usuario["empresa_id"]}).get("Item")
                 # Afiliación desactivada → el usuario no entra. super_admin
@@ -362,6 +366,7 @@ def lambda_handler(event: dict, context) -> dict:
                     "empresa_nombre": empresa.get("nombre") if empresa else None,
                     "empresa_departamento": empresa.get("departamento") if empresa else None,
                     "empresa_ciudad": empresa.get("ciudad") if empresa else None,
+                    "empresa_zonas": empresa.get("zonas") if empresa else None,
                 }
             return _respuesta(200, usuario)
 
@@ -397,6 +402,7 @@ def lambda_handler(event: dict, context) -> dict:
                 actualizado = {
                     **actualizado,
                     "empresa_nombre": empresa.get("nombre") if empresa else None,
+                    "empresa_zonas": empresa.get("zonas") if empresa else None,
                     "empresa_departamento": empresa.get("departamento") if empresa else None,
                     "empresa_ciudad": empresa.get("ciudad") if empresa else None,
                 }
