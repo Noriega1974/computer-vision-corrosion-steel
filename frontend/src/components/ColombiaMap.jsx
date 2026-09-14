@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useBloques } from '../hooks/useBloques';
 import { useMediciones } from '../hooks/useMediciones';
 import { useEmpresas } from '../hooks/useEmpresas';
@@ -21,6 +21,24 @@ function buildNivelMap(mediciones) {
   });
 
   return map;
+}
+
+// Tamaño "fijo en el mundo": antes el pin media 40px (52px seleccionado) en
+// TODOS los zooms -- gigante y sin relación con el nivel de acercamiento,
+// como si fuera un elemento de UI en vez de un objeto sobre el mapa. Ahora
+// el tamaño base es más chico y escala geométricamente con el zoom (cada
+// nivel de zoom multiplica el tamaño), acotado entre MIN/MAX_ESCALA para que
+// no desaparezca al alejar del todo ni tape el mapa al acercar al máximo.
+const ZOOM_BASE = 6; // mismo zoom inicial del mapa -- ahí la escala es 1x
+const FACTOR_POR_NIVEL = 1.16;
+const MIN_ESCALA = 0.55;
+const MAX_ESCALA = 2.1;
+const TAMANO_BASE = 26;
+const TAMANO_BASE_SELECCIONADO = 34;
+
+function escalaParaZoom(zoom) {
+  const cruda = Math.pow(FACTOR_POR_NIVEL, zoom - ZOOM_BASE);
+  return Math.min(MAX_ESCALA, Math.max(MIN_ESCALA, cruda));
 }
 
 export default function ColombiaMap({
@@ -51,6 +69,10 @@ export default function ColombiaMap({
   const markersRef = useRef([]);
   const zonasRef = useRef([]);
 
+  // Nivel de zoom actual -- se usa para recalcular el tamaño de los pines
+  // "a tamaño fijo en el mundo" (ver escalaParaZoom más arriba).
+  const [zoom, setZoom] = useState(6);
+
   // Inicializar mapa Leaflet una sola vez
   useEffect(() => {
     if (mapInstanceRef.current) return;
@@ -73,6 +95,8 @@ export default function ColombiaMap({
         maxZoom: 18,
       }
     ).addTo(map);
+
+    map.on('zoomend', () => setZoom(map.getZoom()));
 
     mapInstanceRef.current = map;
   }, []);
@@ -108,11 +132,20 @@ export default function ColombiaMap({
 
       const isCritical = nivel === 3;
 
+      // Tamaño escalado por zoom (ver escalaParaZoom) en vez de fijo en
+      // pantalla -- el pin se ve más chico al alejar y más grande al
+      // acercar, como un objeto real sobre el mapa.
+      const escala = escalaParaZoom(zoom);
+      const tamano = Math.round((isSelected ? TAMANO_BASE_SELECCIONADO : TAMANO_BASE) * escala);
+      const anilloInset = Math.max(1, Math.round((isSelected ? 2 : 3) * escala));
+      const svgSize = Math.round((isSelected ? 12 : 9) * escala);
+      const glow = Math.round((isSelected ? 13 : 8) * escala);
+
       const iconHtml = `
         <div style="
           position:relative;
-          width:${isSelected ? 52 : 40}px;
-          height:${isSelected ? 52 : 40}px;
+          width:${tamano}px;
+          height:${tamano}px;
           cursor:pointer;
         ">
 
@@ -132,19 +165,19 @@ export default function ColombiaMap({
 
           <div style="
             position:absolute;
-            inset:${isSelected ? 2 : 4}px;
+            inset:${anilloInset}px;
             border-radius:50%;
             background:rgba(8,12,15,0.9);
             border:2px solid ${color};
             display:flex;
             align-items:center;
             justify-content:center;
-            box-shadow:0 0 ${isSelected ? 20 : 12}px ${color}60;
+            box-shadow:0 0 ${glow}px ${color}60;
           ">
 
             <svg
-              width="${isSelected ? 18 : 14}"
-              height="${isSelected ? 18 : 14}"
+              width="${svgSize}"
+              height="${svgSize}"
               viewBox="0 0 24 24"
               fill="none"
             >
@@ -168,14 +201,8 @@ export default function ColombiaMap({
       const icon = L.divIcon({
         html: iconHtml,
         className: '',
-        iconSize: [
-          isSelected ? 52 : 40,
-          isSelected ? 52 : 40
-        ],
-        iconAnchor: [
-          isSelected ? 26 : 20,
-          isSelected ? 26 : 20
-        ],
+        iconSize: [tamano, tamano],
+        iconAnchor: [tamano / 2, tamano / 2],
       });
 
       const nivelStr =
@@ -262,7 +289,8 @@ export default function ColombiaMap({
     puntos,
     mediciones,
     selectedPunto,
-    onSelectPunto
+    onSelectPunto,
+    zoom
   ]);
 
   // Zonas de empresa: un polígono por cada {puntos: [{lat,lng}, ...]}

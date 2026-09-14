@@ -60,17 +60,33 @@ export default function ZonaMapPicker({ zonas = [], onChange, puntoReferencia = 
     });
 
     instanceRef.current = map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leafletReady]);
 
-    if (puntoReferencia) {
+  // Marcador azul de referencia: antes se creaba una sola vez al montar el
+  // mapa (con el `puntoReferencia` de ese instante, normalmente la
+  // geolocalización del navegador) y quedaba fijo ahí para siempre -- si la
+  // persona después tipeaba coordenadas manuales ("Ser más específico con la
+  // ubicación"), el punto azul seguía mostrando la posición vieja aunque el
+  // valor que se iba a guardar ya fuera otro. Este efecto corre en cada
+  // cambio de `puntoReferencia` y mueve (o crea) el marcador para que
+  // siempre refleje la ubicación real que se va a enviar, nunca la
+  // geolocalización congelada del primer render.
+  useEffect(() => {
+    const L = window.L;
+    if (!L || !instanceRef.current || !puntoReferencia) return;
+    const centro = [puntoReferencia.lat, puntoReferencia.lng];
+    if (referenciaRef.current) {
+      referenciaRef.current.setLatLng(centro);
+    } else {
       referenciaRef.current = L.marker(centro, {
         icon: L.divIcon({
           html: `<div style="width:12px;height:12px;border-radius:50%;background:#2563eb;border:2px solid white;box-shadow:0 0 6px #2563eb80;"></div>`,
           className: '', iconSize: [12, 12], iconAnchor: [6, 6],
         }),
-      }).addTo(map).bindTooltip('Ubicación de referencia', { sticky: true });
+      }).addTo(instanceRef.current).bindTooltip('Ubicación de referencia', { sticky: true });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leafletReady]);
+  }, [puntoReferencia]);
 
   // Redibuja las zonas ya confirmadas.
   useEffect(() => {
