@@ -7,9 +7,6 @@ import {
   Cell,
   PieChart,
   Pie,
-  LineChart,
-  Line,
-  ReferenceLine,
   BarChart,
   Bar,
 } from 'recharts';
@@ -140,34 +137,6 @@ export default function ChartsRow() {
     }))
     .filter(d => d.value > 0);
 
-  // --------------------------------------------------
-  // TENDENCIA DE CORROSIÓN
-  // --------------------------------------------------
-
-  const sorted = [...mediciones]
-    .filter(m => m.area_corroida_pct != null)
-    .sort(
-      (a, b) =>
-        new Date(a.timestamp) -
-        new Date(b.timestamp)
-    )
-    .slice(-30);
-
-  const trendData = sorted.map((m, i) => ({
-    idx: i + 1,
-
-    fecha: new Date(
-      m.timestamp
-    ).toLocaleDateString('es-CO', {
-      day: '2-digit',
-      month: 'short',
-    }),
-
-    'Área %': parseFloat(
-      (m.area_corroida_pct ?? 0).toFixed(1)
-    ),
-  }));
-
   // Bar: mediciones por ciudad (top 6)
   const byCity = {};
   mediciones.forEach(m => {
@@ -192,85 +161,10 @@ export default function ChartsRow() {
       className="charts-grid"
       style={{
         display: 'grid',
-        gridTemplateColumns: '1fr 240px 1fr',
+        gridTemplateColumns: '240px 1fr',
         gap: 'var(--space-4)',
       }}
     >
-
-      {/* -------------------------------------------
-          TENDENCIA TEMPORAL
-      ------------------------------------------- */}
-
-      <ChartCard
-        title="TENDENCIA DE CORROSIÓN"
-        subtitle="ÁREA CORROÍDA % · ÚLTIMAS 30 MEDICIONES"
-      >
-        {loading || trendData.length === 0 ? (
-          <EmptyChart
-            message={
-              loading
-                ? 'Cargando…'
-                : 'Sin datos suficientes para mostrar tendencias'
-            }
-          />
-        ) : (
-          <ResponsiveContainer
-            width="100%"
-            height={180}
-          >
-            <LineChart
-              data={trendData}
-              margin={{
-                top: 4,
-                right: 8,
-                left: -24,
-                bottom: 0,
-              }}
-            >
-              <XAxis
-                dataKey="fecha"
-                tick={{
-                  fill: 'var(--text-muted)',
-                  fontSize: 'var(--text-3xs)',
-                }}
-                tickLine={false}
-                axisLine={false}
-                interval="preserveStartEnd"
-              />
-
-              <YAxis
-                tick={{
-                  fill: 'var(--text-faint)',
-                  fontSize: 'var(--text-3xs)',
-                }}
-                tickLine={false}
-                axisLine={false}
-                unit="%"
-              />
-
-              <ReferenceLine
-                y={20}
-                stroke="#ef4444"
-                strokeDasharray="3 3"
-                strokeOpacity={0.4}
-              />
-
-              <Tooltip
-                content={<CustomTooltip />}
-              />
-
-              <Line
-                type="monotone"
-                dataKey="Área %"
-                stroke="var(--accent-orange)"
-                strokeWidth={2}
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        )}
-      </ChartCard>
-
 
       {/* -------------------------------------------
           DISTRIBUCIÓN POR NIVEL
