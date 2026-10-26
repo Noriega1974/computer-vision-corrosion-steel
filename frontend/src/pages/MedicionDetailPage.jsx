@@ -645,7 +645,7 @@ export default function MedicionDetailPage() {
           }}
         >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <Settings size={15} /> Más opciones y detalles técnicos (Ubicación, Tiempo, Descarga, Gestión)
+            <Settings size={15} /> Más opciones y detalles técnicos
           </span>
           {showMasOpciones ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
         </button>
