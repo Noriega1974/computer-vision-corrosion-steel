@@ -166,6 +166,7 @@ export default function MedicionDetailPage() {
   // GaleriaPage.jsx).
   const { bloques } = useBloques(true);
   const [activeTab, setActiveTab] = useState('original');
+  const [showClimaFlashcard, setShowClimaFlashcard] = useState(false);
   const [showMasOpciones, setShowMasOpciones] = useState(false);
   const [shareMsg, setShareMsg] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -348,8 +349,9 @@ export default function MedicionDetailPage() {
   // (0, 0) es el valor por defecto de "sin ubicación", no un punto real.
   const tieneCoordenadas = lat !== null && lng !== null && !(lat === 0 && lng === 0);
   const clima = medicion.clima;
-  const tieneClima = tieneCoordenadas && !!clima && [
-    clima.temperatura_c, clima.humedad_pct, clima.viento_kmh, clima.precipitacion_mm,
+  const vientoKmh = clima?.viento_kmh ?? clima?.velocidad_viento_kmh;
+  const tieneClima = !!clima && [
+    clima.temperatura_c, clima.humedad_pct, vientoKmh, clima.precipitacion_mm,
   ].some(v => v != null);
   const zonaNombre = esSuperAdmin
     ? (empresas.find(e => e.id_empresa === medicion.empresa_id)?.nombre ?? '—')
@@ -523,6 +525,44 @@ export default function MedicionDetailPage() {
               <MetaItem label="Registro" value={formatFecha(medicion.timestamp, { conHora: true })} />
               <MetaItem label="Antigüedad" value={tiempoRelativo(medicion.timestamp)} />
             </div>
+
+            {/* Desplegable de Información meteorológica dentro de la flashcard */}
+            {tieneClima && (
+              <div style={{
+                paddingTop: 8, marginTop: 2, borderTop: `1px solid ${color}25`,
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setShowClimaFlashcard(s => !s)}
+                  aria-expanded={showClimaFlashcard}
+                  style={{
+                    width: '100%', padding: '4px 0',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 12,
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <Thermometer size={14} style={{ color: 'var(--accent-amber)' }} />
+                    Información meteorológica
+                  </span>
+                  {showClimaFlashcard ? <ChevronUp size={15} color="var(--text-muted)" /> : <ChevronDown size={15} color="var(--text-muted)" />}
+                </button>
+
+                {showClimaFlashcard && (
+                  <div style={{
+                    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8,
+                    marginTop: 8,
+                  }}>
+                    {clima.temperatura_c != null && <ClimaItem icon={<Thermometer size={13} />} label="Temperatura" value={`${clima.temperatura_c} °C`} />}
+                    {clima.humedad_pct != null && <ClimaItem icon={<Droplets size={13} />} label="Humedad" value={`${clima.humedad_pct} %`} />}
+                    {vientoKmh != null && <ClimaItem icon={<Wind size={13} />} label="Viento" value={`${vientoKmh} km/h`} />}
+                    {clima.precipitacion_mm != null && <ClimaItem icon={<Droplets size={13} />} label="Precipitación" value={`${clima.precipitacion_mm} mm`} />}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* 3. Pie de la flashcard: Acciones rápidas (píldoras) */}
@@ -637,7 +677,7 @@ export default function MedicionDetailPage() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)' }}>
                     {clima.temperatura_c != null && <ClimaItem icon={<Thermometer size={13} />} label="Temperatura" value={`${clima.temperatura_c} °C`} />}
                     {clima.humedad_pct != null && <ClimaItem icon={<Droplets size={13} />} label="Humedad" value={`${clima.humedad_pct} %`} />}
-                    {clima.viento_kmh != null && <ClimaItem icon={<Wind size={13} />} label="Viento" value={`${clima.viento_kmh} km/h`} />}
+                    {vientoKmh != null && <ClimaItem icon={<Wind size={13} />} label="Viento" value={`${vientoKmh} km/h`} />}
                     {clima.precipitacion_mm != null && <ClimaItem icon={<Droplets size={13} />} label="Precipitación" value={`${clima.precipitacion_mm} mm`} />}
                   </div>
                 </div>
