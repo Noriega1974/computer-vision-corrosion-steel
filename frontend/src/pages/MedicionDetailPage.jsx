@@ -6,7 +6,7 @@ import { useBloques } from '../hooks/useBloques';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
-import { nivelColor, nivelBg, nivelLabel, nivelRange } from '../lib/statusUtils';
+import { NIVELES, nivelColor, nivelBg, nivelLabel, nivelRange } from '../lib/statusUtils';
 import { formatFecha } from '../utils/dateFormat';
 import { apiDelete } from '../lib/apiClient';
 import SegmentationOverlay from '../components/SegmentationOverlay';
@@ -71,7 +71,18 @@ function MiniMapa({ lat, lng, latReal, lngReal }) {
 
     instanceRef.current = map;
 
+    // El mapa ocupa el alto de su celda, que depende de la columna derecha y
+    // se define al desplegar la sección: sin invalidateSize Leaflet se queda
+    // con el tamaño inicial y deja mosaicos grises.
+    const raf = requestAnimationFrame(() => map.invalidateSize());
+    const ro = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(() => map.invalidateSize())
+      : null;
+    ro?.observe(mapRef.current);
+
     return () => {
+      cancelAnimationFrame(raf);
+      ro?.disconnect();
       map.remove();
       instanceRef.current = null;
     };
@@ -80,7 +91,7 @@ function MiniMapa({ lat, lng, latReal, lngReal }) {
   if (!lat || !lng) {
     return (
       <div style={{
-        height: 140, background: 'var(--bg-inset)', borderRadius: 8,
+        flex: 1, height: '100%', minHeight: 140, background: 'var(--bg-inset)', borderRadius: 8,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         border: '1px solid var(--border)',
       }}>
@@ -93,7 +104,7 @@ function MiniMapa({ lat, lng, latReal, lngReal }) {
 
   return (
     <div ref={mapRef} style={{
-      height: 140, borderRadius: 8, border: '1px solid var(--border)', overflow: 'hidden',
+      flex: 1, height: '100%', minHeight: 240, borderRadius: 8, border: '1px solid var(--border)', overflow: 'hidden',
     }} />
   );
 }
@@ -102,8 +113,71 @@ function coordenadaValida(v) {
   return v != null && v !== '' && Number.isFinite(Number(v));
 }
 
+// ─── Caja fija para las vistas Original / Segmentación ──────────────────────
+// Ambas pestañas comparten la misma caja (mismo ancho y relación de aspecto) y
+// la imagen se ajusta adentro con object-fit: contain, así cambiar de pestaña
+// no cambia el tamaño de la imagen ni mueve el layout.
+const IMAGEN_BOX_STYLE = {
+  position: 'relative', width: '100%', aspectRatio: '4 / 3',
+  borderRadius: 8, border: '1px solid var(--border)',
+  background: 'var(--bg-inset)', overflow: 'hidden',
+};
+const IMAGEN_FIT_STYLE = {
+  position: 'absolute', inset: 0, width: '100%', height: '100%',
+  objectFit: 'contain', display: 'block',
+};
+
+// ─── Área corroída: valor medido + banda ISO 10289 en un solo ítem ──────────
+// Reemplaza el texto suelto "ÁREA 0,05–<10 %" de la tarjeta de nivel y la
+// barra de área por separado: una barra con el porcentaje de la foto completa
+// y una barra segmentada con las cuatro bandas ISO, resaltando la del nivel.
+function AreaCorroidaItem({ valor, nivel }) {
+  const color = nivelColor(nivel);
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--space-2)', marginBottom: 6 }}>
+        <MetaLabel>Área corroída (foto completa)</MetaLabel>
+        <span style={{ fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 'var(--text-lg)', color, lineHeight: 1 }}>
+          {(valor ?? 0).toFixed(1)}%
+        </span>
+      </div>
+      <BarraPorcentaje valor={valor ?? 0} color={color} mostrarValor={false} />
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-2)', marginTop: 'var(--space-2-5)', marginBottom: 4 }}>
+        <MetaLabel>Banda ISO 10289</MetaLabel>
+        <span style={{ fontFamily: 'var(--font-data)', fontSize: 'var(--text-2xs)', fontWeight: 600, color }}>
+          {nivelRange(nivel)}
+        </span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${NIVELES.length}, minmax(0, 1fr))`, gap: 3 }}>
+        {NIVELES.map((n, i) => {
+          const activo = i === nivel;
+          const c = nivelColor(i);
+          return (
+            <div key={n.status} title={`${n.label} ${n.range}`}>
+              <div style={{
+                height: 8, borderRadius: 4,
+                background: activo ? c : `${c}30`,
+                boxShadow: activo ? `0 0 6px ${c}60` : 'none',
+              }} />
+              <div style={{
+                marginTop: 3, textAlign: 'center',
+                fontFamily: 'var(--font-data)', fontSize: 9, letterSpacing: '0.02em',
+                color: activo ? c : 'var(--text-faint)', fontWeight: activo ? 700 : 400,
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>
+                {n.range}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Barra de progreso para porcentaje ───────────────────────────────────────
-function BarraPorcentaje({ valor, color, max = 100 }) {
+function BarraPorcentaje({ valor, color, max = 100, mostrarValor = true }) {
   return (
     <div style={{ position: 'relative' }}>
       <div style={{
@@ -124,13 +198,15 @@ function BarraPorcentaje({ valor, color, max = 100 }) {
           boxShadow: `0 0 8px ${color}50`,
         }} />
       </div>
-      <div style={{
-        textAlign: 'right', marginTop: 3,
-        fontFamily: 'var(--font-data)', fontWeight: 700,
-        fontSize: 'var(--text-sm)', color,
-      }}>
-        {(valor ?? 0).toFixed(1)}%
-      </div>
+      {mostrarValor && (
+        <div style={{
+          textAlign: 'right', marginTop: 3,
+          fontFamily: 'var(--font-data)', fontWeight: 700,
+          fontSize: 'var(--text-sm)', color,
+        }}>
+          {(valor ?? 0).toFixed(1)}%
+        </div>
+      )}
     </div>
   );
 }
@@ -400,26 +476,29 @@ export default function MedicionDetailPage() {
             <div style={{ padding: 20 }}>
               {activeTab === 'original' && (
                 medicion.url_imagen ? (
-                  <img
-                    src={medicion.url_imagen}
-                    alt="Imagen original de la medición"
-                    style={{
-                      width: '100%', borderRadius: 8,
-                      border: '1px solid var(--border)',
-                      maxHeight: 480, objectFit: 'contain',
-                      background: 'var(--bg-inset)',
-                    }}
-                  />
+                  <div style={IMAGEN_BOX_STYLE}>
+                    <img
+                      src={medicion.url_imagen}
+                      alt="Imagen original de la medición"
+                      style={IMAGEN_FIT_STYLE}
+                    />
+                  </div>
                 ) : (
                   <PlaceholderImagen mensaje="Imagen no disponible para esta medición" />
                 )
               )}
 
               {activeTab === 'segmentacion' && (
-                <SegmentationOverlay
-                  imagenUrl={medicion.url_imagen}
-                  mascaras={medicion.mascaras ?? []}
-                />
+                medicion.url_imagen ? (
+                  <SegmentationOverlay
+                    imagenUrl={medicion.url_imagen}
+                    mascaras={medicion.mascaras ?? []}
+                    boxStyle={IMAGEN_BOX_STYLE}
+                    imgStyle={IMAGEN_FIT_STYLE}
+                  />
+                ) : (
+                  <PlaceholderImagen mensaje="Imagen no disponible para esta medición" />
+                )
               )}
             </div>
           </div>
@@ -452,7 +531,7 @@ export default function MedicionDetailPage() {
               {nivelLabel(nivel)}
             </div>
             <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)', letterSpacing: '0.08em' }}>
-              NORMA ISO 10289 · NIVEL {nivel} / 3 · ÁREA {nivelRange(nivel)}
+              NORMA ISO 10289 · NIVEL {nivel} / 3
             </div>
           </div>
 
@@ -461,8 +540,7 @@ export default function MedicionDetailPage() {
             <SectionTitle>Resultados del análisis</SectionTitle>
 
             <div style={{ marginBottom: 'var(--space-3-5)' }}>
-              <MetaLabel>Área corroída (foto completa)</MetaLabel>
-              <BarraPorcentaje valor={medicion.area_corroida_pct ?? 0} color={color} />
+              <AreaCorroidaItem valor={medicion.area_corroida_pct ?? 0} nivel={nivel} />
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2-5)' }}>
@@ -524,17 +602,20 @@ export default function MedicionDetailPage() {
             gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 1fr)',
             gap: 20,
           }}>
-            {/* Ubicación y Mapa acotado */}
-            <div>
+            {/* Ubicación y mapa: la celda se estira al alto de la columna
+                derecha (clima + gestión) y el mapa llena ese alto. */}
+            <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
               <SectionTitle>Ubicación geográfica del espécimen</SectionTitle>
-              <MiniMapa
-                lat={lat}
-                lng={lng}
-                latReal={medicion.latitud_real}
-                lngReal={medicion.longitud_real}
-              />
+              <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                <MiniMapa
+                  lat={lat}
+                  lng={lng}
+                  latReal={medicion.latitud_real}
+                  lngReal={medicion.longitud_real}
+                />
+              </div>
               {tieneCoordenadas && (
-                <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', fontFamily: 'var(--font-data)', display: 'flex', gap: 'var(--space-3)' }}>
+                <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', fontFamily: 'var(--font-data)', display: 'flex', gap: 'var(--space-3)', flexShrink: 0 }}>
                   <span style={{ color: 'var(--accent-amber)' }}>● Punto: {lat?.toFixed(5)}, {lng?.toFixed(5)}</span>
                   {medicion.latitud_real && medicion.longitud_real && (
                     <span style={{ color: '#38bdf8' }}>● Foto: {medicion.latitud_real.toFixed(5)}, {medicion.longitud_real.toFixed(5)}</span>

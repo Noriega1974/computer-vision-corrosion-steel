@@ -174,7 +174,10 @@ export default function GaleriaPage() {
   // Filtros activos visibles como pestañas dinámicas a la izquierda. Los
   // filtros restaurados deben tener su pill para poder verlos y quitarlos.
   const [activeFilters, setActiveFilters] = useState(() => {
-    const set = new Set(['nivel']);
+    // Por defecto no hay ningún filtro preseleccionado; solo se restaura la
+    // pill de nivel si se volvió con un nivel concreto elegido.
+    const set = new Set();
+    if (restored.nivelFilter && restored.nivelFilter !== 'all') set.add('nivel');
     if (restored.bloqueFilter) set.add('punto');
     if (esSuperAdmin && restored.empresaFilter) set.add('empresa');
     if (restored.fechaInicio || restored.fechaFin) set.add('fechas');
@@ -323,12 +326,52 @@ export default function GaleriaPage() {
         borderRadius: 10, padding: '12px 16px', marginBottom: 20,
         display: 'flex', flexDirection: 'column', gap: 10,
       }}>
-        {/* Fila principal: Filtros dinámicos a la izquierda + Buscador compacto a la derecha */}
+        {/* Fila principal: Buscador compacto a la izquierda + Filtros dinámicos a la derecha */}
         <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          display: 'flex', alignItems: 'center', justifyContent: 'flex-start',
           flexWrap: 'wrap', gap: 12,
         }}>
-          {/* Lado izquierdo: Botón desplegable [+ Agregar filtro] + Filtros activos */}
+          {/* Lado izquierdo: Buscador compacto con icono de lupa */}
+          <div style={{ position: 'relative', minWidth: 200, maxWidth: 280, flex: '0 1 280px' }}>
+            <Search
+              size={13}
+              style={{
+                position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+                color: 'var(--text-faint)', pointerEvents: 'none',
+              }}
+            />
+            <input
+              id="filtro-notas"
+              name="buscar-notas"
+              type="search"
+              spellCheck={false}
+              placeholder="Buscar en notas…"
+              value={notasQuery}
+              onChange={e => setNotasQuery(e.target.value)}
+              style={{
+                width: '100%', height: 32, boxSizing: 'border-box',
+                padding: '0 26px 0 28px', background: 'var(--bg-card-solid)',
+                border: '1px solid var(--border-strong)', borderRadius: 7,
+                fontSize: 'var(--text-xs)', color: 'var(--text-primary)',
+                fontFamily: 'var(--font-ui)', outline: 'none',
+              }}
+            />
+            {notasQuery && (
+              <button
+                type="button"
+                onClick={() => setNotasQuery('')}
+                style={{
+                  position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                  display: 'flex', color: 'var(--text-faint)',
+                }}
+                title="Borrar búsqueda"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+          {/* A la derecha del buscador: Botón desplegable [+ Agregar filtro] + Filtros activos */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flex: '1 1 320px' }}>
             {/* Menú desplegable para agregar filtros */}
             <div style={{ position: 'relative' }} ref={addMenuRef}>
@@ -528,46 +571,6 @@ export default function GaleriaPage() {
             )}
           </div>
 
-          {/* Lado derecho: Buscador compacto con icono de lupa */}
-          <div style={{ position: 'relative', minWidth: 200, maxWidth: 280, flex: '1 1 auto' }}>
-            <Search
-              size={13}
-              style={{
-                position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
-                color: 'var(--text-faint)', pointerEvents: 'none',
-              }}
-            />
-            <input
-              id="filtro-notas"
-              name="buscar-notas"
-              type="search"
-              spellCheck={false}
-              placeholder="Buscar en notas…"
-              value={notasQuery}
-              onChange={e => setNotasQuery(e.target.value)}
-              style={{
-                width: '100%', height: 32, boxSizing: 'border-box',
-                padding: '0 26px 0 28px', background: 'var(--bg-card-solid)',
-                border: '1px solid var(--border-strong)', borderRadius: 7,
-                fontSize: 'var(--text-xs)', color: 'var(--text-primary)',
-                fontFamily: 'var(--font-ui)', outline: 'none',
-              }}
-            />
-            {notasQuery && (
-              <button
-                type="button"
-                onClick={() => setNotasQuery('')}
-                style={{
-                  position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-                  background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                  display: 'flex', color: 'var(--text-faint)',
-                }}
-                title="Borrar búsqueda"
-              >
-                <X size={12} />
-              </button>
-            )}
-          </div>
         </div>
 
         {/* Fila secundaria: Chips de Nivel (cuando está activo) */}
