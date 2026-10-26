@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Download, Share2, Trash2, MapPin, AlertCircle, Thermometer, Droplets, Wind, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Download, Share2, Trash2, MapPin, AlertCircle, Thermometer, Droplets, Wind, ChevronDown, ChevronUp, Settings } from 'lucide-react';
 import { useMedicion } from '../hooks/useMedicion';
 import { useBloques } from '../hooks/useBloques';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
-import { nivelColor, nivelBg, nivelLabel, nivelToStatus } from '../lib/statusUtils';
+import { nivelColor, nivelBg, nivelLabel, nivelRange } from '../lib/statusUtils';
 import { formatFecha } from '../utils/dateFormat';
 import { apiDelete } from '../lib/apiClient';
 import SegmentationOverlay from '../components/SegmentationOverlay';
@@ -70,6 +70,11 @@ function MiniMapa({ lat, lng, latReal, lngReal }) {
     }
 
     instanceRef.current = map;
+
+    return () => {
+      map.remove();
+      instanceRef.current = null;
+    };
   }, [leafletReady, lat, lng, latReal, lngReal]);
 
   if (!lat || !lng) {
@@ -91,6 +96,10 @@ function MiniMapa({ lat, lng, latReal, lngReal }) {
       height: 140, borderRadius: 8, border: '1px solid var(--border)', overflow: 'hidden',
     }} />
   );
+}
+
+function coordenadaValida(v) {
+  return v != null && v !== '' && Number.isFinite(Number(v));
 }
 
 // ─── Barra de progreso para porcentaje ───────────────────────────────────────
@@ -173,7 +182,7 @@ export default function MedicionDetailPage() {
     }
   }
 
-  // Descarga la vista activa (original/detección/segmentación).
+  // Descarga la vista activa (original/segmentación).
   //
   // La versión anterior de "original" ponía la URL de S3 directo en
   // `<a href download>` -- el atributo `download` NO fuerza la descarga en
@@ -221,21 +230,7 @@ export default function MedicionDetailPage() {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0);
 
-      if (activeTab === 'deteccion') {
-        (medicion.detecciones ?? []).forEach(det => {
-          const w = det.w * canvas.width;
-          const h = det.h * canvas.height;
-          const x = det.x * canvas.width - w / 2;
-          const y = det.y * canvas.height - h / 2;
-          ctx.strokeStyle = '#dc2626';
-          ctx.lineWidth = Math.max(2, canvas.width * 0.003);
-          ctx.strokeRect(x, y, w, h);
-          ctx.fillStyle = '#dc2626';
-          ctx.font = `${Math.max(12, Math.round(canvas.width * 0.02))}px monospace`;
-          const etiqueta = `${det.clase ?? 'corrosion'} ${det.confianza ? (det.confianza * 100).toFixed(0) + '%' : ''}`.trim();
-          ctx.fillText(etiqueta, x + 4, Math.max(12, y - 6));
-        });
-      } else if (activeTab === 'segmentacion') {
+      if (activeTab === 'segmentacion') {
         (medicion.mascaras ?? []).forEach(({ puntos = [], color = '#dc2626', opacidad = 0.45 }) => {
           if (puntos.length < 3) return;
           ctx.beginPath();
@@ -330,8 +325,14 @@ export default function MedicionDetailPage() {
     ciudad: bloqueInfo.ciudad ?? '',
     coordenadas: bloqueInfo.coordenadas ?? {},
   };
-  const lat = punto.coordenadas?.lat;
-  const lng = punto.coordenadas?.lng;
+  const lat = coordenadaValida(punto.coordenadas?.lat) ? Number(punto.coordenadas.lat) : null;
+  const lng = coordenadaValida(punto.coordenadas?.lng) ? Number(punto.coordenadas.lng) : null;
+  // (0, 0) es el valor por defecto de "sin ubicación", no un punto real.
+  const tieneCoordenadas = lat !== null && lng !== null && !(lat === 0 && lng === 0);
+  const clima = medicion.clima;
+  const tieneClima = tieneCoordenadas && !!clima && [
+    clima.temperatura_c, clima.humedad_pct, clima.viento_kmh, clima.precipitacion_mm,
+  ].some(v => v != null);
   const zonaNombre = esSuperAdmin
     ? (empresas.find(e => e.id_empresa === medicion.empresa_id)?.nombre ?? '—')
     : (perfil?.empresa_nombre ?? '—');
@@ -451,7 +452,7 @@ export default function MedicionDetailPage() {
               {nivelLabel(nivel)}
             </div>
             <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)', letterSpacing: '0.08em' }}>
-              NORMA ISO 10289 · NIVEL {nivel} / 3 · {nivelToStatus(nivel)}
+              NORMA ISO 10289 · NIVEL {nivel} / 3 · ÁREA {nivelRange(nivel)}
             </div>
           </div>
 
@@ -479,16 +480,6 @@ export default function MedicionDetailPage() {
               {formatFecha(medicion.timestamp, { conHora: true, conSegundos: true })}
             </div>
           </div>
-
-          {/* Acciones principales rápidas */}
-          <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-            <ActionButton icon={<Download size={15} />} onClick={handleDescargarVistaActual} disabled={!medicion.url_imagen || descargandoVista}>
-              {descargandoVista ? 'Generando…' : `Descargar vista (${TABS.find(t => t.key === activeTab)?.label})`}
-            </ActionButton>
-            <ActionButton icon={<Share2 size={15} />} onClick={handleCompartir}>
-              {shareMsg || 'Copiar enlace'}
-            </ActionButton>
-          </div>
         </div>
       </div>
 
@@ -502,6 +493,7 @@ export default function MedicionDetailPage() {
       }}>
         <button
           onClick={() => setShowMasOpciones(s => !s)}
+          aria-expanded={showMasOpciones}
           style={{
             width: '100%',
             padding: '14px 20px',
@@ -519,7 +511,7 @@ export default function MedicionDetailPage() {
           }}
         >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <span>⚙️</span> Más opciones y detalles técnicos (Ubicación, Clima, Gestión)
+            <Settings size={15} /> Más opciones y detalles técnicos (Ubicación, Clima, Descarga, Gestión)
           </span>
           {showMasOpciones ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
         </button>
@@ -541,7 +533,7 @@ export default function MedicionDetailPage() {
                 latReal={medicion.latitud_real}
                 lngReal={medicion.longitud_real}
               />
-              {lat && lng && (
+              {tieneCoordenadas && (
                 <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', fontFamily: 'var(--font-data)', display: 'flex', gap: 'var(--space-3)' }}>
                   <span style={{ color: 'var(--accent-amber)' }}>● Punto: {lat?.toFixed(5)}, {lng?.toFixed(5)}</span>
                   {medicion.latitud_real && medicion.longitud_real && (
@@ -553,22 +545,15 @@ export default function MedicionDetailPage() {
 
             {/* Condiciones meteorológicas + Gestión */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Clima Open-Meteo */}
-              {medicion.clima ? (
+              {/* Clima Open-Meteo: solo con coordenadas válidas y algún dato */}
+              {tieneClima && (
                 <div>
                   <SectionTitle>Condiciones meteorológicas (Open-Meteo)</SectionTitle>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)' }}>
-                    <ClimaItem icon={<Thermometer size={13} />} label="Temperatura" value={medicion.clima.temperatura_c != null ? `${medicion.clima.temperatura_c} °C` : '—'} />
-                    <ClimaItem icon={<Droplets size={13} />} label="Humedad" value={medicion.clima.humedad_pct != null ? `${medicion.clima.humedad_pct} %` : '—'} />
-                    <ClimaItem icon={<Wind size={13} />} label="Viento" value={medicion.clima.viento_kmh != null ? `${medicion.clima.viento_kmh} km/h` : '—'} />
-                    <ClimaItem icon={<Droplets size={13} />} label="Precipitación" value={medicion.clima.precipitacion_mm != null ? `${medicion.clima.precipitacion_mm} mm` : '—'} />
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <SectionTitle>Condiciones meteorológicas</SectionTitle>
-                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                    Sin datos climáticos disponibles para este espécimen.
+                    {clima.temperatura_c != null && <ClimaItem icon={<Thermometer size={13} />} label="Temperatura" value={`${clima.temperatura_c} °C`} />}
+                    {clima.humedad_pct != null && <ClimaItem icon={<Droplets size={13} />} label="Humedad" value={`${clima.humedad_pct} %`} />}
+                    {clima.viento_kmh != null && <ClimaItem icon={<Wind size={13} />} label="Viento" value={`${clima.viento_kmh} km/h`} />}
+                    {clima.precipitacion_mm != null && <ClimaItem icon={<Droplets size={13} />} label="Precipitación" value={`${clima.precipitacion_mm} mm`} />}
                   </div>
                 </div>
               )}
@@ -577,6 +562,12 @@ export default function MedicionDetailPage() {
               <div>
                 <SectionTitle>Gestión del espécimen</SectionTitle>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                  <ActionButton icon={<Download size={15} />} onClick={handleDescargarVistaActual} disabled={!medicion.url_imagen || descargandoVista}>
+                    {descargandoVista ? 'Generando…' : `Descargar vista (${TABS.find(t => t.key === activeTab)?.label})`}
+                  </ActionButton>
+                  <ActionButton icon={<Share2 size={15} />} onClick={handleCompartir}>
+                    {shareMsg || 'Copiar enlace'}
+                  </ActionButton>
                   <ActionButton
                     icon={<MapPin size={15} />}
                     onClick={() => navigate(`/dashboard?punto=${medicion.bloque_id}`)}
