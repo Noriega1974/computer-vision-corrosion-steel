@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { Upload, AlertCircle, Search, Plus, X, ChevronDown, Filter } from 'lucide-react';
+import { Upload, AlertCircle, Search, Plus, X, ChevronDown, Check } from 'lucide-react';
 import { useMediciones } from '../hooks/useMediciones';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useAuth } from '../auth/AuthContext';
@@ -160,44 +160,69 @@ export default function GaleriaPage() {
   const { empresas } = useEmpresas(esSuperAdmin);
 
   // ─── Filtros ──────────────────────────────────────────────────────────────
-  const [nivelFilter, setNivelFilter] = useState('all');
-  const [bloqueFilter, setBloqueFilter] = useState('');
-  const [empresaFilter, setEmpresaFilter] = useState('');
-  const [fechaInicio, setFechaInicio] = useState('');
-  const [fechaFin, setFechaFin] = useState('');
-  const [notasQuery, setNotasQuery] = useState('');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
+  // Al volver desde la ficha de una medición, los filtros llegan por el state
+  // de navegación (ver handleBack en MedicionDetailPage). Se leen una sola vez.
+  const [restored] = useState(() => location.state ?? {});
+  const [nivelFilter, setNivelFilter] = useState(restored.nivelFilter ?? 'all');
+  const [bloqueFilter, setBloqueFilter] = useState(restored.bloqueFilter ?? '');
+  const [empresaFilter, setEmpresaFilter] = useState(esSuperAdmin ? (restored.empresaFilter ?? '') : '');
+  const [fechaInicio, setFechaInicio] = useState(restored.fechaInicio ?? '');
+  const [fechaFin, setFechaFin] = useState(restored.fechaFin ?? '');
+  const [notasQuery, setNotasQuery] = useState(restored.notasQuery ?? '');
+  const [debouncedQuery, setDebouncedQuery] = useState(restored.notasQuery ?? '');
 
-  // Filtros activos visibles como pestañas dinámicas a la izquierda
-  const [activeFilters, setActiveFilters] = useState(() => new Set(['nivel']));
+  // Filtros activos visibles como pestañas dinámicas a la izquierda. Los
+  // filtros restaurados deben tener su pill para poder verlos y quitarlos.
+  const [activeFilters, setActiveFilters] = useState(() => {
+    const set = new Set(['nivel']);
+    if (restored.bloqueFilter) set.add('punto');
+    if (esSuperAdmin && restored.empresaFilter) set.add('empresa');
+    if (restored.fechaInicio || restored.fechaFin) set.add('fechas');
+    return set;
+  });
   const [showAddMenu, setShowAddMenu] = useState(false);
   const addMenuRef = useRef(null);
+  const addMenuButtonRef = useRef(null);
 
+  // Cierra el menú con clic fuera o Esc (Esc devuelve el foco al botón).
   useEffect(() => {
+    if (!showAddMenu) return;
     function handleClickOutside(e) {
       if (addMenuRef.current && !addMenuRef.current.contains(e.target)) {
         setShowAddMenu(false);
       }
     }
+    function handleKeyDown(e) {
+      if (e.key === 'Escape') {
+        setShowAddMenu(false);
+        addMenuButtonRef.current?.focus();
+      }
+    }
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showAddMenu]);
 
-  const toggleFilter = (key) => {
+  // Desde el menú solo se agregan filtros; quitarlos es con la X de su pill.
+  const addFilter = (key) => {
+    setActiveFilters(prev => (prev.has(key) ? prev : new Set(prev).add(key)));
+    setShowAddMenu(false);
+    addMenuButtonRef.current?.focus();
+  };
+
+  const removeFilter = (key) => {
     setActiveFilters(prev => {
       const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-        if (key === 'nivel') setNivelFilter('all');
-        if (key === 'punto') setBloqueFilter('');
-        if (key === 'empresa') setEmpresaFilter('');
-        if (key === 'fechas') { setFechaInicio(''); setFechaFin(''); }
-      } else {
-        next.add(key);
-      }
+      next.delete(key);
       return next;
     });
-    setShowAddMenu(false);
+    if (key === 'nivel') setNivelFilter('all');
+    if (key === 'punto') setBloqueFilter('');
+    if (key === 'empresa') setEmpresaFilter('');
+    if (key === 'fechas') { setFechaInicio(''); setFechaFin(''); }
   };
 
   // Debounce de la búsqueda por notas
@@ -309,7 +334,10 @@ export default function GaleriaPage() {
             <div style={{ position: 'relative' }} ref={addMenuRef}>
               <button
                 type="button"
+                ref={addMenuButtonRef}
                 onClick={() => setShowAddMenu(v => !v)}
+                aria-haspopup="menu"
+                aria-expanded={showAddMenu}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6,
                   padding: '7px 12px', borderRadius: 7,
@@ -325,7 +353,7 @@ export default function GaleriaPage() {
               </button>
 
               {showAddMenu && (
-                <div style={{
+                <div role="menu" aria-label="Agregar filtro" style={{
                   position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 60,
                   minWidth: 190, background: 'var(--bg-card-solid)', border: '1px solid var(--border-strong)',
                   borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.22)', padding: '4px 0',
@@ -341,7 +369,8 @@ export default function GaleriaPage() {
                       <button
                         key={opt.key}
                         type="button"
-                        onClick={() => toggleFilter(opt.key)}
+                        role="menuitem"
+                        onClick={() => addFilter(opt.key)}
                         style={{
                           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                           width: '100%', padding: '8px 12px', background: 'transparent',
@@ -354,7 +383,11 @@ export default function GaleriaPage() {
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                       >
                         <span>{opt.label}</span>
-                        {isAdded && <span style={{ fontSize: 'var(--text-3xs)', color: 'var(--accent-amber)' }}>✓ Activo</span>}
+                        {isAdded && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 'var(--text-3xs)', color: 'var(--accent-amber)' }}>
+                            <Check size={11} aria-hidden="true" /> Activo
+                          </span>
+                        )}
                       </button>
                     );
                   })}
@@ -363,7 +396,7 @@ export default function GaleriaPage() {
             </div>
 
             {/* Pestaña / pill activa de punto */}
-            {activeFilters.has('punto') && bloquesEnMediciones.length > 0 && (
+            {activeFilters.has('punto') && (
               <div style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
                 padding: '3px 8px 3px 10px', borderRadius: 20,
@@ -381,15 +414,19 @@ export default function GaleriaPage() {
                   }}
                 >
                   <option value="">Todos los puntos</option>
+                  {bloqueFilter && !bloquesEnMediciones.some(b => b.id === bloqueFilter) && (
+                    <option value={bloqueFilter}>Punto seleccionado</option>
+                  )}
                   {bloquesEnMediciones.map(b => (
                     <option key={b.id} value={b.id}>{b.nombre}</option>
                   ))}
                 </select>
                 <button
                   type="button"
-                  onClick={() => toggleFilter('punto')}
+                  onClick={() => removeFilter('punto')}
                   style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', color: 'var(--text-faint)' }}
                   title="Quitar filtro de punto"
+                  aria-label="Quitar filtro de punto"
                 >
                   <X size={12} />
                 </button>
@@ -421,9 +458,10 @@ export default function GaleriaPage() {
                 </select>
                 <button
                   type="button"
-                  onClick={() => toggleFilter('empresa')}
+                  onClick={() => removeFilter('empresa')}
                   style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', color: 'var(--text-faint)' }}
                   title="Quitar filtro de afiliación"
+                  aria-label="Quitar filtro de afiliación"
                 >
                   <X size={12} />
                 </button>
@@ -460,9 +498,10 @@ export default function GaleriaPage() {
                 />
                 <button
                   type="button"
-                  onClick={() => toggleFilter('fechas')}
+                  onClick={() => removeFilter('fechas')}
                   style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', color: 'var(--text-faint)' }}
                   title="Quitar filtro de fecha"
+                  aria-label="Quitar filtro de fecha"
                 >
                   <X size={12} />
                 </button>
@@ -564,12 +603,13 @@ export default function GaleriaPage() {
               ))}
               <button
                 type="button"
-                onClick={() => toggleFilter('nivel')}
+                onClick={() => removeFilter('nivel')}
                 style={{
                   background: 'none', border: 'none', padding: '2px 4px', cursor: 'pointer',
                   display: 'flex', color: 'var(--text-faint)', marginLeft: 4,
                 }}
-                title="Ocultar filtro de nivel"
+                title="Quitar filtro de nivel"
+                aria-label="Quitar filtro de nivel"
               >
                 <X size={12} />
               </button>
@@ -629,7 +669,7 @@ export default function GaleriaPage() {
                 key={m.id_medicion}
                 medicion={m}
                 to={`/galeria/${m.id_medicion}`}
-                state={{ filters: { nivelFilter, bloqueFilter, fechaInicio, fechaFin, notasQuery } }}
+                state={{ filters: { nivelFilter, bloqueFilter, empresaFilter, fechaInicio, fechaFin, notasQuery } }}
               />
             ))}
           </div>
