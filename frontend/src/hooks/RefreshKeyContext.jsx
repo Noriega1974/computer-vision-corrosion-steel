@@ -1,43 +1,32 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 
-// Contexto global para invalidar la caché de todos los hooks de datos
-// Llamar invalidate() después de un upload exitoso para refrescar la UI
+// Contexto global para invalidar la caché de todos los hooks de datos.
+// Llamar invalidate() después de un upload, edición o borrado exitoso para
+// refrescar la UI. No hay recarga automática periódica.
 
-const AUTOREFRESH_STORAGE_KEY = 'corria-auto-refresh';
-const INTERVALO_MS = 60_000; // cada 60s, suficiente para verse "vivo" sin saturar la API
+// Clave de la antigua preferencia "Actualización automática" (ya eliminada).
+// Se borra al cargar para que los navegadores viejos dejen de guardarla.
+const LEGACY_AUTOREFRESH_KEY = 'corria-auto-refresh';
 
 const RefreshKeyContext = createContext({
   key: 0,
   invalidate: () => {},
-  autoRefresh: true,
-  setAutoRefresh: () => {},
 });
 
 export function RefreshKeyProvider({ children }) {
   const [key, setKey] = useState(0);
   const invalidate = useCallback(() => setKey(k => k + 1), []);
 
-  // Preferencia de Configuración > Preferencias del sistema. Por defecto
-  // desactivada para evitar recargas automáticas inesperadas mientras el usuario inspecciona.
-  const [autoRefresh, setAutoRefreshState] = useState(
-    () => localStorage.getItem(AUTOREFRESH_STORAGE_KEY) === 'true'
-  );
-
-  const setAutoRefresh = useCallback((value) => {
-    setAutoRefreshState(value);
-    localStorage.setItem(AUTOREFRESH_STORAGE_KEY, String(value));
+  useEffect(() => {
+    try {
+      localStorage.removeItem(LEGACY_AUTOREFRESH_KEY);
+    } catch {
+      // localStorage no disponible (modo privado, etc.): nada que limpiar.
+    }
   }, []);
 
-  // Mientras esté activado, invalida periódicamente para que todos los
-  // hooks que dependen de `key` (useMediciones, useBloques, etc.) refetcheen.
-  useEffect(() => {
-    if (!autoRefresh) return;
-    const id = setInterval(invalidate, INTERVALO_MS);
-    return () => clearInterval(id);
-  }, [autoRefresh, invalidate]);
-
   return (
-    <RefreshKeyContext.Provider value={{ key, invalidate, autoRefresh, setAutoRefresh }}>
+    <RefreshKeyContext.Provider value={{ key, invalidate }}>
       {children}
     </RefreshKeyContext.Provider>
   );
