@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Upload, ChevronDown, ChevronUp } from 'lucide-react';
+import { Upload, ChevronDown, ChevronUp, BarChart3 } from 'lucide-react';
 
 import KPIBar from '../components/KPIBar';
 import ColombiaMap from '../components/ColombiaMap';
@@ -176,7 +176,7 @@ export default function DashboardPage() {
 
         {/* ========================================================
             ZONAS/PUNTOS + MAPA + DETALLE
-            Las 3 columnas tienen la misma altura exacta (480px)
+            Con 3 columnas tienen la misma altura exacta (480px); por debajo de 1280px ver index.css
             con scroll interno independiente.
             ======================================================== */}
 
@@ -359,7 +359,7 @@ export default function DashboardPage() {
                 className="dashboard-section-title"
                 style={{ display: 'flex', alignItems: 'center', gap: 8 }}
               >
-                <span>📊</span> Análisis y métricas avanzadas (en desarrollo)
+                <BarChart3 size={16} /> Análisis y métricas avanzadas (en desarrollo)
               </div>
               <div
                 style={{

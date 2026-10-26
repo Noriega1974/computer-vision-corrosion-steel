@@ -1253,10 +1253,28 @@ body {
       minmax(0, 2fr) minmax(300px, 1fr) !important;
   }
 
+  /* Las alturas fijas (480px) viven en estilos inline y solo valen para tres
+     columnas. Con dos filas se liberan: cada seccion crece segun su contenido
+     con un minimo razonable, y mapa y detalle (misma fila) se estiran al mismo
+     alto por el propio grid. */
+  .main-grid {
+    height: auto !important;
+    max-height: none !important;
+  }
+
   .main-grid > .section-plants {
     grid-column: 1 / -1;
 
-    min-height: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 280px !important;
+  }
+
+  .main-grid > .section-map,
+  .main-grid > .section-detail {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 420px !important;
   }
 }
 

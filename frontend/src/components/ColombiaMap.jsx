@@ -50,6 +50,8 @@ export default function ColombiaMap({
   const mapInstanceRef = useRef(null);
   const markersRef = useRef([]);
   const zonasRef = useRef([]);
+  // El encuadre automático a todos los puntos se hace una sola vez.
+  const encuadreInicialRef = useRef(false);
 
   // Inicializar mapa Leaflet una sola vez
   useEffect(() => {
@@ -77,7 +79,7 @@ export default function ColombiaMap({
     mapInstanceRef.current = map;
 
     // Asegurar que Leaflet recalcule el tamaño del contenedor para evitar zonas grises
-    setTimeout(() => {
+    const invalidateTimer = setTimeout(() => {
       map.invalidateSize();
     }, 250);
 
@@ -90,7 +92,13 @@ export default function ColombiaMap({
     }
 
     return () => {
+      clearTimeout(invalidateTimer);
       if (resizeObserver) resizeObserver.disconnect();
+      map.remove();
+      mapInstanceRef.current = null;
+      markersRef.current = [];
+      zonasRef.current = [];
+      encuadreInicialRef.current = false;
     };
   }, []);
 
@@ -106,12 +114,15 @@ export default function ColombiaMap({
     if (puntos.length === 0) return;
 
     const nivelMap = buildNivelMap(mediciones);
+    const coordsValidas = [];
 
     puntos.forEach((punto, index) => {
       const lat = punto.coordenadas?.lat;
       const lng = punto.coordenadas?.lng;
 
       if (lat == null || lng == null) return;
+      if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) return;
+      coordsValidas.push([Number(lat), Number(lng)]);
 
       const nivel = nivelMap[punto.id_bloque] ?? -1;
 
@@ -251,6 +262,20 @@ export default function ColombiaMap({
 
       markersRef.current.push(marker);
     });
+
+    // Primera carga: encuadrar todos los puntos existentes. Si no hay ninguno
+    // se queda la vista por defecto (Barranquilla). Si ya viene un punto
+    // seleccionado, el flyTo de abajo manda.
+    if (!encuadreInicialRef.current && coordsValidas.length > 0) {
+      encuadreInicialRef.current = true;
+      if (!selectedPunto) {
+        mapInstanceRef.current.fitBounds(coordsValidas, {
+          padding: [40, 40],
+          maxZoom: 13,
+          animate: false,
+        });
+      }
+    }
   }, [
     puntos,
     mediciones,
@@ -306,7 +331,7 @@ export default function ColombiaMap({
     );
   }, [selectedPunto]);
 
-  // Centrar el mapa en una afiliación elegida desde ZonasList -- encuadra
+  // Centrar el mapa en una afiliación elegida desde la lista de afiliaciones -- encuadra
   // TODAS sus zonas juntas (una empresa puede tener varias manchas).
   useEffect(() => {
     const L = window.L;
