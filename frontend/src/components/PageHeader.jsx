@@ -4,6 +4,7 @@ import { Menu, Sun, Moon } from 'lucide-react';
 
 // Mapa de rutas a títulos de página para el breadcrumb
 const ROUTE_TITLES = {
+  '/que-es-pixelrust': '¿Qué es PixelRust?',
   '/dashboard':    'Dashboard',
   '/upload':       'Nueva Medición',
   '/galeria':      'Galería',

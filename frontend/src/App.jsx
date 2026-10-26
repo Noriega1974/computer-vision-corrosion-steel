@@ -24,6 +24,7 @@ const UsersPage           = lazy(() => import('./pages/UsersPage'));
 const ConfiguracionPage   = lazy(() => import('./pages/ConfiguracionPage'));
 const NotFoundPage        = lazy(() => import('./pages/NotFoundPage'));
 const PrivacidadPage      = lazy(() => import('./pages/PrivacidadPage'));
+const QuePixelRustPage    = lazy(() => import('./pages/QuePixelRustPage'));
 
 
 export default function App() {
@@ -44,6 +45,7 @@ export default function App() {
                   </ProtectedRoute>
                 }
               >
+                <Route path="/que-es-pixelrust"    element={<QuePixelRustPage />} />
                 <Route path="/dashboard"           element={<DashboardPage />} />
                 <Route path="/galeria"             element={<GaleriaPage />} />
                 <Route path="/galeria/:idMedicion" element={<MedicionDetailPage />} />
