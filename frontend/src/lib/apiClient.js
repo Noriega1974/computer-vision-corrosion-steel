@@ -27,6 +27,20 @@ async function getIdToken() {
   return session.tokens?.idToken?.toString();
 }
 
+// fetch lanza TypeError ("Failed to fetch") cuando no hay respuesta legible:
+// sin red, servidor caído o CORS bloqueado. Se traduce a un mensaje que el
+// usuario pueda entender; los errores HTTP siguen su camino normal.
+async function fetchConRedLegible(url, options) {
+  try {
+    return await fetch(url, options);
+  } catch (e) {
+    if (e instanceof TypeError) {
+      throw new Error('No se pudo conectar con el servidor. Revisa tu conexión a internet e inténtalo de nuevo.');
+    }
+    throw e;
+  }
+}
+
 async function request(method, path, body) {
   const token = await getIdToken();
 
@@ -42,7 +56,7 @@ async function request(method, path, body) {
     options.body = JSON.stringify(body);
   }
 
-  const res = await fetch(`${BASE_URL}${path}`, options);
+  const res = await fetchConRedLegible(`${BASE_URL}${path}`, options);
 
   // 401 → emitir evento global para que AuthContext fuerce el logout
   if (res.status === 401) {
@@ -99,3 +113,18 @@ export const apiGet = (path) => {
 export const apiPost = (path, body) => request('POST', path, body);
 export const apiPut = (path, body) => request('PUT', path, body);
 export const apiDelete = (path) => request('DELETE', path);
+
+// Sube un archivo a S3 con un POST prefirmado ({url, fields} de
+// POST /medicion/upload-url). S3 exige los campos primero y el archivo AL
+// FINAL; no se fija Content-Type a mano (el navegador arma el multipart).
+export async function apiSubirS3({ url, fields }, file) {
+  const form = new FormData();
+  Object.entries(fields).forEach(([k, v]) => form.append(k, v));
+  form.append('file', file);
+  const res = await fetchConRedLegible(url, { method: 'POST', body: form });
+  if (!res.ok) {
+    const err = new Error(`No se pudo subir la foto (error ${res.status}). Inténtalo de nuevo.`);
+    err.status = res.status;
+    throw err;
+  }
+}
