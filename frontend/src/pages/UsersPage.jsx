@@ -197,6 +197,7 @@ function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error, rolesPermi
         <button
           type="button"
           onClick={() => setShowOptional(v => !v)}
+          aria-expanded={showOptional}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             width: '100%', padding: '9px 12px', borderRadius: 8,

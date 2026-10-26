@@ -168,7 +168,11 @@ function ZonaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
       return;
     }
     if (tipoMaterial === 'otro' && !tipoMaterialOtro.trim()) {
+      // La sección opcional puede estar colapsada: se expande y se enfoca el
+      // campo para que el error sea visible y accionable.
+      setShowOptional(true);
       setValidationError('Especifica el tipo de material.');
+      setTimeout(() => document.getElementById('zona-tipo-material-otro')?.focus(), 0);
       return;
     }
     if (zonas.length === 0) {
@@ -235,6 +239,7 @@ function ZonaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
         <button
           type="button"
           onClick={() => setShowOptional(v => !v)}
+          aria-expanded={showOptional}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             width: '100%', padding: '9px 12px', borderRadius: 8,
