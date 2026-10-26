@@ -1,7 +1,7 @@
 import React from 'react';
 import { useMedicionesPunto } from '../hooks/useMedicionesPunto';
 import {
-  nivelColor, nivelBg, nivelLabel, nivelToStatus,
+  nivelColor, nivelBg, nivelLabel,
 } from '../lib/statusUtils';
 import { formatFecha } from '../utils/dateFormat';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';

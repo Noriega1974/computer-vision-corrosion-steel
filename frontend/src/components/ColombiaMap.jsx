@@ -4,9 +4,9 @@ import { useMediciones } from '../hooks/useMediciones';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useAuth } from '../auth/AuthContext';
 import {
+  NIVELES,
   nivelColor,
-  nivelToStatus,
-  getStatusLabel
+  nivelLabel,
 } from '../lib/statusUtils';
 
 // Construye un mapa {id_bloque → nivel_corrosion_mas_reciente}. El "Punto"
@@ -173,7 +173,7 @@ export default function ColombiaMap({
 
       const nivelStr =
         nivel >= 0
-          ? getStatusLabel(nivelToStatus(nivel))
+          ? nivelLabel(nivel)
           : 'Sin mediciones';
 
       const ciudad =
@@ -382,16 +382,12 @@ export default function ColombiaMap({
         <div
           style={{
             display: 'flex',
+            flexWrap: 'wrap',
             gap: 'var(--space-2)'
           }}
         >
 
-          {[
-  { color: '#16a34a', label: 'Sin corrosión' },
-  { color: '#d97706', label: 'Leve' },
-  { color: '#ea580c', label: 'Moderada' },
-  { color: '#dc2626', label: 'Severa' },
-].map(({ color, label }) => ( 
+          {NIVELES.map((_, n) => ({ color: nivelColor(n), label: nivelLabel(n) })).map(({ color, label }) => ( 
 
             <div
               key={label}

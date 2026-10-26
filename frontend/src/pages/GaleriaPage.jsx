@@ -4,7 +4,7 @@ import { Upload, AlertCircle, Search, Plus, X, ChevronDown, Filter } from 'lucid
 import { useMediciones } from '../hooks/useMediciones';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useAuth } from '../auth/AuthContext';
-import { nivelColor, nivelLabel, nivelToStatus } from '../lib/statusUtils';
+import { NIVELES, nivelColor, nivelLabel } from '../lib/statusUtils';
 import { formatFecha } from '../utils/dateFormat';
 
 // ─── Helper: tiempo relativo ─────────────────────────────────────────────────
@@ -543,10 +543,7 @@ export default function GaleriaPage() {
             <div style={{ display: 'flex', gap: 'var(--space-1)', flexWrap: 'wrap', alignItems: 'center' }}>
               {[
                 { key: 'all', label: 'Todos', color: 'var(--text-muted)' },
-                { key: '0', label: 'Sin corrosión (<0.05%)', color: '#16a34a' },
-                { key: '1', label: 'Leve (<10%)', color: '#d97706' },
-                { key: '2', label: 'Moderada (<25%)', color: '#ea580c' },
-                { key: '3', label: 'Severa (≥25%)', color: '#dc2626' },
+                ...NIVELES.map((_, n) => ({ key: String(n), label: nivelLabel(n), color: nivelColor(n) })),
               ].map(({ key, label, color }) => (
                 <button
                   key={key}

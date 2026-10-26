@@ -1,5 +1,6 @@
 import React from 'react';
 import { useMediciones } from '../hooks/useMediciones';
+import { nivelRange } from '../lib/statusUtils';
 
 
 // ================================================================
@@ -318,7 +319,7 @@ export default function KPIBar() {
         criticas,
 
       sub:
-        'nivel severo',
+        `severa ${nivelRange(3)}`,
 
       color:
         criticas > 0
@@ -335,7 +336,7 @@ export default function KPIBar() {
         sinCorrosion,
 
       sub:
-        'nivel 0',
+        `sin corrosión ${nivelRange(0)}`,
 
       color:
         'var(--accent-green)',
