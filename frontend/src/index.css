@@ -1333,3 +1333,17 @@ body {
     border-radius: 14px;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   FORM CONTROLS & DROPDOWNS (OPAQUE SURFACES)
+   Previene fondos transparentes/vidriados en selects nativos y menús.
+   ───────────────────────────────────────────────────────────── */
+select {
+  background-color: var(--bg-card-solid);
+  color: var(--text-primary);
+}
+
+select option {
+  background-color: var(--bg-card-solid);
+  color: var(--text-primary);
+}

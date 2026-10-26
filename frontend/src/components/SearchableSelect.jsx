@@ -15,7 +15,7 @@ function normalizar(s) {
 
 const inputStyle = {
   width: '100%', padding: '8px 12px', borderRadius: 8,
-  border: '1px solid var(--border)', background: 'var(--bg-page)',
+  border: '1px solid var(--border-strong)', background: 'var(--bg-card-solid)',
   color: 'var(--text-primary)', fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)',
   boxSizing: 'border-box',
 };
@@ -136,9 +136,9 @@ export default function SearchableSelect({
           id={listboxId}
           role="listbox"
           style={{
-            position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50,
-            background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8,
-            maxHeight: 220, overflowY: 'auto', boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+            position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 60,
+            background: 'var(--bg-card-solid)', border: '1px solid var(--border-strong)', borderRadius: 8,
+            maxHeight: 220, overflowY: 'auto', boxShadow: '0 10px 28px rgba(0,0,0,0.22)',
             // Evita que el scroll de la lista arrastre la pagina de atras al llegar al tope.
             overscrollBehavior: 'contain',
           }}
@@ -157,9 +157,14 @@ export default function SearchableSelect({
                 onMouseDown={(e) => { e.preventDefault(); selectOption(opt); }}
                 onMouseEnter={() => setHighlight(i)}
                 style={{
-                  padding: '8px 12px', fontSize: 'var(--text-sm)', cursor: 'pointer',
+                  padding: '9px 12px', fontSize: 'var(--text-sm)', cursor: 'pointer',
                   fontFamily: 'var(--font-ui)', color: 'var(--text-primary)',
-                  background: i === highlight ? 'var(--bg-page)' : 'transparent',
+                  fontWeight: opt === value ? 600 : 400,
+                  background: i === highlight
+                    ? 'var(--nav-active-bg, rgba(193,70,11,0.08))'
+                    : opt === value
+                      ? 'var(--bg-page)'
+                      : 'transparent',
                 }}
               >
                 {opt}

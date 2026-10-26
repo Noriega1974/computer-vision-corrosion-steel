@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit2, X, AlertCircle, Check, Power, Trash2, MapPin, Building2 } from 'lucide-react';
+import { Plus, Edit2, X, AlertCircle, Check, Power, Trash2, MapPin, Building2, ChevronDown } from 'lucide-react';
 import { useGestionBloques } from '../hooks/useBloques';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
@@ -146,6 +146,7 @@ const labelStyle = {
 // `tipo_material` NO va acá -- es propiedad de la zona/empresa completa (ver
 // ZonasPage), no de cada punto individual.
 function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, esSuperAdmin, empresasDisponibles, perfil }) {
+  const [showOptional, setShowOptional] = useState(() => Boolean(initial.tipo_estructura || initial.grosor_mm || initial.descripcion));
   const [form, setForm] = useState({
     nombre: initial.nombre ?? '',
     descripcion: initial.descripcion ?? '',
@@ -380,38 +381,70 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, esSuperAdmi
         )}
       </div>
 
+      {/* ── Información opcional colapsable ── */}
       <div style={{ marginBottom: 'var(--space-3-5)' }}>
-        <label htmlFor="punto-tipo-estructura" style={labelStyle}>
-          Tipo de estructura (opcional)
-        </label>
-        <input
-          id="punto-tipo-estructura" name="tipo_estructura" autoComplete="off"
-          value={form.tipo_estructura} onChange={set('tipo_estructura')}
-          placeholder="ej: Tubería" style={inputStyle}
-        />
-      </div>
+        <button
+          type="button"
+          onClick={() => setShowOptional(v => !v)}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            width: '100%', padding: '9px 12px', borderRadius: 8,
+            background: 'var(--bg-inset)', border: '1px solid var(--border)',
+            color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)',
+            fontSize: 'var(--text-xs)', fontWeight: 600, cursor: 'pointer',
+            textAlign: 'left',
+          }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <ChevronDown size={14} style={{ transform: showOptional ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+            <span>Información adicional (opcional)</span>
+          </span>
+          <span style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)' }}>
+            {showOptional ? 'Ocultar' : 'Estructura, grosor y notas'}
+          </span>
+        </button>
 
-      <div style={{ marginBottom: 'var(--space-3-5)' }}>
-        <label htmlFor="punto-grosor" style={labelStyle}>
-          Grosor del material en mm (opcional)
-        </label>
-        <input
-          id="punto-grosor" name="grosor_mm" type="number" inputMode="decimal" step="any" min="0"
-          value={form.grosor_mm} onChange={set('grosor_mm')}
-          placeholder="ej: 2.5" style={inputStyle}
-        />
-      </div>
+        {showOptional && (
+          <div style={{
+            marginTop: 8, padding: '12px 14px', borderRadius: 8,
+            background: 'var(--bg-page)', border: '1px solid var(--border)',
+            display: 'flex', flexDirection: 'column', gap: 'var(--space-3)',
+          }}>
+            <div>
+              <label htmlFor="punto-tipo-estructura" style={labelStyle}>
+                Tipo de estructura (opcional)
+              </label>
+              <input
+                id="punto-tipo-estructura" name="tipo_estructura" autoComplete="off"
+                value={form.tipo_estructura} onChange={set('tipo_estructura')}
+                placeholder="ej: Tubería" style={inputStyle}
+              />
+            </div>
 
-      <div style={{ marginBottom: 'var(--space-3-5)' }}>
-        <label htmlFor="punto-descripcion" style={labelStyle}>
-          Descripción (opcional)
-        </label>
-        <input
-          id="punto-descripcion" name="descripcion" autoComplete="off"
-          value={form.descripcion} onChange={set('descripcion')}
-          placeholder="ej: Techo y estructura metálica del galpón principal"
-          style={inputStyle}
-        />
+            <div>
+              <label htmlFor="punto-grosor" style={labelStyle}>
+                Grosor del material en mm (opcional)
+              </label>
+              <input
+                id="punto-grosor" name="grosor_mm" type="number" inputMode="decimal" step="any" min="0"
+                value={form.grosor_mm} onChange={set('grosor_mm')}
+                placeholder="ej: 2.5" style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="punto-descripcion" style={labelStyle}>
+                Descripción (opcional)
+              </label>
+              <input
+                id="punto-descripcion" name="descripcion" autoComplete="off"
+                value={form.descripcion} onChange={set('descripcion')}
+                placeholder="ej: Techo y estructura metálica del galpón principal"
+                style={inputStyle}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {(validationError || error) && (

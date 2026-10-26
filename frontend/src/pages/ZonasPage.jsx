@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, X, AlertCircle, Check, Power, MapPin } from 'lucide-react';
+import { Plus, Edit2, X, AlertCircle, Check, Power, MapPin, ChevronDown } from 'lucide-react';
 import { useGestionEmpresas } from '../hooks/useEmpresas';
 import ZonaMapPicker from '../components/ZonaMapPicker';
 import SearchableSelect from '../components/SearchableSelect';
@@ -121,6 +121,7 @@ function ZonaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
   // y no en cada Punto. Casi todo lo que se trabaja es galvanizado, así que
   // arranca preseleccionado; "Otro" revela texto libre.
   const materialInicialEsOtro = initial.tipo_material && initial.tipo_material !== 'Galvanizado';
+  const [showOptional, setShowOptional] = useState(() => Boolean(materialInicialEsOtro));
   const [tipoMaterial, setTipoMaterial] = useState(materialInicialEsOtro ? 'otro' : 'Galvanizado');
   const [tipoMaterialOtro, setTipoMaterialOtro] = useState(materialInicialEsOtro ? initial.tipo_material : '');
 
@@ -229,30 +230,61 @@ function ZonaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
         />
       </div>
 
-      <div style={{ marginBottom: tipoMaterial === 'otro' ? 'var(--space-2)' : 'var(--space-3-5)' }}>
-        <label htmlFor="zona-tipo-material" style={labelStyle}>
-          Tipo de material (opcional)
-        </label>
-        <select
-          id="zona-tipo-material" name="tipo_material" style={inputStyle}
-          value={tipoMaterial} onChange={e => setTipoMaterial(e.target.value)}
+      {/* ── Información opcional colapsable ── */}
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
+        <button
+          type="button"
+          onClick={() => setShowOptional(v => !v)}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            width: '100%', padding: '9px 12px', borderRadius: 8,
+            background: 'var(--bg-inset)', border: '1px solid var(--border)',
+            color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)',
+            fontSize: 'var(--text-xs)', fontWeight: 600, cursor: 'pointer',
+            textAlign: 'left',
+          }}
         >
-          <option value="Galvanizado">Galvanizado</option>
-          <option value="otro">Otro (especificar)</option>
-        </select>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <ChevronDown size={14} style={{ transform: showOptional ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+            <span>Información adicional (opcional)</span>
+          </span>
+          <span style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)' }}>
+            {showOptional ? 'Ocultar' : 'Tipo de material'}
+          </span>
+        </button>
+
+        {showOptional && (
+          <div style={{
+            marginTop: 8, padding: '12px 14px', borderRadius: 8,
+            background: 'var(--bg-page)', border: '1px solid var(--border)',
+          }}>
+            <div style={{ marginBottom: tipoMaterial === 'otro' ? 'var(--space-2)' : 0 }}>
+              <label htmlFor="zona-tipo-material" style={labelStyle}>
+                Tipo de material (opcional)
+              </label>
+              <select
+                id="zona-tipo-material" name="tipo_material" style={inputStyle}
+                value={tipoMaterial} onChange={e => setTipoMaterial(e.target.value)}
+              >
+                <option value="Galvanizado">Galvanizado (predeterminado)</option>
+                <option value="otro">Otro (especificar)</option>
+              </select>
+            </div>
+            {tipoMaterial === 'otro' && (
+              <div style={{ marginTop: 'var(--space-2-5)' }}>
+                <label htmlFor="zona-tipo-material-otro" style={labelStyle}>
+                  Especifica el material *
+                </label>
+                <input
+                  id="zona-tipo-material-otro" name="tipo_material_otro" autoComplete="off"
+                  required value={tipoMaterialOtro} onChange={e => setTipoMaterialOtro(e.target.value)}
+                  placeholder="ej: A588" style={inputStyle}
+                />
+              </div>
+            )}
+          </div>
+        )}
       </div>
-      {tipoMaterial === 'otro' && (
-        <div style={{ marginBottom: 'var(--space-3-5)' }}>
-          <label htmlFor="zona-tipo-material-otro" style={labelStyle}>
-            Especifica el material *
-          </label>
-          <input
-            id="zona-tipo-material-otro" name="tipo_material_otro" autoComplete="off"
-            required value={tipoMaterialOtro} onChange={e => setTipoMaterialOtro(e.target.value)}
-            placeholder="ej: A588" style={inputStyle}
-          />
-        </div>
-      )}
 
       {/* Ubicación de referencia -- detección automática + toggle manual.
           No es <label>: encabeza el bloque entero, no un solo control. */}
