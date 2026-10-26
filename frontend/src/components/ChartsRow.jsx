@@ -15,8 +15,7 @@ import { useMediciones } from '../hooks/useMediciones';
 import { useBloques } from '../hooks/useBloques';
 import {
   nivelColor,
-  nivelToStatus,
-  getStatusLabel,
+  nivelLabel,
 } from '../lib/statusUtils';
 
 const CustomTooltip = ({ active, payload, label }) => {
@@ -128,7 +127,7 @@ export default function ChartsRow() {
 
   const nivelCounts = [0, 1, 2, 3]
     .map(n => ({
-      name: getStatusLabel(nivelToStatus(n)),
+      name: nivelLabel(n),
       value: mediciones.filter(
         m => (m.nivel_corrosion ?? 0) === n
       ).length,

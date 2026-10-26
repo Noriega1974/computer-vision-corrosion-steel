@@ -1,5 +1,6 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 
 /**
  * Aviso de datos.
@@ -45,18 +46,50 @@ const SECCIONES = [
 ];
 
 export default function PrivacidadPage() {
+  const navigate = useNavigate();
+
+  function handleBack() {
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate('/dashboard');
+    }
+  }
+
   return (
     <div
       style={{
         maxWidth: 720,
         margin: '0 auto',
-        padding: '40px 20px 64px',
+        padding: '32px 20px 64px',
         display: 'flex',
         flexDirection: 'column',
         gap: 'var(--space-5)',
       }}
     >
       <div>
+        <button
+          type="button"
+          onClick={handleBack}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '7px 14px',
+            marginBottom: 16,
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border)',
+            borderRadius: 999,
+            color: 'var(--text-primary)',
+            fontFamily: 'var(--font-ui)',
+            fontSize: 'var(--text-xs)',
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          <ArrowLeft size={14} /> Volver atrás
+        </button>
+
         <h2
           style={{
             fontSize: 'var(--text-xl)',
@@ -197,17 +230,28 @@ export default function PrivacidadPage() {
         </p>
       </section>
 
-      <Link
-        to="/dashboard"
-        style={{
-          fontSize: 'var(--text-sm)',
-          color: 'var(--accent-blue)',
-          textDecoration: 'none',
-          fontWeight: 550,
-        }}
-      >
-        Volver al dashboard
-      </Link>
+      <div>
+        <button
+          type="button"
+          onClick={handleBack}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '8px 16px',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border)',
+            borderRadius: 999,
+            color: 'var(--text-primary)',
+            fontFamily: 'var(--font-ui)',
+            fontSize: 'var(--text-xs)',
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          <ArrowLeft size={14} /> Volver atrás
+        </button>
+      </div>
     </div>
   );
 }

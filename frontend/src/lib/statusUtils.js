@@ -1,4 +1,19 @@
-// Mapeo de nivel_corrosion (0-3) del backend a etiquetas internas
+// Mapeo de nivel_corrosion (0-3) según la norma ISO 10289.
+// El nivel lo calcula el backend (única fuente de verdad); el frontend solo
+// lo traduce a texto/color a través de la tabla NIVELES. No recalcular acá.
+//   0: Sin corrosión   <0,05 % del área
+//   1: Leve            0,05 – <10 %
+//   2: Moderada        10 – <25 %
+//   3: Severa          ≥25 %
+
+export const NIVELES = [
+  { status: 'OK',       label: 'Sin corrosión', short: 'Sin corrosión', range: 'Menor a 0,05%' },
+  { status: 'EARLY',    label: 'Leve',          short: 'Leve',          range: '0,05% a 10%' },
+  { status: 'MODERATE', label: 'Moderada',      short: 'Moderada',      range: '10% a 25%' },
+  { status: 'CRITICAL', label: 'Severa',        short: 'Severa',        range: '25% o más' },
+];
+
+const byStatus = (status) => NIVELES.find(n => n.status === status);
 
 export function nivelToStatus(nivel) {
   return ['OK', 'EARLY', 'MODERATE', 'CRITICAL'][nivel] ?? 'OK';
@@ -23,12 +38,11 @@ export function getStatusBg(status) {
 }
 
 export function getStatusLabel(status) {
-  return {
-    OK:       'Sin Corrosión',
-    EARLY:    'Corrosión Leve',
-    MODERATE: 'Corrosión Moderada',
-    CRITICAL: 'Corrosión Severa',
-  }[status] ?? status;
+  return byStatus(status)?.label ?? status;
+}
+
+export function getStatusShortLabel(status) {
+  return byStatus(status)?.short ?? status;
 }
 
 // Atajo: nivel (0-3) directo a color
@@ -36,8 +50,18 @@ export function nivelColor(nivel) {
   return getStatusColor(nivelToStatus(nivel));
 }
 
+// Texto único para chips, filtros, mapa, KPI y gráficas: "Severa ≥25 %".
 export function nivelLabel(nivel) {
   return getStatusLabel(nivelToStatus(nivel));
+}
+
+// Rango de área corroída del nivel: "≥25 %".
+export function nivelRange(nivel) {
+  return NIVELES[nivel]?.range ?? '';
+}
+
+export function nivelShortLabel(nivel) {
+  return getStatusShortLabel(nivelToStatus(nivel));
 }
 
 export function nivelBg(nivel) {

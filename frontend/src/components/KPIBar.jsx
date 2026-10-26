@@ -269,7 +269,7 @@ export default function KPIBar() {
         criticas,
 
       sub:
-        'nivel severo',
+        'severa',
 
       color:
         criticas > 0
@@ -286,7 +286,7 @@ export default function KPIBar() {
         sinCorrosion,
 
       sub:
-        'nivel 0',
+        'sin corrosión',
 
       color:
         'var(--accent-green)',

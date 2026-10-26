@@ -14,7 +14,6 @@ import {
 } from 'lucide-react';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
-import { useRefreshKey } from '../hooks/RefreshKeyContext';
 import { getDateFormat, setDateFormat as guardarFormatoFecha } from '../utils/dateFormat';
 import AvatarCropper from '../components/AvatarCropper';
 
@@ -96,50 +95,6 @@ const descriptionStyle = {
   color: 'var(--text-muted)',
   lineHeight: 1.5,
 };
-
-
-// ─── Switch ──────────────────────────────────────────────────────────────────
-
-function Switch({ checked, onChange }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(!checked)}
-      aria-pressed={checked}
-      style={{
-        width: 38,
-        height: 21,
-        padding: 2,
-        border: 'none',
-        borderRadius: 20,
-        cursor: 'pointer',
-        background: checked
-          ? 'var(--accent-blue)'
-          : 'var(--border-bright)',
-        position: 'relative',
-        transition: 'background 0.15s ease',
-        flexShrink: 0,
-      }}
-    >
-      <span
-        style={{
-          position: 'absolute',
-          top: 2,
-          left: 2,
-          width: 17,
-          height: 17,
-          borderRadius: '50%',
-          background: 'white',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-          // translateX en vez de animar `left`: el desplazamiento corre en GPU
-          // y no dispara layout en cada frame.
-          transform: `translateX(${checked ? 17 : 0}px)`,
-          transition: 'transform 0.15s ease-out',
-        }}
-      />
-    </button>
-  );
-}
 
 
 // ─── Fila de configuración ──────────────────────────────────────────────────
@@ -282,7 +237,6 @@ export default function ConfiguracionPage() {
   const [darkMode, setDarkModeLocal] = useState(
     () => localStorage.getItem('corria-darkmode') === 'true'
   );
-  const { autoRefresh, setAutoRefresh } = useRefreshKey();
   const [dateFormat, setDateFormatLocal] = useState(() => getDateFormat());
 
   useEffect(() => {
@@ -395,7 +349,7 @@ export default function ConfiguracionPage() {
         @keyframes shimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
       `}</style>
 
-      <div style={{ padding: 'var(--space-5)', maxWidth: 1000, margin: '0 auto' }}>
+      <div style={{ padding: 'var(--space-5)', maxWidth: 1360, width: '100%', margin: '0 auto' }}>
 
         {/* ── Encabezado ── */}
         <div
@@ -676,16 +630,6 @@ export default function ConfiguracionPage() {
               <option value="claro">Claro</option>
               <option value="oscuro">Oscuro</option>
             </select>
-          </SettingRow>
-
-          <SettingRow
-            title="Actualización automática"
-            description="Actualizar periódicamente la información mostrada en el sistema."
-          >
-            <Switch
-              checked={autoRefresh}
-              onChange={setAutoRefresh}
-            />
           </SettingRow>
 
           <SettingRow

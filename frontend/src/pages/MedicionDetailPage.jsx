@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Download, Share2, Trash2, MapPin, AlertCircle, Thermometer, Droplets, Wind } from 'lucide-react';
+import { ArrowLeft, Download, Share2, Trash2, MapPin, AlertCircle, Thermometer, Droplets, Wind, ChevronDown, ChevronUp, Settings } from 'lucide-react';
 import { useMedicion } from '../hooks/useMedicion';
 import { useBloques } from '../hooks/useBloques';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
-import { nivelColor, nivelBg, nivelLabel, nivelToStatus } from '../lib/statusUtils';
+import { NIVELES, nivelColor, nivelBg, nivelLabel } from '../lib/statusUtils';
 import { formatFecha } from '../utils/dateFormat';
 import { apiDelete } from '../lib/apiClient';
-import BoundingBoxOverlay from '../components/BoundingBoxOverlay';
 import SegmentationOverlay from '../components/SegmentationOverlay';
 
 // ─── Helper tiempo relativo ───────────────────────────────────────────────────
@@ -71,12 +70,28 @@ function MiniMapa({ lat, lng, latReal, lngReal }) {
     }
 
     instanceRef.current = map;
+
+    // El mapa ocupa el alto de su celda, que depende de la columna derecha y
+    // se define al desplegar la sección: sin invalidateSize Leaflet se queda
+    // con el tamaño inicial y deja mosaicos grises.
+    const raf = requestAnimationFrame(() => map.invalidateSize());
+    const ro = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(() => map.invalidateSize())
+      : null;
+    ro?.observe(mapRef.current);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      ro?.disconnect();
+      map.remove();
+      instanceRef.current = null;
+    };
   }, [leafletReady, lat, lng, latReal, lngReal]);
 
   if (!lat || !lng) {
     return (
       <div style={{
-        height: 140, background: 'var(--bg-inset)', borderRadius: 8,
+        flex: 1, height: '100%', minHeight: 140, background: 'var(--bg-inset)', borderRadius: 8,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         border: '1px solid var(--border)',
       }}>
@@ -89,10 +104,28 @@ function MiniMapa({ lat, lng, latReal, lngReal }) {
 
   return (
     <div ref={mapRef} style={{
-      height: 140, borderRadius: 8, border: '1px solid var(--border)', overflow: 'hidden',
+      flex: 1, height: '100%', minHeight: 240, borderRadius: 8, border: '1px solid var(--border)', overflow: 'hidden',
     }} />
   );
 }
+
+function coordenadaValida(v) {
+  return v != null && v !== '' && Number.isFinite(Number(v));
+}
+
+// ─── Caja fija para las vistas Original / Segmentación ──────────────────────
+// Ambas pestañas comparten la misma caja (mismo ancho y relación de aspecto) y
+// la imagen se ajusta adentro con object-fit: contain, así cambiar de pestaña
+// no cambia el tamaño de la imagen ni mueve el layout.
+const IMAGEN_BOX_STYLE = {
+  position: 'relative', width: '100%', aspectRatio: '4 / 3',
+  borderRadius: 8, border: '1px solid var(--border)',
+  background: 'var(--bg-inset)', overflow: 'hidden',
+};
+const IMAGEN_FIT_STYLE = {
+  position: 'absolute', inset: 0, width: '100%', height: '100%',
+  objectFit: 'contain', display: 'block',
+};
 
 // ─── Barra de progreso para porcentaje ───────────────────────────────────────
 function BarraPorcentaje({ valor, color, max = 100 }) {
@@ -116,13 +149,6 @@ function BarraPorcentaje({ valor, color, max = 100 }) {
           boxShadow: `0 0 8px ${color}50`,
         }} />
       </div>
-      <div style={{
-        textAlign: 'right', marginTop: 3,
-        fontFamily: 'var(--font-data)', fontWeight: 700,
-        fontSize: 'var(--text-sm)', color,
-      }}>
-        {(valor ?? 0).toFixed(1)}%
-      </div>
     </div>
   );
 }
@@ -140,6 +166,8 @@ export default function MedicionDetailPage() {
   // GaleriaPage.jsx).
   const { bloques } = useBloques(true);
   const [activeTab, setActiveTab] = useState('original');
+  const [showClimaFlashcard, setShowClimaFlashcard] = useState(false);
+  const [showMasOpciones, setShowMasOpciones] = useState(false);
   const [shareMsg, setShareMsg] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [eliminando, setEliminando] = useState(false);
@@ -173,7 +201,7 @@ export default function MedicionDetailPage() {
     }
   }
 
-  // Descarga la vista activa (original/detección/segmentación).
+  // Descarga la vista activa (original/segmentación).
   //
   // La versión anterior de "original" ponía la URL de S3 directo en
   // `<a href download>` -- el atributo `download` NO fuerza la descarga en
@@ -221,21 +249,7 @@ export default function MedicionDetailPage() {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0);
 
-      if (activeTab === 'deteccion') {
-        (medicion.detecciones ?? []).forEach(det => {
-          const w = det.w * canvas.width;
-          const h = det.h * canvas.height;
-          const x = det.x * canvas.width - w / 2;
-          const y = det.y * canvas.height - h / 2;
-          ctx.strokeStyle = '#dc2626';
-          ctx.lineWidth = Math.max(2, canvas.width * 0.003);
-          ctx.strokeRect(x, y, w, h);
-          ctx.fillStyle = '#dc2626';
-          ctx.font = `${Math.max(12, Math.round(canvas.width * 0.02))}px monospace`;
-          const etiqueta = `${det.clase ?? 'corrosion'} ${det.confianza ? (det.confianza * 100).toFixed(0) + '%' : ''}`.trim();
-          ctx.fillText(etiqueta, x + 4, Math.max(12, y - 6));
-        });
-      } else if (activeTab === 'segmentacion') {
+      if (activeTab === 'segmentacion') {
         (medicion.mascaras ?? []).forEach(({ puntos = [], color = '#dc2626', opacidad = 0.45 }) => {
           if (puntos.length < 3) return;
           ctx.beginPath();
@@ -330,20 +344,26 @@ export default function MedicionDetailPage() {
     ciudad: bloqueInfo.ciudad ?? '',
     coordenadas: bloqueInfo.coordenadas ?? {},
   };
-  const lat = punto.coordenadas?.lat;
-  const lng = punto.coordenadas?.lng;
+  const lat = coordenadaValida(punto.coordenadas?.lat) ? Number(punto.coordenadas.lat) : null;
+  const lng = coordenadaValida(punto.coordenadas?.lng) ? Number(punto.coordenadas.lng) : null;
+  // (0, 0) es el valor por defecto de "sin ubicación", no un punto real.
+  const tieneCoordenadas = lat !== null && lng !== null && !(lat === 0 && lng === 0);
+  const clima = medicion.clima;
+  const vientoKmh = clima?.viento_kmh ?? clima?.velocidad_viento_kmh;
+  const tieneClima = !!clima && [
+    clima.temperatura_c, clima.humedad_pct, vientoKmh, clima.precipitacion_mm,
+  ].some(v => v != null);
   const zonaNombre = esSuperAdmin
     ? (empresas.find(e => e.id_empresa === medicion.empresa_id)?.nombre ?? '—')
     : (perfil?.empresa_nombre ?? '—');
 
   const TABS = [
     { key: 'original', label: 'Original' },
-    { key: 'deteccion', label: 'Detección' },
     { key: 'segmentacion', label: 'Segmentación' },
   ];
 
   return (
-    <div style={{ padding: 'var(--space-5)', maxWidth: 1200, margin: '0 auto' }}>
+    <div style={{ padding: 'var(--space-5)', maxWidth: 1600, width: '100%', margin: '0 auto' }}>
 
       {/* Botón volver */}
       <button onClick={handleBack} style={{
@@ -359,7 +379,7 @@ export default function MedicionDetailPage() {
         Volver a galería
       </button>
 
-      {/* Layout de dos columnas */}
+      {/* Layout de dos columnas principales */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)',
@@ -367,69 +387,65 @@ export default function MedicionDetailPage() {
         alignItems: 'start',
       }}>
 
-        {/* ── Columna izquierda: imagen con tabs + secciones que antes iban a la derecha ── */}
+        {/* ── Columna izquierda: imagen con tabs Original / Segmentación + Notas ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3-5)' }}>
-        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
-          {/* Tabs */}
-          <div style={{
-            display: 'flex', borderBottom: '1px solid var(--border)',
-            background: 'var(--bg-inset)',
-          }}>
-            {TABS.map(tab => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                style={{
-                  flex: 1, padding: '12px 8px',
-                  background: activeTab === tab.key ? 'var(--bg-card)' : 'transparent',
-                  border: 'none',
-                  borderBottom: activeTab === tab.key ? `2px solid ${color}` : '2px solid transparent',
-                  cursor: 'pointer',
-                  fontFamily: 'var(--font-ui)', fontWeight: activeTab === tab.key ? 600 : 400,
-                  fontSize: 'var(--text-sm)',
-                  color: activeTab === tab.key ? 'var(--text-primary)' : 'var(--text-muted)',
-                  transition: 'color 0.13s, background-color 0.13s, border-bottom-color 0.13s',
-                }}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Contenido del tab */}
-          <div style={{ padding: 20 }}>
-            {activeTab === 'original' && (
-              medicion.url_imagen ? (
-                <img
-                  src={medicion.url_imagen}
-                  alt="Imagen original de la medición"
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+            {/* Tabs */}
+            <div style={{
+              display: 'flex', borderBottom: '1px solid var(--border)',
+              background: 'var(--bg-inset)',
+            }}>
+              {TABS.map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
                   style={{
-                    width: '100%', borderRadius: 8,
-                    border: '1px solid var(--border)',
-                    maxHeight: 480, objectFit: 'contain',
-                    background: 'var(--bg-inset)',
+                    flex: 1, padding: '12px 8px',
+                    background: activeTab === tab.key ? 'var(--bg-card)' : 'transparent',
+                    border: 'none',
+                    borderBottom: activeTab === tab.key ? `2px solid ${color}` : '2px solid transparent',
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font-ui)', fontWeight: activeTab === tab.key ? 600 : 400,
+                    fontSize: 'var(--text-sm)',
+                    color: activeTab === tab.key ? 'var(--text-primary)' : 'var(--text-muted)',
+                    transition: 'color 0.13s, background-color 0.13s, border-bottom-color 0.13s',
                   }}
-                />
-              ) : (
-                <PlaceholderImagen mensaje="Imagen no disponible para esta medición" />
-              )
-            )}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
 
-            {activeTab === 'deteccion' && (
-              <BoundingBoxOverlay
-                imagenUrl={medicion.url_imagen}
-                detecciones={medicion.detecciones ?? []}
-              />
-            )}
+            {/* Contenido del tab */}
+            <div style={{ padding: 20 }}>
+              {activeTab === 'original' && (
+                medicion.url_imagen ? (
+                  <div style={IMAGEN_BOX_STYLE}>
+                    <img
+                      src={medicion.url_imagen}
+                      alt="Imagen original de la medición"
+                      style={IMAGEN_FIT_STYLE}
+                    />
+                  </div>
+                ) : (
+                  <PlaceholderImagen mensaje="Imagen no disponible para esta medición" />
+                )
+              )}
 
-            {activeTab === 'segmentacion' && (
-              <SegmentationOverlay
-                imagenUrl={medicion.url_imagen}
-                mascaras={medicion.mascaras ?? []}
-              />
-            )}
+              {activeTab === 'segmentacion' && (
+                medicion.url_imagen ? (
+                  <SegmentationOverlay
+                    imagenUrl={medicion.url_imagen}
+                    mascaras={medicion.mascaras ?? []}
+                    boxStyle={IMAGEN_BOX_STYLE}
+                    imgStyle={IMAGEN_FIT_STYLE}
+                  />
+                ) : (
+                  <PlaceholderImagen mensaje="Imagen no disponible para esta medición" />
+                )
+              )}
+            </div>
           </div>
-        </div>
 
           {/* Notas */}
           {medicion.notas && (
@@ -440,170 +456,353 @@ export default function MedicionDetailPage() {
               </p>
             </div>
           )}
+        </div>
 
-          {/* Mapa */}
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 20px' }}>
-            <SectionTitle>Ubicación</SectionTitle>
-            <MiniMapa
-              lat={lat}
-              lng={lng}
-              latReal={medicion.latitud_real}
-              lngReal={medicion.longitud_real}
-            />
-            {lat && lng && (
-              <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', fontFamily: 'var(--font-data)', display: 'flex', gap: 'var(--space-3)' }}>
-                <span style={{ color: 'var(--accent-amber)' }}>● Punto: {lat?.toFixed(5)}, {lng?.toFixed(5)}</span>
-                {medicion.latitud_real && medicion.longitud_real && (
-                  <span style={{ color: '#38bdf8' }}>● Foto: {medicion.latitud_real.toFixed(5)}, {medicion.longitud_real.toFixed(5)}</span>
+        {/* ── Columna derecha: Flashcard de la medición (sin huecos entre tarjetas) ── */}
+        <div style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border)',
+          borderRadius: 14,
+          padding: '18px 20px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
+          boxShadow: 'var(--shadow-sm)',
+        }}>
+          {/* 1. Cabecera: Título (Punto) + Subtítulo (Zona · Ciudad · Fecha) */}
+          <div>
+            <div style={{
+              fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 20,
+              color: 'var(--text-primary)', letterSpacing: '-0.01em', lineHeight: 1.15,
+            }}>
+              {punto.sede ?? 'Punto sin nombre'}
+            </div>
+            <div style={{
+              fontSize: 13, color: 'var(--text-muted)', fontWeight: 400, marginTop: 4,
+              fontFamily: 'var(--font-ui)',
+            }}>
+              {zonaNombre} · {punto.ciudad ?? '—'} · {tiempoRelativo(medicion.timestamp)}
+            </div>
+          </div>
+
+          {/* 2. Bloque central encuadrado: Veredicto + Barra de progreso de área corroída */}
+          <div style={{
+            background: bg,
+            border: `1px solid ${color}45`,
+            borderRadius: 10,
+            padding: '14px 16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ width: 9, height: 9, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                <span style={{
+                  fontFamily: 'var(--font-ui)', fontWeight: 700,
+                  fontSize: 17, color,
+                  animation: nivel === 3 ? 'blink 1.2s ease-in-out infinite' : 'none',
+                }}>
+                  {nivelLabel(nivel)}
+                </span>
+              </div>
+              <span style={{
+                fontFamily: 'var(--font-data)', fontWeight: 800,
+                fontSize: 20, color, letterSpacing: '-0.02em',
+              }}>
+                {(medicion.area_corroida_pct ?? 0).toFixed(1)}%
+              </span>
+            </div>
+            <BarraPorcentaje valor={medicion.area_corroida_pct ?? 0} color={color} />
+
+            {/* Metadatos secundarios compactos dentro de la caja central */}
+            <div style={{
+              display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 14px',
+              paddingTop: 10, marginTop: 2, borderTop: `1px solid ${color}25`,
+            }}>
+              <MetaItem label="Zona" value={zonaNombre} />
+              <MetaItem label="Ciudad" value={punto.ciudad ?? '—'} />
+              <MetaItem label="Registro" value={formatFecha(medicion.timestamp, { conHora: true })} />
+              <MetaItem label="Antigüedad" value={tiempoRelativo(medicion.timestamp)} />
+            </div>
+
+            {/* Desplegable de Información meteorológica dentro de la flashcard */}
+            {tieneClima && (
+              <div style={{
+                paddingTop: 8, marginTop: 2, borderTop: `1px solid ${color}25`,
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setShowClimaFlashcard(s => !s)}
+                  aria-expanded={showClimaFlashcard}
+                  style={{
+                    width: '100%', padding: '4px 0',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 12,
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <Thermometer size={14} style={{ color: 'var(--accent-amber)' }} />
+                    Información meteorológica
+                  </span>
+                  {showClimaFlashcard ? <ChevronUp size={15} color="var(--text-muted)" /> : <ChevronDown size={15} color="var(--text-muted)" />}
+                </button>
+
+                {showClimaFlashcard && (
+                  <div style={{
+                    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8,
+                    marginTop: 8,
+                  }}>
+                    {clima.temperatura_c != null && <ClimaItem icon={<Thermometer size={13} />} label="Temperatura" value={`${clima.temperatura_c} °C`} />}
+                    {clima.humedad_pct != null && <ClimaItem icon={<Droplets size={13} />} label="Humedad" value={`${clima.humedad_pct} %`} />}
+                    {vientoKmh != null && <ClimaItem icon={<Wind size={13} />} label="Viento" value={`${vientoKmh} km/h`} />}
+                    {clima.precipitacion_mm != null && <ClimaItem icon={<Droplets size={13} />} label="Precipitación" value={`${clima.precipitacion_mm} mm`} />}
+                  </div>
                 )}
               </div>
             )}
           </div>
 
-          {/* Acciones */}
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 20px' }}>
-            <SectionTitle>Acciones</SectionTitle>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+          {/* 3. Pie de la flashcard: Acciones rápidas (píldoras) */}
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            gap: 10, flexWrap: 'wrap',
+          }}>
+            <button
+              type="button"
+              onClick={() => navigate(`/dashboard?punto=${medicion.bloque_id}`)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '9px 14px', borderRadius: 999,
+                background: 'var(--bg-inset)', border: '1px solid var(--border)',
+                color: 'var(--text-primary)', fontFamily: 'var(--font-ui)',
+                fontWeight: 600, fontSize: 12, cursor: 'pointer',
+              }}
+            >
+              <MapPin size={14} /> Ver en mapa
+            </button>
 
-              <ActionButton icon={<Download size={15} />} onClick={handleDescargarVistaActual} disabled={!medicion.url_imagen || descargandoVista}>
-                {descargandoVista ? 'Generando…' : `Descargar vista actual (${TABS.find(t => t.key === activeTab)?.label})`}
-              </ActionButton>
+            <button
+              type="button"
+              onClick={handleDescargarVistaActual}
+              disabled={!medicion.url_imagen || descargandoVista}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '9px 16px', borderRadius: 999,
+                background: 'var(--text-primary)', border: 'none',
+                color: 'var(--bg-card-solid)', fontFamily: 'var(--font-ui)',
+                fontWeight: 600, fontSize: 12,
+                cursor: (!medicion.url_imagen || descargandoVista) ? 'not-allowed' : 'pointer',
+                opacity: (!medicion.url_imagen || descargandoVista) ? 0.5 : 1,
+              }}
+            >
+              <Download size={14} />
+              {descargandoVista ? 'Generando…' : `Descargar (${TABS.find(t => t.key === activeTab)?.label})`}
+            </button>
+          </div>
+        </div>
+      </div>
 
-              <ActionButton icon={<Share2 size={15} />} onClick={handleCompartir}>
-                {shareMsg || 'Copiar enlace'}
-              </ActionButton>
+      {/* ── Sección Desplegable: Más opciones y detalles técnicos ── */}
+      <div style={{
+        marginTop: 24,
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border)',
+        borderRadius: 12,
+        overflow: 'hidden',
+      }}>
+        <button
+          onClick={() => setShowMasOpciones(s => !s)}
+          aria-expanded={showMasOpciones}
+          style={{
+            width: '100%',
+            padding: '14px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: showMasOpciones ? 'var(--bg-inset)' : 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            fontFamily: 'var(--font-ui)',
+            fontWeight: 600,
+            fontSize: 'var(--text-sm)',
+            color: 'var(--text-primary)',
+            transition: 'background-color 0.15s ease',
+          }}
+        >
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <Settings size={15} /> Más opciones y detalles técnicos (Ubicación, Clima, Descarga, Gestión)
+          </span>
+          {showMasOpciones ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+        </button>
 
-              <ActionButton
-                icon={<MapPin size={15} />}
-                onClick={() => navigate(`/dashboard?punto=${medicion.bloque_id}`)}
-              >
-                Ver punto en dashboard
-              </ActionButton>
-
-              {/* Eliminar: solo admins */}
-              {isAdmin && (
-                <>
-                  <ActionButton
-                    icon={<Trash2 size={15} />}
-                    danger
-                    onClick={() => setShowDeleteConfirm(true)}
-                    disabled={eliminando}
-                  >
-                    Eliminar medición
-                  </ActionButton>
-
-                  {showDeleteConfirm && (
-                    <div style={{
-                      padding: '12px 14px',
-                      background: 'rgba(220,38,38,0.08)',
-                      border: '1px solid rgba(220,38,38,0.3)',
-                      borderRadius: 8, fontSize: 'var(--text-xs)',
-                      color: 'var(--text-secondary)', lineHeight: 1.5,
-                    }}>
-                      Esta acción borra la medición y su foto de forma permanente. ¿Confirmás?
-                      {errorEliminar && (
-                        <div style={{ color: 'var(--accent-red)', marginTop: 6 }}>{errorEliminar}</div>
-                      )}
-                      <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
-                        <button
-                          onClick={handleEliminar}
-                          disabled={eliminando}
-                          style={{
-                            background: 'var(--accent-red)', border: 'none', borderRadius: 5,
-                            padding: '6px 12px', cursor: eliminando ? 'not-allowed' : 'pointer',
-                            fontSize: 'var(--text-2xs)', color: 'white', fontWeight: 600, opacity: eliminando ? 0.6 : 1,
-                          }}
-                        >
-                          {eliminando ? 'Eliminando…' : 'Sí, eliminar'}
-                        </button>
-                        <button
-                          onClick={() => { setShowDeleteConfirm(false); setErrorEliminar(''); }}
-                          disabled={eliminando}
-                          style={{
-                            background: 'transparent', border: '1px solid var(--border)', borderRadius: 5,
-                            padding: '6px 12px', cursor: 'pointer', fontSize: 'var(--text-2xs)', color: 'var(--text-muted)',
-                          }}
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                    </div>
+        {showMasOpciones && (
+          <div style={{
+            padding: '20px',
+            borderTop: '1px solid var(--border)',
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 1fr)',
+            gap: 20,
+          }}>
+            {/* Ubicación y mapa: la celda se estira al alto de la columna
+                derecha (clima + gestión) y el mapa llena ese alto. */}
+            <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+              <SectionTitle>Ubicación geográfica del espécimen</SectionTitle>
+              <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                <MiniMapa
+                  lat={lat}
+                  lng={lng}
+                  latReal={medicion.latitud_real}
+                  lngReal={medicion.longitud_real}
+                />
+              </div>
+              {tieneCoordenadas && (
+                <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', fontFamily: 'var(--font-data)', display: 'flex', gap: 'var(--space-3)', flexShrink: 0 }}>
+                  <span style={{ color: 'var(--accent-amber)' }}>● Punto: {lat?.toFixed(5)}, {lng?.toFixed(5)}</span>
+                  {medicion.latitud_real && medicion.longitud_real && (
+                    <span style={{ color: '#38bdf8' }}>● Foto: {medicion.latitud_real.toFixed(5)}, {medicion.longitud_real.toFixed(5)}</span>
                   )}
-                </>
+                </div>
               )}
             </div>
-          </div>
-        </div>
 
-        {/* ── Columna derecha: metadata ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3-5)' }}>
+            {/* Condiciones meteorológicas + Gestión */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Clima Open-Meteo: solo con coordenadas válidas y algún dato */}
+              {tieneClima && (
+                <div>
+                  <SectionTitle>Condiciones meteorológicas (Open-Meteo)</SectionTitle>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)' }}>
+                    {clima.temperatura_c != null && <ClimaItem icon={<Thermometer size={13} />} label="Temperatura" value={`${clima.temperatura_c} °C`} />}
+                    {clima.humedad_pct != null && <ClimaItem icon={<Droplets size={13} />} label="Humedad" value={`${clima.humedad_pct} %`} />}
+                    {vientoKmh != null && <ClimaItem icon={<Wind size={13} />} label="Viento" value={`${vientoKmh} km/h`} />}
+                    {clima.precipitacion_mm != null && <ClimaItem icon={<Droplets size={13} />} label="Precipitación" value={`${clima.precipitacion_mm} mm`} />}
+                  </div>
+                </div>
+              )}
 
-          {/* Badge de nivel grande */}
-          <div style={{
-            background: bg, border: `1px solid ${color}40`,
-            borderRadius: 12, padding: '16px 20px',
-            borderTop: `3px solid ${color}`,
-          }}>
-            <div style={{
-              fontFamily: 'var(--font-data)', fontWeight: 700,
-              fontSize: 'var(--text-xl)', color, marginBottom: 'var(--space-1)',
-              animation: nivel === 3 ? 'blink 1.2s ease-in-out infinite' : 'none',
-            }}>
-              {nivelLabel(nivel)}
-            </div>
-            <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)', letterSpacing: '0.08em' }}>
-              NIVEL {nivel} / 3 · {nivelToStatus(nivel)}
-            </div>
-          </div>
+              {/* Referencia técnica ISO 10289: tarjetas estructuradas con barra de color */}
+              <div>
+                <SectionTitle>Escala de referencia (ISO 10289)</SectionTitle>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                  gap: 6,
+                }}>
+                  {NIVELES.map((n, i) => {
+                    const activo = i === nivel;
+                    const c = nivelColor(i);
+                    return (
+                      <div
+                        key={n.status}
+                        style={{
+                          padding: '8px 10px',
+                          background: activo ? nivelBg(i) : 'var(--bg-inset)',
+                          border: `1px solid ${activo ? `${c}60` : 'var(--border)'}`,
+                          borderRadius: 8,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 5,
+                        }}
+                      >
+                        <div style={{
+                          height: 4, borderRadius: 999,
+                          background: activo ? c : `${c}45`,
+                        }} />
+                        <div style={{
+                          fontFamily: 'var(--font-ui)', fontSize: 12,
+                          fontWeight: 700, color: activo ? c : 'var(--text-primary)',
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                        }}>
+                          {n.label}
+                        </div>
+                        <div style={{
+                          fontFamily: 'var(--font-data)', fontSize: 10,
+                          color: 'var(--text-muted)', lineHeight: 1.2,
+                        }}>
+                          {n.range}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
 
-          {/* Métricas */}
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px 20px' }}>
-            <SectionTitle>Resultados del análisis</SectionTitle>
+              {/* Acciones de gestión y navegación */}
+              <div>
+                <SectionTitle>Gestión del espécimen</SectionTitle>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                  <ActionButton icon={<Download size={15} />} onClick={handleDescargarVistaActual} disabled={!medicion.url_imagen || descargandoVista}>
+                    {descargandoVista ? 'Generando…' : `Descargar vista (${TABS.find(t => t.key === activeTab)?.label})`}
+                  </ActionButton>
+                  <ActionButton icon={<Share2 size={15} />} onClick={handleCompartir}>
+                    {shareMsg || 'Copiar enlace'}
+                  </ActionButton>
+                  <ActionButton
+                    icon={<MapPin size={15} />}
+                    onClick={() => navigate(`/dashboard?punto=${medicion.bloque_id}`)}
+                  >
+                    Ver punto en dashboard
+                  </ActionButton>
 
-            <div style={{ marginBottom: 'var(--space-3-5)' }}>
-              <MetaLabel>Área corroída</MetaLabel>
-              <BarraPorcentaje valor={medicion.area_corroida_pct ?? 0} color={color} />
-            </div>
+                  {/* Eliminar: solo admins */}
+                  {isAdmin && (
+                    <>
+                      <ActionButton
+                        icon={<Trash2 size={15} />}
+                        danger
+                        onClick={() => setShowDeleteConfirm(true)}
+                        disabled={eliminando}
+                      >
+                        Eliminar medición
+                      </ActionButton>
 
-            <div style={{ marginBottom: 'var(--space-3-5)' }}>
-              <MetaLabel>Confianza del modelo</MetaLabel>
-              <BarraPorcentaje
-                valor={medicion.confianza_promedio != null ? medicion.confianza_promedio * 100 : 0}
-                color="var(--accent-blue)"
-              />
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2-5)' }}>
-              <MetaItem label="Zona" value={zonaNombre} />
-              <MetaItem label="Punto" value={punto.sede ?? '—'} />
-              <MetaItem label="Ciudad" value={punto.ciudad ?? '—'} />
-            </div>
-          </div>
-
-          {/* Fecha y hora */}
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 20px' }}>
-            <SectionTitle>Fecha y hora</SectionTitle>
-            <div style={{ fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', marginBottom: 3 }}>
-              {formatFecha(medicion.timestamp, { conHora: true, conSegundos: true })}
-            </div>
-            <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
-              {tiempoRelativo(medicion.timestamp)}
-            </div>
-          </div>
-
-          {/* Clima */}
-          {medicion.clima && (
-            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 20px' }}>
-              <SectionTitle>Condiciones meteorológicas</SectionTitle>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)' }}>
-                <ClimaItem icon={<Thermometer size={13} />} label="Temperatura" value={medicion.clima.temperatura_c != null ? `${medicion.clima.temperatura_c} °C` : '—'} />
-                <ClimaItem icon={<Droplets size={13} />} label="Humedad" value={medicion.clima.humedad_pct != null ? `${medicion.clima.humedad_pct} %` : '—'} />
-                <ClimaItem icon={<Wind size={13} />} label="Viento" value={medicion.clima.viento_kmh != null ? `${medicion.clima.viento_kmh} km/h` : '—'} />
-                <ClimaItem icon={<Droplets size={13} />} label="Precipitación" value={medicion.clima.precipitacion_mm != null ? `${medicion.clima.precipitacion_mm} mm` : '—'} />
+                      {showDeleteConfirm && (
+                        <div style={{
+                          padding: '12px 14px',
+                          background: 'rgba(220,38,38,0.08)',
+                          border: '1px solid rgba(220,38,38,0.3)',
+                          borderRadius: 8, fontSize: 'var(--text-xs)',
+                          color: 'var(--text-secondary)', lineHeight: 1.5,
+                        }}>
+                          Esta acción borra la medición y su foto de forma permanente. ¿Confirmás?
+                          {errorEliminar && (
+                            <div style={{ color: 'var(--accent-red)', marginTop: 6 }}>{errorEliminar}</div>
+                          )}
+                          <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+                            <button
+                              onClick={handleEliminar}
+                              disabled={eliminando}
+                              style={{
+                                background: 'var(--accent-red)', border: 'none', borderRadius: 5,
+                                padding: '6px 12px', cursor: eliminando ? 'not-allowed' : 'pointer',
+                                fontSize: 'var(--text-2xs)', color: 'white', fontWeight: 600, opacity: eliminando ? 0.6 : 1,
+                              }}
+                            >
+                              {eliminando ? 'Eliminando…' : 'Sí, eliminar'}
+                            </button>
+                            <button
+                              onClick={() => { setShowDeleteConfirm(false); setErrorEliminar(''); }}
+                              disabled={eliminando}
+                              style={{
+                                background: 'transparent', border: '1px solid var(--border)', borderRadius: 5,
+                                padding: '6px 12px', cursor: 'pointer', fontSize: 'var(--text-2xs)', color: 'var(--text-muted)',
+                              }}
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       <style>{`

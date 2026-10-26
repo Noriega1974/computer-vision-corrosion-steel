@@ -5,9 +5,9 @@ import { useEmpresas } from '../hooks/useEmpresas';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
 import {
+  NIVELES,
   nivelColor,
-  nivelToStatus,
-  getStatusLabel
+  nivelLabel,
 } from '../lib/statusUtils';
 
 // Construye un mapa {id_bloque → nivel_corrosion_mas_reciente}. El "Punto"
@@ -41,8 +41,9 @@ const ZOOM_BASE = 6; // mismo zoom inicial del mapa -- ahí la escala es 1x
 const FACTOR_POR_NIVEL = 1.10;
 const MIN_ESCALA = 0.6;
 const MAX_ESCALA = 1.35;
-const TAMANO_BASE = 22;
-const TAMANO_BASE_SELECCIONADO = 28;
+// Diámetro base del punto (px) a zoom ZOOM_BASE.
+const TAMANO_BASE = 12;
+const TAMANO_BASE_SELECCIONADO = 16;
 
 function escalaParaZoom(zoom) {
   const cruda = Math.pow(FACTOR_POR_NIVEL, zoom - ZOOM_BASE);
@@ -83,6 +84,8 @@ export default function ColombiaMap({
   const mapInstanceRef = useRef(null);
   const markersRef = useRef([]);
   const zonasRef = useRef([]);
+  // El encuadre automático a todos los puntos se hace una sola vez.
+  const encuadreInicialRef = useRef(false);
 
   // Nivel de zoom actual -- se usa para recalcular el tamaño de los pines
   // "a tamaño fijo en el mundo" (ver escalaParaZoom más arriba).
@@ -96,8 +99,8 @@ export default function ColombiaMap({
     if (!L) return;
 
     const map = L.map(mapRef.current, {
-      center: [6.5, -74.5],
-      zoom: 6,
+      center: [10.9685, -74.7813], // Centrado de bienvenida en Barranquilla
+      zoom: 12,
       zoomControl: true,
       attributionControl: true,
       scrollWheelZoom: true,
@@ -114,6 +117,29 @@ export default function ColombiaMap({
     map.on('zoomend', () => setZoom(map.getZoom()));
 
     mapInstanceRef.current = map;
+
+    // Asegurar que Leaflet recalcule el tamaño del contenedor para evitar zonas grises
+    const invalidateTimer = setTimeout(() => {
+      map.invalidateSize();
+    }, 250);
+
+    let resizeObserver = null;
+    if (window.ResizeObserver && mapRef.current) {
+      resizeObserver = new ResizeObserver(() => {
+        map.invalidateSize();
+      });
+      resizeObserver.observe(mapRef.current);
+    }
+
+    return () => {
+      clearTimeout(invalidateTimer);
+      if (resizeObserver) resizeObserver.disconnect();
+      map.remove();
+      mapInstanceRef.current = null;
+      markersRef.current = [];
+      zonasRef.current = [];
+      encuadreInicialRef.current = false;
+    };
   }, []);
 
   // Actualizar marcadores
@@ -128,12 +154,15 @@ export default function ColombiaMap({
     if (puntos.length === 0) return;
 
     const nivelMap = buildNivelMap(mediciones);
+    const coordsValidas = [];
 
     puntos.forEach((punto, index) => {
       const lat = punto.coordenadas?.lat;
       const lng = punto.coordenadas?.lng;
 
       if (lat == null || lng == null) return;
+      if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) return;
+      coordsValidas.push([Number(lat), Number(lng)]);
 
       const nivel = nivelMap[punto.id_bloque] ?? -1;
 
@@ -147,29 +176,29 @@ export default function ColombiaMap({
 
       const isCritical = nivel === 3;
 
-      // Tamaño escalado por zoom (ver escalaParaZoom) en vez de fijo en
-      // pantalla -- el pin se ve más chico al alejar y más grande al
-      // acercar, como un objeto real sobre el mapa.
+      // Marcador tipo "punto" geoespacial limpio. El tamaño escala con el
+      // zoom (ver escalaParaZoom), acotado por MIN/MAX_ESCALA para que el
+      // punto nunca tape el mapa al acercar.
       const escala = escalaParaZoom(zoom);
-      const tamano = Math.round((isSelected ? TAMANO_BASE_SELECCIONADO : TAMANO_BASE) * escala);
-      const anilloInset = Math.max(1, Math.round((isSelected ? 2 : 3) * escala));
-      const svgSize = Math.round((isSelected ? 12 : 9) * escala);
-      const glow = Math.round((isSelected ? 13 : 8) * escala);
+      const dotSize = Math.round((isSelected ? TAMANO_BASE_SELECCIONADO : TAMANO_BASE) * escala);
+      const wrapperSize = dotSize * 2;
 
       const iconHtml = `
         <div style="
           position:relative;
-          width:${tamano}px;
-          height:${tamano}px;
+          width:${wrapperSize}px;
+          height:${wrapperSize}px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
           cursor:pointer;
         ">
-
           ${
             isCritical
               ? `
                 <div style="
                   position:absolute;
-                  inset:0;
+                  inset:2px;
                   border-radius:50%;
                   border:2px solid ${color};
                   animation:ping-ring 1.4s ease-out infinite;
@@ -177,52 +206,28 @@ export default function ColombiaMap({
               `
               : ''
           }
-
           <div style="
-            position:absolute;
-            inset:${anilloInset}px;
+            width:${dotSize}px;
+            height:${dotSize}px;
             border-radius:50%;
-            background:rgba(8,12,15,0.9);
-            border:2px solid ${color};
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            box-shadow:0 0 ${glow}px ${color}60;
-          ">
-
-            <svg
-              width="${svgSize}"
-              height="${svgSize}"
-              viewBox="0 0 24 24"
-              fill="none"
-            >
-              <path
-                d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"
-                fill="${color}"
-                opacity="0.9"
-              />
-
-              <circle
-                cx="12"
-                cy="9"
-                r="2.5"
-                fill="#080c0f"
-              />
-            </svg>
-          </div>
+            background:${color};
+            border:${isSelected ? 3 : 2}px solid #ffffff;
+            box-shadow:0 1px 4px rgba(0,0,0,0.4), 0 0 ${isSelected ? 10 : 4}px ${color}80;
+            transition:transform 0.15s ease;
+          "></div>
         </div>
       `;
 
       const icon = L.divIcon({
         html: iconHtml,
-        className: '',
-        iconSize: [tamano, tamano],
-        iconAnchor: [tamano / 2, tamano / 2],
+        className: 'leaflet-dot-marker',
+        iconSize: [wrapperSize, wrapperSize],
+        iconAnchor: [wrapperSize / 2, wrapperSize / 2],
       });
 
       const nivelStr =
         nivel >= 0
-          ? getStatusLabel(nivelToStatus(nivel))
+          ? nivelLabel(nivel)
           : 'Sin mediciones';
 
       const ciudad =
@@ -300,6 +305,20 @@ export default function ColombiaMap({
 
       markersRef.current.push(marker);
     });
+
+    // Primera carga: encuadrar todos los puntos existentes. Si no hay ninguno
+    // se queda la vista por defecto (Barranquilla). Si ya viene un punto
+    // seleccionado, el flyTo de abajo manda.
+    if (!encuadreInicialRef.current && coordsValidas.length > 0) {
+      encuadreInicialRef.current = true;
+      if (!selectedPunto) {
+        mapInstanceRef.current.fitBounds(coordsValidas, {
+          padding: [40, 40],
+          maxZoom: 13,
+          animate: false,
+        });
+      }
+    }
   }, [
     puntos,
     mediciones,
@@ -356,7 +375,7 @@ export default function ColombiaMap({
     );
   }, [selectedPunto]);
 
-  // Centrar el mapa en una afiliación elegida desde ZonasList -- encuadra
+  // Centrar el mapa en una afiliación elegida desde la lista de afiliaciones -- encuadra
   // TODAS sus zonas juntas (una empresa puede tener varias manchas).
   useEffect(() => {
     const L = window.L;
@@ -432,16 +451,12 @@ export default function ColombiaMap({
         <div
           style={{
             display: 'flex',
+            flexWrap: 'wrap',
             gap: 'var(--space-2)'
           }}
         >
 
-          {[
-  { color: '#16a34a', label: 'Sin corrosión' },
-  { color: '#d97706', label: 'Leve' },
-  { color: '#ea580c', label: 'Moderada' },
-  { color: '#dc2626', label: 'Severa' },
-].map(({ color, label }) => ( 
+          {NIVELES.map((_, n) => ({ color: nivelColor(n), label: nivelLabel(n) })).map(({ color, label }) => ( 
 
             <div
               key={label}

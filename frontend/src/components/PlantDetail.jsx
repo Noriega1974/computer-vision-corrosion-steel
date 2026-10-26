@@ -1,10 +1,11 @@
 import React from 'react';
 import { useMedicionesPunto } from '../hooks/useMedicionesPunto';
 import {
-  nivelColor, nivelBg, nivelLabel, nivelToStatus,
+  nivelColor, nivelBg, nivelLabel,
 } from '../lib/statusUtils';
 import { formatFecha } from '../utils/dateFormat';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { Thermometer, Droplets, CloudRain, Wind } from 'lucide-react';
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
@@ -21,6 +22,7 @@ const CustomTooltip = ({ active, payload, label }) => {
   );
 };
 
+// ─── Tarjeta Flashcard de Ubicación (Dashboard) ─────────────────────────────
 export default function PlantDetail({ punto }) {
   const { mediciones, loading, error } = useMedicionesPunto(punto?.id_bloque);
 
@@ -36,7 +38,7 @@ export default function PlantDetail({ punto }) {
           <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="#7a9ab5" strokeWidth="1.5"/>
           <circle cx="12" cy="9" r="2.5" stroke="#7a9ab5" strokeWidth="1.5"/>
         </svg>
-        <div style={{ fontSize: 'var(--text-2xs)', letterSpacing: '0.15em', textTransform: 'uppercase', textAlign: 'center', padding: '0 16px' }}>
+        <div style={{ fontSize: 'var(--text-xs)', letterSpacing: '0.02em', textTransform: 'uppercase', textAlign: 'center', padding: '0 16px', fontWeight: 500 }}>
           Selecciona un punto en el mapa
         </div>
       </div>
@@ -58,80 +60,106 @@ export default function PlantDetail({ punto }) {
       corrosion: parseFloat((m.area_corroida_pct ?? 0).toFixed(1)),
     }));
 
+  const clima = ultimaMedicion?.clima;
+  const stats = [
+    ...(clima ? [
+      { Icon: Thermometer, label: 'Temp.', v: clima.temperatura_c != null ? `${clima.temperatura_c}°C` : null },
+      { Icon: Droplets, label: 'Humedad', v: clima.humedad_pct != null ? `${clima.humedad_pct}%` : null },
+      { Icon: CloudRain, label: 'Precip.', v: clima.precipitacion_mm != null ? `${clima.precipitacion_mm} mm` : null },
+      { Icon: Wind, label: 'Viento', v: (clima.viento_kmh ?? clima.velocidad_viento_kmh) != null ? `${clima.viento_kmh ?? clima.velocidad_viento_kmh} km/h` : null },
+    ] : []),
+  ].filter(x => x.v);
+
   return (
     <div style={{
       background: 'var(--bg-card)', border: '1px solid var(--border)',
       height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden',
     }}>
-      {/* Header del punto */}
+      {/* Flashcard superior del punto: 1) Título + subtítulo, 2) Caja encuadrada
+          de clima en el centro, 3) Pie con total de mediciones y píldora de estado */}
       <div style={{
-        padding: '14px 16px', borderBottom: '1px solid var(--border)',
-        background: bg, flexShrink: 0,
+        padding: '10px 14px', borderBottom: '1px solid var(--border)',
+        background: bg, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8,
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        {/* 1. Título y subtítulo con pesos diferenciados */}
+        <div>
+          <div style={{
+            fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 17,
+            color: 'var(--text-primary)', letterSpacing: '-0.01em', lineHeight: 1.15,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>
+            {punto.nombre ?? 'Punto sin nombre'}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 400, marginTop: 2 }}>
+            {punto.ciudad ?? '—'}{punto.departamento ? ` · ${punto.departamento}` : ''}
+          </div>
+        </div>
+
+        {/* 2. Bloque central encuadrado: datos meteorológicos con iconos y textos grandes */}
+        {stats.length > 0 && (
+          <div style={{
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            borderRadius: 8, padding: '8px 10px',
+            display: 'grid',
+            gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))`,
+            gap: 6,
+          }}>
+            {stats.map(({ Icon, label, v }) => (
+              <div key={label} style={{ textAlign: 'center', minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                  <Icon size={16} strokeWidth={2} style={{ color: 'var(--accent-amber)', flexShrink: 0 }} />
+                  <span style={{
+                    fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 15,
+                    color: 'var(--text-primary)', lineHeight: 1.1,
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  }}>
+                    {v}
+                  </span>
+                </div>
+                <div style={{ fontSize: 10, fontWeight: 500, color: 'var(--text-muted)', marginTop: 2, whiteSpace: 'nowrap' }}>
+                  {label}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 3. Pie de la flashcard: métrica clave a la izquierda + píldora a la derecha */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <div>
             <div style={{
-              fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 16,
-              color, letterSpacing: '0.04em', lineHeight: 1,
+              fontFamily: 'var(--font-data)', fontWeight: 800, fontSize: 16,
+              color: 'var(--text-primary)', lineHeight: 1.1,
             }}>
-              {(punto.nombre ?? 'PUNTO SIN NOMBRE').toUpperCase()}
+              {mediciones.length} {mediciones.length === 1 ? 'medición' : 'mediciones'}
             </div>
-            <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)', marginTop: 'var(--space-1)', letterSpacing: '0.08em' }}>
-              {punto.ciudad} · {punto.departamento}
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+              {ultimaMedicion?.area_corroida_pct != null
+                ? `Última área: ${ultimaMedicion.area_corroida_pct.toFixed(1)}%`
+                : 'Sin lecturas registradas'}
             </div>
           </div>
+
           {nivel >= 0 && (
             <div style={{
-              padding: '4px 10px',
-              background: `${color}15`,
-              border: `1px solid ${color}50`,
-              fontSize: 'var(--text-3xs)', fontWeight: 700, color,
-              letterSpacing: '0.1em',
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '5px 12px', borderRadius: 999,
+              background: 'var(--bg-card)', border: `1px solid ${color}60`,
+              fontSize: 12, fontWeight: 700, color,
               animation: nivel === 3 ? 'blink 1.2s ease-in-out infinite' : 'none',
+              flexShrink: 0,
             }}>
-              {nivelLabel(nivel).toUpperCase()}
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: color }} />
+              {nivelLabel(nivel)}
             </div>
           )}
         </div>
-
-        {/* Meta info */}
-        <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-2)', flexWrap: 'wrap' }}>
-          {[
-            { l: 'Mediciones', v: mediciones.length },
-          ].map(({ l, v }) => (
-            <div key={l} style={{ textAlign: 'center', minWidth: 50 }}>
-              <div style={{ fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', lineHeight: 1 }}>{v}</div>
-              <div style={{ fontSize: 8, color: 'var(--text-muted)', letterSpacing: '0.1em', marginTop: 2 }}>{l.toUpperCase()}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Clima de la última medición */}
-        {ultimaMedicion?.clima && (
-          <div style={{ display: 'flex', gap: 'var(--space-3-5)', marginTop: 'var(--space-2-5)', flexWrap: 'wrap', paddingTop: 'var(--space-2)', borderTop: '1px solid var(--border)' }}>
-            {[
-              { icon: '🌡', label: 'Temp.', v: ultimaMedicion.clima.temperatura_c != null ? `${ultimaMedicion.clima.temperatura_c}°C` : null },
-              { icon: '💧', label: 'Humedad', v: ultimaMedicion.clima.humedad_pct != null ? `${ultimaMedicion.clima.humedad_pct}%` : null },
-              { icon: '🌧', label: 'Precip.', v: ultimaMedicion.clima.precipitacion_mm != null ? `${ultimaMedicion.clima.precipitacion_mm} mm` : null },
-              { icon: '💨', label: 'Viento', v: ultimaMedicion.clima.velocidad_viento_kmh != null ? `${ultimaMedicion.clima.velocidad_viento_kmh} km/h` : null },
-            ].filter(x => x.v).map(({ icon, label, v }) => (
-              <div key={label} style={{ textAlign: 'center', minWidth: 44 }}>
-                <div style={{ fontSize: 'var(--text-xs)', lineHeight: 1 }}>{icon}</div>
-                <div style={{ fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 'var(--text-2xs)', color: 'var(--text-primary)', marginTop: 2 }}>{v}</div>
-                <div style={{ fontSize: 8, color: 'var(--text-muted)', letterSpacing: '0.08em' }}>{label.toUpperCase()}</div>
-              </div>
-            ))}
-            <div style={{ alignSelf: 'flex-end', fontSize: 8, color: 'var(--text-faint)', letterSpacing: '0.08em', marginLeft: 'auto' }}>
-              ÚLTIMA MEDICIÓN
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Gráfica de tendencia */}
       {trendData.length > 1 && (
         <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-          <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)', letterSpacing: '0.12em', marginBottom: 'var(--space-2)' }}>
+          <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', letterSpacing: '0.04em', marginBottom: 'var(--space-2)', fontWeight: 600 }}>
             TENDENCIA — ÁREA CORROÍDA (%)
           </div>
           <ResponsiveContainer width="100%" height={70}>
@@ -153,7 +181,7 @@ export default function PlantDetail({ punto }) {
 
       {/* Historial de mediciones */}
       <div style={{ flex: 1, overflow: 'auto', padding: 'var(--space-2)' }}>
-        <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)', letterSpacing: '0.12em', padding: '4px 8px 8px' }}>
+        <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', letterSpacing: '0.04em', padding: '4px 8px 8px', fontWeight: 600 }}>
           HISTORIAL DE MEDICIONES
         </div>
 
@@ -183,7 +211,7 @@ export default function PlantDetail({ punto }) {
         <div
           style={{
             display: 'flex', flexDirection: 'column', gap: 'var(--space-1)',
-            maxHeight: 280, overflowY: 'auto', overscrollBehavior: 'contain',
+            flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain',
             paddingRight: 2,
           }}
         >

@@ -11,7 +11,10 @@ export function useMediciones(limit = 20) {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    // Solo mostramos el skeleton de carga si no tenemos datos en caché (stale-while-revalidate)
+    if (mediciones.length === 0) {
+      setLoading(true);
+    }
     setError(null);
     apiGet(`/mediciones/recientes?limit=${limit}`)
       .then(data => {

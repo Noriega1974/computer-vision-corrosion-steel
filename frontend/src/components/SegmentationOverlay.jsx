@@ -13,7 +13,7 @@ import React, { useEffect, useRef } from 'react';
  *       Solo expone nivel_corrosion, area_corroida_pct y confianza_promedio.
  *       Cuando el backend devuelva los polígonos, conectar aquí sin cambiar la interfaz.
  */
-export default function SegmentationOverlay({ imagenUrl, mascaras = [] }) {
+export default function SegmentationOverlay({ imagenUrl, mascaras = [], boxStyle, imgStyle }) {
   const canvasRef = useRef(null);
   const imgRef = useRef(null);
 
@@ -23,15 +23,27 @@ export default function SegmentationOverlay({ imagenUrl, mascaras = [] }) {
     if (!canvas || !img || mascaras.length === 0) return;
 
     const draw = () => {
-      canvas.width = img.clientWidth;
-      canvas.height = img.clientHeight;
+      if (!img.naturalWidth) return;
+      // Con object-fit: contain la imagen visible no ocupa toda la caja: se
+      // calcula el rectángulo real (con franjas a los lados o arriba/abajo)
+      // para que los polígonos [0, 1] caigan sobre la imagen y no sobre la caja.
+      const boxW = img.clientWidth;
+      const boxH = img.clientHeight;
+      const escala = Math.min(boxW / img.naturalWidth, boxH / img.naturalHeight);
+      const w = img.naturalWidth * escala;
+      const h = img.naturalHeight * escala;
+      const offX = (boxW - w) / 2;
+      const offY = (boxH - h) / 2;
+
+      canvas.width = boxW;
+      canvas.height = boxH;
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       mascaras.forEach(({ puntos = [], color = '#dc2626', opacidad = 0.45 }) => {
         if (puntos.length < 3) return;
         ctx.beginPath();
-        ctx.moveTo(puntos[0].x * canvas.width, puntos[0].y * canvas.height);
-        puntos.slice(1).forEach(p => ctx.lineTo(p.x * canvas.width, p.y * canvas.height));
+        ctx.moveTo(offX + puntos[0].x * w, offY + puntos[0].y * h);
+        puntos.slice(1).forEach(p => ctx.lineTo(offX + p.x * w, offY + p.y * h));
         ctx.closePath();
         ctx.fillStyle = color + Math.round(opacidad * 255).toString(16).padStart(2, '0');
         ctx.fill();
@@ -42,19 +54,25 @@ export default function SegmentationOverlay({ imagenUrl, mascaras = [] }) {
     };
 
     if (img.complete && img.naturalWidth > 0) draw();
-    else img.addEventListener('load', draw);
-    return () => img.removeEventListener('load', draw);
+    img.addEventListener('load', draw);
+    // La caja es responsive: se redibuja cuando cambia su tamaño.
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(draw) : null;
+    ro?.observe(img);
+    return () => {
+      img.removeEventListener('load', draw);
+      ro?.disconnect();
+    };
   }, [mascaras]);
 
   if (!imagenUrl) return null;
 
   return (
-    <div style={{ position: 'relative', width: '100%', display: 'inline-block' }}>
+    <div style={boxStyle ?? { position: 'relative', width: '100%' }}>
       <img
         ref={imgRef}
         src={imagenUrl}
         alt="Segmentación"
-        style={{ width: '100%', display: 'block', borderRadius: 8 }}
+        style={imgStyle ?? { width: '100%', display: 'block', borderRadius: 8 }}
       />
       <canvas
         ref={canvasRef}

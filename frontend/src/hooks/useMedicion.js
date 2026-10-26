@@ -10,7 +10,7 @@ import { useMediciones } from './useMediciones';
 export function useMedicion(idMedicion) {
   const { mediciones, loading, error } = useMediciones(100);
 
-  if (loading) {
+  if (loading && (!mediciones || mediciones.length === 0)) {
     return { medicion: null, loading: true, error: null };
   }
 

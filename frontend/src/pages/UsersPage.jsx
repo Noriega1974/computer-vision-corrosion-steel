@@ -165,6 +165,7 @@ function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error, rolesPermi
     rol: initial.rol ?? initial.role ?? opcionesRol[0]?.value ?? 'cliente',
     empresa_id: initial.empresa_id ?? '',
   });
+  const [showOptional, setShowOptional] = useState(() => Boolean(initial.nombre || initial.name));
   const [validationError, setValidationError] = useState(null);
 
   const mostrarEmpresa = requiereEmpresa && form.rol !== 'super_admin';
@@ -197,14 +198,45 @@ function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error, rolesPermi
           disabled={isEdit} style={{ ...inputStyle, opacity: isEdit ? 0.6 : 1, cursor: isEdit ? 'not-allowed' : 'text' }}
         />
       </div>
+      {/* ── Información opcional colapsable ── */}
       <div style={{ marginBottom: 'var(--space-3-5)' }}>
-        <label htmlFor="usuario-nombre" style={labelStyle}>
-          Nombre completo
-        </label>
-        <input
-          id="usuario-nombre" name="name" autoComplete="name"
-          value={form.nombre} onChange={set('nombre')} style={inputStyle}
-        />
+        <button
+          type="button"
+          onClick={() => setShowOptional(v => !v)}
+          aria-expanded={showOptional}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            width: '100%', padding: '9px 12px', borderRadius: 8,
+            background: 'var(--bg-inset)', border: '1px solid var(--border)',
+            color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)',
+            fontSize: 'var(--text-xs)', fontWeight: 600, cursor: 'pointer',
+            textAlign: 'left',
+          }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <ChevronDown size={14} style={{ transform: showOptional ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+            <span>Información adicional (opcional)</span>
+          </span>
+          <span style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)' }}>
+            {showOptional ? 'Ocultar' : 'Nombre completo'}
+          </span>
+        </button>
+
+        {showOptional && (
+          <div style={{
+            marginTop: 8, padding: '12px 14px', borderRadius: 8,
+            background: 'var(--bg-page)', border: '1px solid var(--border)',
+          }}>
+            <label htmlFor="usuario-nombre" style={labelStyle}>
+              Nombre completo (opcional)
+            </label>
+            <input
+              id="usuario-nombre" name="name" autoComplete="name"
+              placeholder="ej: Juan Pérez"
+              value={form.nombre} onChange={set('nombre')} style={inputStyle}
+            />
+          </div>
+        )}
       </div>
       <div style={{ marginBottom: 'var(--space-3-5)' }}>
         <label htmlFor="usuario-rol" style={labelStyle}>

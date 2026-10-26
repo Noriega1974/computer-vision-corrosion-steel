@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiGet, apiPost, apiPut, apiDelete } from '../lib/apiClient';
 import { useRefreshKey } from './RefreshKeyContext';
 
@@ -20,6 +20,7 @@ export function useBloques(enabled = true, empresaId) {
   const [bloques, setBloques] = useState([]);
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState(null);
+  const prevEmpresaRef = useRef(empresaId);
 
   useEffect(() => {
     if (!enabled) {
@@ -27,7 +28,13 @@ export function useBloques(enabled = true, empresaId) {
       return;
     }
     let cancelled = false;
-    setLoading(true);
+    // Stale-while-revalidate only for the same scope: a new empresa must not show the previous one's points.
+    const scopeChanged = prevEmpresaRef.current !== empresaId;
+    prevEmpresaRef.current = empresaId;
+    if (scopeChanged) setBloques([]);
+    if (scopeChanged || bloques.length === 0) {
+      setLoading(true);
+    }
     setError(null);
     const query = empresaId ? `?empresa_id=${encodeURIComponent(empresaId)}` : '';
     apiGet(`/bloques${query}`)

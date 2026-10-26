@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { Upload, AlertCircle } from 'lucide-react';
+import { Upload, AlertCircle, Search, Plus, X, ChevronDown, Check } from 'lucide-react';
 import { useMediciones } from '../hooks/useMediciones';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useAuth } from '../auth/AuthContext';
-import { nivelColor, nivelLabel, nivelToStatus } from '../lib/statusUtils';
+import { NIVELES, nivelColor, nivelLabel } from '../lib/statusUtils';
 import { formatFecha } from '../utils/dateFormat';
 
 // ─── Helper: tiempo relativo ─────────────────────────────────────────────────
@@ -21,45 +21,57 @@ function tiempoRelativo(timestamp) {
   return formatFecha(timestamp);
 }
 
-// ─── Card de galería ─────────────────────────────────────────────────────────
+// ─── Card de galería (patrón Flashcard) ──────────────────────────────────────
 function MedicionCard({ medicion, to, state }) {
   const nivel = medicion.nivel_corrosion ?? 0;
   const color = nivelColor(nivel);
-  // sede/ciudad ya no viajan denormalizadas en la medición -- el nombre del
-  // punto (bloque) sí, resuelto y congelado al momento de subir la medición.
   const nombrePunto = medicion.bloque_nombre ?? 'Sin punto asignado';
+  const pct = (medicion.area_corroida_pct ?? 0).toFixed(1);
 
   return (
-    // Link y no <div onClick>: esto navega a la ficha de la medicion, asi que
-    // corresponde un ancla real. Ademas de ser accesible por teclado, habilita
-    // Cmd/Ctrl+click y click del medio para abrir en otra pestaña, que en un
-    // listado de mediciones se usa todo el tiempo.
     <Link
       to={to}
       state={state}
       className="medicion-card"
       style={{
-        display: 'block',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+        padding: 14,
         textDecoration: 'none',
         color: 'inherit',
         background: 'var(--bg-card)',
         border: '1px solid var(--border)',
-        borderRadius: 10,
+        borderRadius: 14,
         overflow: 'hidden',
         boxShadow: 'var(--shadow-sm)',
       }}
     >
-      {/* Imagen o placeholder */}
+      {/* 1. Cabecera: Título en negrita + subtítulo suave */}
+      <div>
+        <div style={{
+          fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 15,
+          color: 'var(--text-primary)', lineHeight: 1.2,
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>
+          {nombrePunto}
+        </div>
+        <div style={{
+          fontSize: 12, color: 'var(--text-muted)', marginTop: 2,
+          fontFamily: 'var(--font-ui)',
+        }}>
+          {tiempoRelativo(medicion.timestamp)}
+        </div>
+      </div>
+
+      {/* 2. Imagen encuadrada con bordes redondeados */}
       <div style={{
-        height: 170, background: 'var(--bg-inset)',
+        height: 164, background: 'var(--bg-inset)',
+        borderRadius: 10, border: '1px solid var(--border)',
         position: 'relative', overflow: 'hidden',
       }}>
         {medicion.url_imagen ? (
           <img
-            // Miniatura (~400px, unos 40KB) en vez de la foto original
-            // (hasta 4032x3024, 2-4MB) -- acá solo se muestra en un
-            // cuadrito de 170px. `url_thumbnail` cae a `url_imagen` para
-            // mediciones de antes de que existiera la miniatura.
             src={medicion.url_thumbnail || medicion.url_imagen}
             alt="Medición"
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
@@ -78,24 +90,11 @@ function MedicionCard({ medicion, to, state }) {
           </div>
         )}
 
-        {/* Badge de nivel */}
-        <div style={{
-          position: 'absolute', top: 8, right: 8,
-          padding: '3px 8px', borderRadius: 20,
-          background: `${color}ee`,
-          fontFamily: 'var(--font-data)', fontWeight: 700,
-          fontSize: 'var(--text-3xs)', color: 'white',
-          letterSpacing: '0.06em',
-          boxShadow: `0 2px 8px ${color}50`,
-        }}>
-          {nivelLabel(nivel).toUpperCase()}
-        </div>
-
-        {/* Barra de área corroída en la parte inferior */}
+        {/* Barra de progreso al pie de la imagen */}
         {medicion.area_corroida_pct != null && (
           <div style={{
-            position: 'absolute', bottom: 0, left: 0, right: 0, height: 3,
-            background: 'rgba(0,0,0,0.3)',
+            position: 'absolute', bottom: 0, left: 0, right: 0, height: 4,
+            background: 'rgba(0,0,0,0.35)',
           }}>
             <div style={{
               height: '100%',
@@ -109,33 +108,35 @@ function MedicionCard({ medicion, to, state }) {
         )}
       </div>
 
-      {/* Metadata */}
-      <div style={{ padding: '12px 14px' }}>
-        <div style={{
-          fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)',
-          color: 'var(--text-primary)', marginBottom: 'var(--space-2)',
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        }}>
-          {nombrePunto}
+      {/* 3. Pie: métrica grande + estado a la izquierda, botón píldora CTA a la derecha */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        gap: 10, marginTop: 2,
+      }}>
+        <div>
+          <div style={{
+            fontFamily: 'var(--font-data)', fontWeight: 800, fontSize: 18,
+            color: 'var(--text-primary)', lineHeight: 1.05, letterSpacing: '-0.02em',
+          }}>
+            {pct}%
+          </div>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 5, marginTop: 3,
+            fontSize: 11, color: 'var(--text-muted)', fontWeight: 500,
+          }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
+            <span>{nivelLabel(nivel)}</span>
+          </div>
         </div>
 
-        <div style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        <span style={{
+          padding: '7px 14px', borderRadius: 999,
+          background: 'var(--text-primary)', color: 'var(--bg-card-solid)',
+          fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 12,
+          lineHeight: 1, flexShrink: 0,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <div style={{
-              width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0,
-            }} />
-            <span style={{
-              fontFamily: 'var(--font-data)', fontSize: 'var(--text-2xs)', color,
-            }}>
-              {(medicion.area_corroida_pct ?? 0).toFixed(1)}%
-            </span>
-          </div>
-          <span style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', fontFamily: 'var(--font-data)' }}>
-            {tiempoRelativo(medicion.timestamp)}
-          </span>
-        </div>
+          Ver detalle
+        </span>
       </div>
     </Link>
   );
@@ -160,13 +161,73 @@ export default function GaleriaPage() {
   const { empresas } = useEmpresas(esSuperAdmin);
 
   // ─── Filtros ──────────────────────────────────────────────────────────────
-  const [nivelFilter, setNivelFilter] = useState('all');
-  const [bloqueFilter, setBloqueFilter] = useState('');
-  const [empresaFilter, setEmpresaFilter] = useState('');
-  const [fechaInicio, setFechaInicio] = useState('');
-  const [fechaFin, setFechaFin] = useState('');
-  const [notasQuery, setNotasQuery] = useState('');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
+  // Al volver desde la ficha de una medición, los filtros llegan por el state
+  // de navegación (ver handleBack en MedicionDetailPage). Se leen una sola vez.
+  const [restored] = useState(() => location.state ?? {});
+  const [nivelFilter, setNivelFilter] = useState(restored.nivelFilter ?? 'all');
+  const [bloqueFilter, setBloqueFilter] = useState(restored.bloqueFilter ?? '');
+  const [empresaFilter, setEmpresaFilter] = useState(esSuperAdmin ? (restored.empresaFilter ?? '') : '');
+  const [fechaInicio, setFechaInicio] = useState(restored.fechaInicio ?? '');
+  const [fechaFin, setFechaFin] = useState(restored.fechaFin ?? '');
+  const [notasQuery, setNotasQuery] = useState(restored.notasQuery ?? '');
+  const [debouncedQuery, setDebouncedQuery] = useState(restored.notasQuery ?? '');
+
+  // Filtros activos visibles como pestañas dinámicas a la izquierda. Los
+  // filtros restaurados deben tener su pill para poder verlos y quitarlos.
+  const [activeFilters, setActiveFilters] = useState(() => {
+    // Por defecto no hay ningún filtro preseleccionado; solo se restaura la
+    // pill de nivel si se volvió con un nivel concreto elegido.
+    const set = new Set();
+    if (restored.nivelFilter && restored.nivelFilter !== 'all') set.add('nivel');
+    if (restored.bloqueFilter) set.add('punto');
+    if (esSuperAdmin && restored.empresaFilter) set.add('empresa');
+    if (restored.fechaInicio || restored.fechaFin) set.add('fechas');
+    return set;
+  });
+  const [showAddMenu, setShowAddMenu] = useState(false);
+  const addMenuRef = useRef(null);
+  const addMenuButtonRef = useRef(null);
+
+  // Cierra el menú con clic fuera o Esc (Esc devuelve el foco al botón).
+  useEffect(() => {
+    if (!showAddMenu) return;
+    function handleClickOutside(e) {
+      if (addMenuRef.current && !addMenuRef.current.contains(e.target)) {
+        setShowAddMenu(false);
+      }
+    }
+    function handleKeyDown(e) {
+      if (e.key === 'Escape') {
+        setShowAddMenu(false);
+        addMenuButtonRef.current?.focus();
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showAddMenu]);
+
+  // Desde el menú solo se agregan filtros; quitarlos es con la X de su pill.
+  const addFilter = (key) => {
+    setActiveFilters(prev => (prev.has(key) ? prev : new Set(prev).add(key)));
+    setShowAddMenu(false);
+    addMenuButtonRef.current?.focus();
+  };
+
+  const removeFilter = (key) => {
+    setActiveFilters(prev => {
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+    if (key === 'nivel') setNivelFilter('all');
+    if (key === 'punto') setBloqueFilter('');
+    if (key === 'empresa') setEmpresaFilter('');
+    if (key === 'fechas') { setFechaInicio(''); setFechaFin(''); }
+  };
 
   // Debounce de la búsqueda por notas
   useEffect(() => {
@@ -260,120 +321,304 @@ export default function GaleriaPage() {
         </button>
       </div>
 
-      {/* ── Filtros ── */}
+      {/* ── Barra de búsqueda y filtros ── */}
       <div style={{
         background: 'var(--bg-card)', border: '1px solid var(--border)',
-        borderRadius: 10, padding: '14px 16px', marginBottom: 20,
-        display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', alignItems: 'flex-end',
+        borderRadius: 10, padding: '12px 16px', marginBottom: 20,
+        display: 'flex', flexDirection: 'column', gap: 10,
       }}>
-        {/* Chips de nivel */}
-        <div>
-          <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', marginBottom: 5, fontFamily: 'var(--font-data)', letterSpacing: '0.1em' }}>NIVEL</div>
-          <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
-            {[
-              { key: 'all', label: 'Todos', color: 'var(--text-muted)' },
-              { key: '0', label: 'Sin corrosión', color: '#16a34a' },
-              { key: '1', label: 'Leve', color: '#d97706' },
-              { key: '2', label: 'Moderada', color: '#ea580c' },
-              { key: '3', label: 'Severa', color: '#dc2626' },
-            ].map(({ key, label, color }) => (
+        {/* Fila principal: Buscador compacto a la izquierda + Filtros dinámicos a la derecha */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'flex-start',
+          flexWrap: 'wrap', gap: 12,
+        }}>
+          {/* Lado izquierdo: Buscador compacto con icono de lupa */}
+          <div style={{ position: 'relative', minWidth: 200, maxWidth: 280, flex: '0 1 280px' }}>
+            <Search
+              size={13}
+              style={{
+                position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+                color: 'var(--text-faint)', pointerEvents: 'none',
+              }}
+            />
+            <input
+              id="filtro-notas"
+              name="buscar-notas"
+              type="search"
+              spellCheck={false}
+              placeholder="Buscar en notas…"
+              value={notasQuery}
+              onChange={e => setNotasQuery(e.target.value)}
+              style={{
+                width: '100%', height: 32, boxSizing: 'border-box',
+                padding: '0 26px 0 28px', background: 'var(--bg-card-solid)',
+                border: '1px solid var(--border-strong)', borderRadius: 7,
+                fontSize: 'var(--text-xs)', color: 'var(--text-primary)',
+                fontFamily: 'var(--font-ui)', outline: 'none',
+              }}
+            />
+            {notasQuery && (
               <button
-                key={key}
-                onClick={() => setNivelFilter(key)}
+                type="button"
+                onClick={() => setNotasQuery('')}
                 style={{
-                  padding: '4px 10px', borderRadius: 20,
-                  border: `1px solid ${nivelFilter === key ? color : 'var(--border)'}`,
-                  background: nivelFilter === key ? `${color}18` : 'transparent',
-                  color: nivelFilter === key ? color : 'var(--text-muted)',
-                  fontFamily: 'var(--font-ui)', fontSize: 'var(--text-2xs)', cursor: 'pointer',
-                  // Explicito y no `all`: solo cambian estas tres al filtrar.
-                  transition: 'color 0.12s, background-color 0.12s, border-color 0.12s',
+                  position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                  display: 'flex', color: 'var(--text-faint)',
+                }}
+                title="Borrar búsqueda"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+          {/* A la derecha del buscador: Botón desplegable [+ Agregar filtro] + Filtros activos */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flex: '1 1 320px' }}>
+            {/* Menú desplegable para agregar filtros */}
+            <div style={{ position: 'relative' }} ref={addMenuRef}>
+              <button
+                type="button"
+                ref={addMenuButtonRef}
+                onClick={() => setShowAddMenu(v => !v)}
+                aria-haspopup="menu"
+                aria-expanded={showAddMenu}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '7px 12px', borderRadius: 7,
+                  background: 'var(--bg-inset)', border: '1px solid var(--border-strong)',
+                  color: 'var(--text-primary)', fontFamily: 'var(--font-ui)',
+                  fontSize: 'var(--text-xs)', fontWeight: 600, cursor: 'pointer',
+                  transition: 'background-color 0.15s, border-color 0.15s',
                 }}
               >
-                {label}
+                <Plus size={13} style={{ color: 'var(--accent-amber)' }} />
+                <span>Agregar filtro</span>
+                <ChevronDown size={13} style={{ color: 'var(--text-faint)', transform: showAddMenu ? 'rotate(180deg)' : 'none' }} />
               </button>
-            ))}
+
+              {showAddMenu && (
+                <div role="menu" aria-label="Agregar filtro" style={{
+                  position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 60,
+                  minWidth: 190, background: 'var(--bg-card-solid)', border: '1px solid var(--border-strong)',
+                  borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.22)', padding: '4px 0',
+                }}>
+                  {[
+                    { key: 'nivel', label: 'Nivel de corrosión' },
+                    ...(bloquesEnMediciones.length > 0 ? [{ key: 'punto', label: 'Punto de medición' }] : []),
+                    ...(esSuperAdmin ? [{ key: 'empresa', label: 'Afiliación' }] : []),
+                    { key: 'fechas', label: 'Rango de fechas' },
+                  ].map(opt => {
+                    const isAdded = activeFilters.has(opt.key);
+                    return (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        role="menuitem"
+                        onClick={() => addFilter(opt.key)}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          width: '100%', padding: '8px 12px', background: 'transparent',
+                          border: 'none', textAlign: 'left', cursor: 'pointer',
+                          fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)',
+                          color: isAdded ? 'var(--accent-amber)' : 'var(--text-primary)',
+                          fontWeight: isAdded ? 600 : 400,
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--nav-active-bg, rgba(193,70,11,0.08))'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                      >
+                        <span>{opt.label}</span>
+                        {isAdded && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 'var(--text-3xs)', color: 'var(--accent-amber)' }}>
+                            <Check size={11} aria-hidden="true" /> Activo
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Pestaña / pill activa de punto */}
+            {activeFilters.has('punto') && (
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '3px 8px 3px 10px', borderRadius: 20,
+                background: 'var(--bg-card-solid)', border: '1px solid var(--border-strong)',
+                fontSize: 'var(--text-2xs)', color: 'var(--text-primary)',
+              }}>
+                <span style={{ fontFamily: 'var(--font-data)', letterSpacing: '0.05em', color: 'var(--text-faint)' }}>PUNTO:</span>
+                <select
+                  value={bloqueFilter}
+                  onChange={e => setBloqueFilter(e.target.value)}
+                  style={{
+                    background: 'transparent', border: 'none', color: 'var(--text-primary)',
+                    fontFamily: 'var(--font-ui)', fontSize: 'var(--text-2xs)', cursor: 'pointer',
+                    outline: 'none', padding: '2px 4px', fontWeight: 500,
+                  }}
+                >
+                  <option value="">Todos los puntos</option>
+                  {bloqueFilter && !bloquesEnMediciones.some(b => b.id === bloqueFilter) && (
+                    <option value={bloqueFilter}>Punto seleccionado</option>
+                  )}
+                  {bloquesEnMediciones.map(b => (
+                    <option key={b.id} value={b.id}>{b.nombre}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => removeFilter('punto')}
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', color: 'var(--text-faint)' }}
+                  title="Quitar filtro de punto"
+                  aria-label="Quitar filtro de punto"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            )}
+
+            {/* Pestaña / pill activa de afiliación */}
+            {activeFilters.has('empresa') && esSuperAdmin && (
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '3px 8px 3px 10px', borderRadius: 20,
+                background: 'var(--bg-card-solid)', border: '1px solid var(--border-strong)',
+                fontSize: 'var(--text-2xs)', color: 'var(--text-primary)',
+              }}>
+                <span style={{ fontFamily: 'var(--font-data)', letterSpacing: '0.05em', color: 'var(--text-faint)' }}>AFILIACIÓN:</span>
+                <select
+                  value={empresaFilter}
+                  onChange={e => setEmpresaFilter(e.target.value)}
+                  style={{
+                    background: 'transparent', border: 'none', color: 'var(--text-primary)',
+                    fontFamily: 'var(--font-ui)', fontSize: 'var(--text-2xs)', cursor: 'pointer',
+                    outline: 'none', padding: '2px 4px', fontWeight: 500,
+                  }}
+                >
+                  <option value="">Todas las afiliaciones</option>
+                  {empresas.map(e => (
+                    <option key={e.id_empresa} value={e.id_empresa}>{e.nombre}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => removeFilter('empresa')}
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', color: 'var(--text-faint)' }}
+                  title="Quitar filtro de afiliación"
+                  aria-label="Quitar filtro de afiliación"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            )}
+
+            {/* Pestaña / pill activa de fechas */}
+            {activeFilters.has('fechas') && (
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '3px 8px 3px 10px', borderRadius: 20,
+                background: 'var(--bg-card-solid)', border: '1px solid var(--border-strong)',
+                fontSize: 'var(--text-2xs)', color: 'var(--text-primary)',
+              }}>
+                <span style={{ fontFamily: 'var(--font-data)', letterSpacing: '0.05em', color: 'var(--text-faint)' }}>DESDE:</span>
+                <input
+                  type="date"
+                  value={fechaInicio}
+                  onChange={e => setFechaInicio(e.target.value)}
+                  style={{
+                    background: 'transparent', border: 'none', color: 'var(--text-primary)',
+                    fontFamily: 'var(--font-ui)', fontSize: 'var(--text-2xs)', outline: 'none',
+                  }}
+                />
+                <span style={{ fontFamily: 'var(--font-data)', letterSpacing: '0.05em', color: 'var(--text-faint)' }}>HASTA:</span>
+                <input
+                  type="date"
+                  value={fechaFin}
+                  onChange={e => setFechaFin(e.target.value)}
+                  style={{
+                    background: 'transparent', border: 'none', color: 'var(--text-primary)',
+                    fontFamily: 'var(--font-ui)', fontSize: 'var(--text-2xs)', outline: 'none',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => removeFilter('fechas')}
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', color: 'var(--text-faint)' }}
+                  title="Quitar filtro de fecha"
+                  aria-label="Quitar filtro de fecha"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            )}
+
+            {/* Botón limpiar filtros */}
+            {(nivelFilter !== 'all' || bloqueFilter || empresaFilter || fechaInicio || fechaFin || notasQuery) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setNivelFilter('all'); setBloqueFilter(''); setEmpresaFilter('');
+                  setFechaInicio(''); setFechaFin(''); setNotasQuery('');
+                }}
+                style={{
+                  padding: '4px 9px', background: 'transparent',
+                  border: '1px dashed var(--border-strong)', borderRadius: 6,
+                  cursor: 'pointer', color: 'var(--text-muted)',
+                  fontFamily: 'var(--font-ui)', fontSize: 'var(--text-2xs)',
+                }}
+              >
+                Limpiar filtros
+              </button>
+            )}
           </div>
+
         </div>
 
-        {/* Dropdown de punto -- solo aparece si hay mediciones con punto
-            asignado. */}
-        {bloquesEnMediciones.length > 0 && (
-          <div>
-            <label htmlFor="filtro-bloque" style={FILTRO_LABEL_STYLE}>PUNTO</label>
-            <select
-              id="filtro-bloque"
-              name="filtro-bloque"
-              value={bloqueFilter}
-              onChange={e => setBloqueFilter(e.target.value)}
-              style={{ ...inputStyle, appearance: 'none', paddingRight: 'var(--space-5)' }}
-            >
-              <option value="">Todos los puntos</option>
-              {bloquesEnMediciones.map(b => (
-                <option key={b.id} value={b.id}>{b.nombre}</option>
+        {/* Fila secundaria: Chips de Nivel (cuando está activo) */}
+        {activeFilters.has('nivel') && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+            paddingTop: 8, borderTop: '1px solid var(--border)',
+          }}>
+            <span style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', fontFamily: 'var(--font-data)', letterSpacing: '0.1em' }}>
+              NIVEL:
+            </span>
+            <div style={{ display: 'flex', gap: 'var(--space-1)', flexWrap: 'wrap', alignItems: 'center' }}>
+              {[
+                { key: 'all', label: 'Todos', color: 'var(--text-muted)' },
+                ...NIVELES.map((_, n) => ({ key: String(n), label: nivelLabel(n), color: nivelColor(n) })),
+              ].map(({ key, label, color }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setNivelFilter(key)}
+                  style={{
+                    padding: '3px 9px', borderRadius: 20,
+                    border: `1px solid ${nivelFilter === key ? color : 'var(--border)'}`,
+                    background: nivelFilter === key ? `${color}18` : 'transparent',
+                    color: nivelFilter === key ? color : 'var(--text-muted)',
+                    fontFamily: 'var(--font-ui)', fontSize: 'var(--text-2xs)', cursor: 'pointer',
+                    fontWeight: nivelFilter === key ? 600 : 400,
+                    transition: 'color 0.12s, background-color 0.12s, border-color 0.12s',
+                  }}
+                >
+                  {label}
+                </button>
               ))}
-            </select>
+              <button
+                type="button"
+                onClick={() => removeFilter('nivel')}
+                style={{
+                  background: 'none', border: 'none', padding: '2px 4px', cursor: 'pointer',
+                  display: 'flex', color: 'var(--text-faint)', marginLeft: 4,
+                }}
+                title="Quitar filtro de nivel"
+                aria-label="Quitar filtro de nivel"
+              >
+                <X size={12} />
+              </button>
+            </div>
           </div>
-        )}
-
-        {/* Dropdown de afiliación -- exclusivo de super_admin, los demás
-            roles ya ven solo las mediciones de la suya (scopeado en el
-            backend), así que este filtro no les aportaría nada. */}
-        {esSuperAdmin && (
-          <div>
-            <label htmlFor="filtro-afiliacion" style={FILTRO_LABEL_STYLE}>AFILIACIÓN</label>
-            <select
-              id="filtro-afiliacion"
-              name="filtro-afiliacion"
-              value={empresaFilter}
-              onChange={e => setEmpresaFilter(e.target.value)}
-              style={{ ...inputStyle, appearance: 'none', paddingRight: 'var(--space-5)' }}
-            >
-              <option value="">Todas las afiliaciones</option>
-              {empresas.map(e => (
-                <option key={e.id_empresa} value={e.id_empresa}>{e.nombre}</option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {/* Rango de fechas */}
-        <div>
-          <label htmlFor="filtro-desde" style={FILTRO_LABEL_STYLE}>DESDE</label>
-          <input id="filtro-desde" name="fecha-desde" type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} style={inputStyle} />
-        </div>
-        <div>
-          <label htmlFor="filtro-hasta" style={FILTRO_LABEL_STYLE}>HASTA</label>
-          <input id="filtro-hasta" name="fecha-hasta" type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} style={inputStyle} />
-        </div>
-
-        {/* Búsqueda por notas */}
-        <div style={{ flex: 1, minWidth: 160 }}>
-          <label htmlFor="filtro-notas" style={FILTRO_LABEL_STYLE}>BUSCAR EN NOTAS</label>
-          <input
-            id="filtro-notas" name="buscar-notas"
-            type="search" spellCheck={false} placeholder="Buscar…"
-            value={notasQuery} onChange={e => setNotasQuery(e.target.value)}
-            style={{ ...inputStyle, width: '100%' }}
-          />
-        </div>
-
-        {/* Botón limpiar filtros */}
-        {(nivelFilter !== 'all' || bloqueFilter || empresaFilter || fechaInicio || fechaFin || notasQuery) && (
-          <button
-            onClick={() => {
-              setNivelFilter('all'); setBloqueFilter(''); setEmpresaFilter('');
-              setFechaInicio(''); setFechaFin(''); setNotasQuery('');
-            }}
-            style={{
-              padding: '7px 12px', background: 'transparent',
-              border: '1px solid var(--border)', borderRadius: 7,
-              cursor: 'pointer', color: 'var(--text-muted)',
-              fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)',
-            }}
-          >
-            Limpiar filtros
-          </button>
         )}
       </div>
 
@@ -428,7 +673,7 @@ export default function GaleriaPage() {
                 key={m.id_medicion}
                 medicion={m}
                 to={`/galeria/${m.id_medicion}`}
-                state={{ filters: { nivelFilter, bloqueFilter, fechaInicio, fechaFin, notasQuery } }}
+                state={{ filters: { nivelFilter, bloqueFilter, empresaFilter, fechaInicio, fechaFin, notasQuery } }}
               />
             ))}
           </div>
