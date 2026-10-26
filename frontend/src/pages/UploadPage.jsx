@@ -21,9 +21,6 @@ function ResultadoAnalisis({ result, tiempos, archivo, onReset, onDashboard }) {
   const color = nivelColor(nivel);
   const bloque = result.bloque_info ?? {};
   const areaPct = result.area_corroida_pct ?? 0;
-  const frase = nivel === 0
-    ? 'No se detectó corrosión.'
-    : `Se detectó corrosión en el ${formatoPct(areaPct)} % de la superficie analizada.`;
   const dev = modoDev();
 
   // Tiempo de análisis percibido: del clic en "Analizar imagen" hasta que la
@@ -60,6 +57,7 @@ function ResultadoAnalisis({ result, tiempos, archivo, onReset, onDashboard }) {
         boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: 18,
       }}>
         <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--text-muted)' }}>
+          <span aria-hidden="true">📍 </span>
           {bloque.nombre ?? '—'}{bloque.ciudad ? ` · ${bloque.ciudad}` : ''}
         </div>
 
@@ -70,19 +68,17 @@ function ResultadoAnalisis({ result, tiempos, archivo, onReset, onDashboard }) {
           <div style={{ fontSize: 44, lineHeight: 1, marginBottom: 'var(--space-2)' }} aria-hidden="true">
             {nivel === 0 ? '✅' : nivel === 1 ? '⚠️' : nivel === 2 ? '🔶' : '🚨'}
           </div>
-          <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 28, color, letterSpacing: '-0.01em' }}>
-            {nivelLabel(nivel)}
+          <div style={{ fontFamily: 'var(--font-ui)', fontSize: 20, color, letterSpacing: '-0.01em' }}>
+            Tipo de corrosión: <span style={{ fontWeight: 800, fontSize: 28 }}>{nivelLabel(nivel)}</span>
           </div>
-          <div style={{ fontFamily: 'var(--font-data)', fontWeight: 800, fontSize: 48, color, letterSpacing: '-0.02em', lineHeight: 1.1, marginTop: 6 }}>
+          {/* Fuente de interfaz con cifras tabulares: la monoespaciada dejaba
+              un hueco visible alrededor de la coma decimal. */}
+          <div style={{ fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 52, color, letterSpacing: '-0.02em', lineHeight: 1.1, marginTop: 10 }}>
             {formatoPct(areaPct)}%
           </div>
-          <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)', marginTop: 4, letterSpacing: '0.08em' }}>
-            DE LA SUPERFICIE CORROÍDA
+          <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', marginTop: 6, letterSpacing: '0.08em', fontWeight: 600 }}>
+            ÁREA CORROÍDA
           </div>
-        </div>
-
-        <div style={{ fontFamily: 'var(--font-ui)', fontSize: 16, color: 'var(--text-primary)', lineHeight: 1.45, textAlign: 'center' }}>
-          {frase}
         </div>
 
         {/* Imagen analizada */}
