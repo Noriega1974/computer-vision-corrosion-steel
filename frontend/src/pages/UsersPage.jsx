@@ -7,7 +7,7 @@ import { useGestionUsuarios } from '../hooks/useUsuarios';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
-import { Building2 } from 'lucide-react';
+import { Building2, CheckCircle2 } from 'lucide-react';
 import { formatFecha } from '../utils/dateFormat';
 
 // ─── RBAC multi-empresa ────────────────────────────────────────────────────
@@ -827,7 +827,9 @@ export default function UsersPage() {
       {colaboradorResult && (
         <Modal title="Colaborador creado" onClose={() => setColaboradorResult(null)}>
           <div style={{ textAlign: 'center', padding: '8px 0 16px' }}>
-            <div style={{ fontSize: 36, marginBottom: 'var(--space-3)' }}>✅</div>
+            <div style={{ display: 'flex', justifyContent: 'center', color: 'var(--accent-green)', marginBottom: 'var(--space-3)' }}>
+              <CheckCircle2 size={36} aria-hidden="true" />
+            </div>
             <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 16, color: 'var(--text-primary)', marginBottom: 6 }}>
               {colaboradorResult.nickname}
             </div>

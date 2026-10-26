@@ -5,7 +5,7 @@ import {
 } from '../lib/statusUtils';
 import { formatFecha } from '../utils/dateFormat';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Thermometer, Droplets, CloudRain, Wind } from 'lucide-react';
+import { Thermometer, Droplets, CloudRain, Wind, Camera } from 'lucide-react';
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
@@ -251,9 +251,9 @@ function MedicionRow({ medicion }) {
           width: 36, height: 36, borderRadius: 4, flexShrink: 0,
           background: `${color}15`, border: `1px solid ${color}30`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 16,
+          color,
         }}>
-          📷
+          <Camera size={16} aria-hidden="true" />
         </div>
       )}
 

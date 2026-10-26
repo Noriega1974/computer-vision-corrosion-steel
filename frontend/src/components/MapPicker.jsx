@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { MapPin } from 'lucide-react';
 
 // ─── Carga Leaflet vía CDN (mismo patrón que ColombiaMap.jsx / MedicionDetailPage.jsx) ──
 function useLeaflet() {
@@ -61,10 +62,15 @@ export default function MapPicker({ lat, lng, onChange }) {
         height: 220, borderRadius: 8, border: '1px solid var(--border)',
         overflow: 'hidden',
       }} />
-      <div style={{ marginTop: 6, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>
-        {lat && lng
-          ? `📍 ${lat}, ${lng} — Haz clic para mover`
-          : 'Haz clic en el mapa para marcar la ubicación'}
+      <div style={{ marginTop: 6, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)', display: 'flex', alignItems: 'center', gap: 6 }}>
+        {lat && lng ? (
+          <>
+            <MapPin size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
+            <span>{lat}, {lng} — Haz clic para mover</span>
+          </>
+        ) : (
+          'Haz clic en el mapa para marcar la ubicación'
+        )}
       </div>
     </div>
   );

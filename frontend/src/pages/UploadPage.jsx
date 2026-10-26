@@ -1,10 +1,12 @@
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { MapPin, Check, ImagePlus, Microscope } from 'lucide-react';
 import exifr from 'exifr';
 import { useBloques } from '../hooks/useBloques';
 import { useUploadMedicion } from '../hooks/useUploadMedicion';
 import { nivelColor, nivelBg, nivelLabel } from '../lib/statusUtils';
 import SearchableSelect from '../components/SearchableSelect';
+import NivelIcon from '../components/NivelIcon';
 
 // Tope de la foto: lo impone también S3 (política del POST prefirmado) y el
 // backend; este chequeo solo evita subir 50+ MB para recibir un rechazo.
@@ -36,17 +38,17 @@ function ResultadoAnalisis({ result, onReset, onDashboard }) {
             {result.nombre}
           </div>
         )}
-        <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--text-muted)', marginTop: result.nombre ? -10 : 0 }}>
-          <span aria-hidden="true">📍 </span>
-          {bloque.nombre ?? '—'}{bloque.ciudad ? ` · ${bloque.ciudad}` : ''}
+        <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--text-muted)', marginTop: result.nombre ? -10 : 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <MapPin size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
+          <span>{bloque.nombre ?? '—'}{bloque.ciudad ? ` · ${bloque.ciudad}` : ''}</span>
         </div>
 
         <div style={{
           background: nivelBg(nivel), border: `1px solid ${color}45`, borderRadius: 12,
           padding: '22px 18px', textAlign: 'center',
         }}>
-          <div style={{ fontSize: 44, lineHeight: 1, marginBottom: 'var(--space-2)' }} aria-hidden="true">
-            {nivel === 0 ? '✅' : nivel === 1 ? '⚠️' : nivel === 2 ? '🔶' : '🚨'}
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'var(--space-2)' }}>
+            <NivelIcon nivel={nivel} size={44} color={color} />
           </div>
           <div style={{ fontFamily: 'var(--font-ui)', fontSize: 20, color, letterSpacing: '-0.01em' }}>
             Tipo de corrosión: <span style={{ fontWeight: 800, fontSize: 28 }}>{nivelLabel(nivel)}</span>
@@ -276,7 +278,9 @@ export default function UploadPage() {
                   }
                 }}
               >
-                <div style={{ fontSize: 36, marginBottom: 'var(--space-2-5)' }} aria-hidden="true">📸</div>
+                <div style={{ display: 'flex', justifyContent: 'center', color: 'var(--text-muted)', marginBottom: 'var(--space-2-5)' }}>
+                  <ImagePlus size={36} aria-hidden="true" />
+                </div>
                 <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 'var(--space-1)' }}>
                   Arrastra una imagen aquí o haz clic para seleccionar
                 </div>
@@ -320,7 +324,7 @@ export default function UploadPage() {
                       border: '1px solid rgba(22,163,74,0.3)', borderRadius: 7,
                       fontSize: 'var(--text-2xs)', color: 'var(--accent-green)', display: 'flex', alignItems: 'center', gap: 6,
                     }}>
-                      <span>📍</span>
+                      <MapPin size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
                       <span>GPS detectado en la foto: {exifGps.latitude.toFixed(5)}, {exifGps.longitude.toFixed(5)}</span>
                     </div>
                   )}
@@ -346,8 +350,10 @@ export default function UploadPage() {
                 marginTop: 'var(--space-2-5)', padding: '10px 14px',
                 background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.3)',
                 borderRadius: 7, fontSize: 'var(--text-xs)', color: 'var(--accent-green)',
+                display: 'flex', alignItems: 'center', gap: 6,
               }}>
-                ✓ Punto seleccionado: <strong>{bloqueSeleccionado.nombre}</strong>{bloqueSeleccionado.ciudad ? ` — ${bloqueSeleccionado.ciudad}` : ''}
+                <Check size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
+                <span>Punto seleccionado: <strong>{bloqueSeleccionado.nombre}</strong>{bloqueSeleccionado.ciudad ? ` — ${bloqueSeleccionado.ciudad}` : ''}</span>
               </div>
             )}
             {bloques.length === 0 && (
@@ -456,7 +462,10 @@ export default function UploadPage() {
                 {fase === 'subiendo' ? 'Subiendo foto…' : 'Analizando con IA… (puede tomar 15-30s)'}
               </>
             ) : (
-              '🔬 Analizar imagen'
+              <>
+                <Microscope size={18} aria-hidden="true" />
+                Analizar imagen
+              </>
             )}
           </button>
         </form>
