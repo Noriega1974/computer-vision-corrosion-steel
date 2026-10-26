@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Factory, Globe, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
 
 // ─── Lista jerárquica de Zonas y Puntos en el Dashboard ───────────────────────
@@ -13,20 +13,24 @@ export default function PlantsTable({
   onSelectZona,
 }) {
   // Manejo de zonas desplegadas
-  const [openZonas, setOpenZonas] = useState(() => {
-    // Por defecto abrimos la primera empresa si existe
-    if (empresas && empresas.length > 0) {
-      return { [empresas[0].id_empresa]: true };
-    }
-    return {};
-  });
+  const [openZonas, setOpenZonas] = useState({});
+
+  // Las empresas llegan de forma asíncrona: al cargar por primera vez se abre
+  // la primera zona. Solo ocurre una vez, para no reabrirla si el usuario la
+  // cierra después.
+  const abrioPrimeraZona = useRef(false);
+  useEffect(() => {
+    if (abrioPrimeraZona.current || !empresas || empresas.length === 0) return;
+    abrioPrimeraZona.current = true;
+    setOpenZonas(prev => ({ ...prev, [empresas[0].id_empresa]: true }));
+  }, [empresas]);
 
   const toggleZona = (id) => {
     setOpenZonas(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
   const tieneEmpresas = empresas && empresas.length > 0;
-  
+
   // Agrupamos puntos por empresa_id
   const puntosPorEmpresa = {};
   const puntosSinZona = [];
@@ -104,13 +108,19 @@ export default function PlantsTable({
                   }}
                 >
                   {/* Cabecera de la Zona */}
-                  <div
+                  <button
+                    type="button"
+                    aria-expanded={isOpen}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
+                      width: '100%',
                       padding: '8px 10px',
                       background: isZonaSelected ? 'rgba(0,185,255,0.08)' : 'var(--bg-inset)',
+                      border: 'none',
+                      font: 'inherit',
+                      textAlign: 'left',
                       cursor: 'pointer',
                       userSelect: 'none',
                     }}
@@ -139,7 +149,7 @@ export default function PlantsTable({
                       </span>
                       {isOpen ? <ChevronUp size={14} color="var(--text-muted)" /> : <ChevronDown size={14} color="var(--text-muted)" />}
                     </div>
-                  </div>
+                  </button>
 
                   {/* Puntos dentro de la Zona */}
                   {isOpen && (
@@ -175,13 +185,19 @@ export default function PlantsTable({
                   background: 'var(--bg-page)',
                 }}
               >
-                <div
+                <button
+                  type="button"
+                  aria-expanded={!!openZonas['sin_zona']}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
+                    width: '100%',
                     padding: '8px 10px',
                     background: 'var(--bg-inset)',
+                    border: 'none',
+                    font: 'inherit',
+                    textAlign: 'left',
                     cursor: 'pointer',
                   }}
                   onClick={() => toggleZona('sin_zona')}
@@ -198,7 +214,7 @@ export default function PlantsTable({
                     </span>
                     {openZonas['sin_zona'] ? <ChevronUp size={14} color="var(--text-muted)" /> : <ChevronDown size={14} color="var(--text-muted)" />}
                   </div>
-                </div>
+                </button>
 
                 {openZonas['sin_zona'] && (
                   <div style={{ padding: '4px', display: 'flex', flexDirection: 'column', gap: 4, background: 'var(--bg-card)' }}>

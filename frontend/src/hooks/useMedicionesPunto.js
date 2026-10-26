@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiGet } from '../lib/apiClient';
 import { useRefreshKey } from './RefreshKeyContext';
 
@@ -8,15 +8,25 @@ export function useMedicionesPunto(idPunto) {
   const [mediciones, setMediciones] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const idPuntoPrevio = useRef(idPunto);
 
   useEffect(() => {
     if (!idPunto) {
+      idPuntoPrevio.current = idPunto;
       setMediciones([]);
       setLoading(false);
       return;
     }
     let cancelled = false;
-    if (mediciones.length === 0) {
+    // Si cambió el punto, la lista anterior pertenece a otro: se limpia para
+    // no mostrar mediciones ajenas mientras llegan las nuevas. En un refresco
+    // del mismo punto se conserva la lista para evitar parpadeo.
+    const cambioDePunto = idPuntoPrevio.current !== idPunto;
+    idPuntoPrevio.current = idPunto;
+    if (cambioDePunto) {
+      setMediciones([]);
+      setLoading(true);
+    } else if (mediciones.length === 0) {
       setLoading(true);
     }
     setError(null);
