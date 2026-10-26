@@ -3,32 +3,39 @@ import { useNavigate } from 'react-router-dom';
 import exifr from 'exifr';
 import { useBloques } from '../hooks/useBloques';
 import { useUploadMedicion } from '../hooks/useUploadMedicion';
-import { nivelColor, nivelLabel } from '../lib/statusUtils';
+import { nivelColor, nivelBg, nivelLabel } from '../lib/statusUtils';
 import SearchableSelect from '../components/SearchableSelect';
 import { registrarTiempo, borrarTiempos, leerTiempos, descargarTiemposCsv } from '../lib/tiemposAnalisis';
 
 // Tope de la foto: lo impone también S3 (política del POST prefirmado) y el
 // backend; este chequeo solo evita subir 50+ MB para recibir un rechazo.
 const MAX_FOTO_MB = 50;
-const formatoSegundos = s => s.toFixed(2).replace('.', ',');
 
 // ─── Componente: resultado del análisis ─────────────────────────────────────
+// Los controles del CSV de tiempos son solo para el equipo: aparecen con ?dev=1.
+const modoDev = () => new URLSearchParams(window.location.search).get('dev') === '1';
+const formatoPct = n => n.toFixed(1).replace('.', ',');
+
 function ResultadoAnalisis({ result, tiempos, archivo, onReset, onDashboard }) {
   const nivel = result.nivel_corrosion ?? 0;
   const color = nivelColor(nivel);
   const bloque = result.bloque_info ?? {};
+  const areaPct = result.area_corroida_pct ?? 0;
+  const frase = nivel === 0
+    ? 'No se detectó corrosión.'
+    : `Se detectó corrosión en el ${formatoPct(areaPct)} % de la superficie analizada.`;
+  const dev = modoDev();
 
   // Tiempo de análisis percibido: del clic en "Analizar imagen" hasta que la
   // imagen del resultado termina de cargar (si la respuesta no trae imagen,
-  // hasta que el resultado se muestra). Se mide una sola vez por resultado.
-  const [totalS, setTotalS] = useState(null);
+  // hasta que el resultado se muestra). Se mide una sola vez por resultado y
+  // se guarda en localStorage; el usuario no lo ve (solo el equipo con ?dev=1).
   const [nFilas, setNFilas] = useState(() => leerTiempos().length);
   const medido = useRef(false);
   const cerrarTiempo = useCallback(() => {
     if (medido.current) return;
     medido.current = true;
     const total = (performance.now() - tiempos.inicio) / 1000;
-    setTotalS(total);
     registrarTiempo({
       fecha_iso: new Date().toISOString(),
       archivo: archivo.name,
@@ -46,90 +53,66 @@ function ResultadoAnalisis({ result, tiempos, archivo, onReset, onDashboard }) {
 
   return (
     <div style={{ maxWidth: 560, margin: '0 auto', animation: 'fade-in-up 0.4s ease' }}>
-      {/* Banner de resultado */}
+      {/* Tarjeta única de resultado */}
       <div style={{
-        textAlign: 'center', padding: '28px 24px 20px',
-        background: `${color}10`, border: `1px solid ${color}40`,
-        borderRadius: 12, marginBottom: 20,
+        background: 'var(--bg-card)', border: '1px solid var(--border)',
+        borderRadius: 14, padding: '24px 22px', marginBottom: 20,
+        boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: 18,
       }}>
-        <div style={{ fontSize: 40, marginBottom: 'var(--space-2)' }}>
-          {nivel === 0 ? '✅' : nivel === 1 ? '⚠️' : nivel === 2 ? '🔶' : '🚨'}
+        <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--text-muted)' }}>
+          {bloque.nombre ?? '—'}{bloque.ciudad ? ` · ${bloque.ciudad}` : ''}
         </div>
-        <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 'var(--text-xl)', color, marginBottom: 'var(--space-1)' }}>
-          {nivelLabel(nivel)}
-        </div>
-        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-          Análisis completado — {bloque.nombre ?? '—'}{bloque.ciudad ? ` · ${bloque.ciudad}` : ''}
-        </div>
-      </div>
 
-      {/* Imagen analizada */}
-      {result.url_imagen && (
-        <img
-          src={result.url_imagen}
-          alt="Resultado"
-          onLoad={cerrarTiempo}
-          onError={cerrarTiempo}
-          style={{ width: '100%', borderRadius: 10, marginBottom: 'var(--space-4)', border: `2px solid ${color}40`, maxHeight: 280, objectFit: 'cover' }}
-        />
-      )}
-
-      {/* Métricas */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2-5)', marginBottom: 20 }}>
-        {[
-          { label: 'Área corroída', value: `${(result.area_corroida_pct ?? 0).toFixed(1)}%`, color },
-          { label: 'Nivel ISO 10289', value: `${nivel}/3`, color },
-        ].map(({ label, value, color: c }) => (
-          <div key={label} style={{
-            background: 'var(--bg-inset)', border: '1px solid var(--border)',
-            borderRadius: 8, padding: '12px 14px', textAlign: 'center',
-          }}>
-            <div style={{ fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 'var(--text-xl)', color: c }}>{value}</div>
-            <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)', marginTop: 3, letterSpacing: '0.06em' }}>{label.toUpperCase()}</div>
+        <div style={{
+          background: nivelBg(nivel), border: `1px solid ${color}45`, borderRadius: 12,
+          padding: '22px 18px', textAlign: 'center',
+        }}>
+          <div style={{ fontSize: 44, lineHeight: 1, marginBottom: 'var(--space-2)' }} aria-hidden="true">
+            {nivel === 0 ? '✅' : nivel === 1 ? '⚠️' : nivel === 2 ? '🔶' : '🚨'}
           </div>
-        ))}
-      </div>
-
-      {/* Info del punto */}
-      <div style={{ background: 'var(--bg-inset)', borderRadius: 8, padding: '12px 16px', marginBottom: 20, border: '1px solid var(--border)' }}>
-        <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)', marginBottom: 'var(--space-2)', letterSpacing: '0.08em' }}>PUNTO DE MEDICIÓN</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-          {[
-            ['Punto', bloque.nombre ?? '—'],
-            ['Ciudad', bloque.ciudad ?? '—'],
-          ].map(([l, v]) => (
-            <div key={l}>
-              <span style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)' }}>{l}: </span>
-              <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-primary)', fontWeight: 500 }}>{v}</span>
-            </div>
-          ))}
+          <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 28, color, letterSpacing: '-0.01em' }}>
+            {nivelLabel(nivel)}
+          </div>
+          <div style={{ fontFamily: 'var(--font-data)', fontWeight: 800, fontSize: 48, color, letterSpacing: '-0.02em', lineHeight: 1.1, marginTop: 6 }}>
+            {formatoPct(areaPct)}%
+          </div>
+          <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)', marginTop: 4, letterSpacing: '0.08em' }}>
+            DE LA SUPERFICIE CORROÍDA
+          </div>
         </div>
+
+        <div style={{ fontFamily: 'var(--font-ui)', fontSize: 16, color: 'var(--text-primary)', lineHeight: 1.45, textAlign: 'center' }}>
+          {frase}
+        </div>
+
+        {/* Imagen analizada */}
+        {result.url_imagen && (
+          <img
+            src={result.url_imagen}
+            alt="Resultado"
+            onLoad={cerrarTiempo}
+            onError={cerrarTiempo}
+            style={{ width: '100%', borderRadius: 10, border: `2px solid ${color}40`, maxHeight: 280, objectFit: 'cover' }}
+          />
+        )}
       </div>
 
-      {/* Tiempo de análisis (estudio de latencia) */}
-      {totalS !== null && (
+      {/* Solo con ?dev=1: CSV de tiempos para el estudio de latencia */}
+      {dev && (
         <div style={{ marginBottom: 20, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
-          <div style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
-            Tiempo de análisis: {formatoSegundos(totalS)} s
-          </div>
-          <div>
-            Subida {formatoSegundos(tiempos.subidaS)} s · Análisis {formatoSegundos(tiempos.analisisS)} s
-          </div>
-          <div style={{ marginTop: 4 }}>
-            <button type="button" onClick={descargarTiemposCsv} style={linkBtnStyle}>
-              Descargar tiempos (CSV)
-            </button>
-            {' · '}
-            <button
-              type="button"
-              onClick={() => { borrarTiempos(); setNFilas(0); }}
-              disabled={nFilas === 0}
-              style={{ ...linkBtnStyle, opacity: nFilas === 0 ? 0.5 : 1 }}
-            >
-              Borrar tiempos
-            </button>
-            {' '}({nFilas} guardados en este navegador)
-          </div>
+          <button type="button" onClick={descargarTiemposCsv} style={linkBtnStyle}>
+            Descargar tiempos (CSV)
+          </button>
+          {' · '}
+          <button
+            type="button"
+            onClick={() => { borrarTiempos(); setNFilas(0); }}
+            disabled={nFilas === 0}
+            style={{ ...linkBtnStyle, opacity: nFilas === 0 ? 0.5 : 1 }}
+          >
+            Borrar tiempos
+          </button>
+          {' '}({nFilas} guardados en este navegador)
         </div>
       )}
 

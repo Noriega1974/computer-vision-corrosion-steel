@@ -25,7 +25,13 @@ export function useUploadMedicion() {
       const finSubida = performance.now();
 
       setFase('analizando');
-      const res = await apiPost('/medicion', { ...body, imagen_key: post.imagen_key });
+      // tiempo_subida_s: el servidor lo guarda junto a su tiempo de proceso
+      // para mostrar el tiempo de análisis en el detalle de la medición.
+      const res = await apiPost('/medicion', {
+        ...body,
+        imagen_key: post.imagen_key,
+        tiempo_subida_s: Number(((finSubida - inicio) / 1000).toFixed(2)),
+      });
       const finAnalisis = performance.now();
 
       setTiempos({
