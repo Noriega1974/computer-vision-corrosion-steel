@@ -64,31 +64,29 @@ export default function PlantDetail({ punto }) {
       background: 'var(--bg-card)', border: '1px solid var(--border)',
       height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden',
     }}>
-      {/* Header del punto: nombre + nivel arriba y una sola franja de datos
-          (mediciones + clima de la última medición) en una grilla pareja, sin
-          bloques sueltos que dejen huecos a la derecha. */}
+      {/* Header del punto: compacto y con textos más legibles */}
       <div style={{
-        padding: '10px 14px', borderBottom: '1px solid var(--border)',
+        padding: '8px 12px', borderBottom: '1px solid var(--border)',
         background: bg, flexShrink: 0,
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <div style={{ minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{
               fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 16,
-              color, letterSpacing: '0.01em', lineHeight: 1.2,
+              color, letterSpacing: '0.01em', lineHeight: 1.15,
             }}>
               {(punto.nombre ?? 'PUNTO SIN NOMBRE').toUpperCase()}
-            </div>
-            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 2 }}>
+            </span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>
               {punto.ciudad} · {punto.departamento}
-            </div>
+            </span>
           </div>
           {nivel >= 0 && (
             <div style={{
-              padding: '4px 10px',
+              padding: '3px 9px',
               background: `${color}15`,
               border: `1px solid ${color}50`,
-              fontSize: 'var(--text-2xs)', fontWeight: 700, color,
+              fontSize: 11, fontWeight: 700, color,
               letterSpacing: '0.03em', borderRadius: 4,
               animation: nivel === 3 ? 'blink 1.2s ease-in-out infinite' : 'none',
               flexShrink: 0,
@@ -111,33 +109,29 @@ export default function PlantDetail({ punto }) {
             ] : []),
           ].filter(x => x.v);
           return (
-            <div style={{ marginTop: 'var(--space-2)', paddingTop: 'var(--space-2)', borderTop: '1px solid var(--border)' }}>
-              {clima && (
-                <div style={{ fontSize: 10, color: 'var(--text-faint)', letterSpacing: '0.04em', marginBottom: 6, textTransform: 'uppercase' }}>
-                  Clima de la última medición
-                </div>
-              )}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))`,
-                gap: 'var(--space-1)',
-              }}>
-                {stats.map(({ Icon, label, v }) => (
-                  <div key={label} style={{ textAlign: 'center', minWidth: 0 }}>
-                    <Icon size={20} strokeWidth={1.8} style={{ color: 'var(--accent-amber)', display: 'block', margin: '0 auto' }} />
-                    <div style={{
-                      fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 'var(--text-md)',
-                      color: 'var(--text-primary)', marginTop: 4, lineHeight: 1.1,
+            <div style={{
+              marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--border)',
+              display: 'grid',
+              gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))`,
+              gap: 'var(--space-1)',
+            }}>
+              {stats.map(({ Icon, label, v }) => (
+                <div key={label} style={{ textAlign: 'center', minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                    <Icon size={16} strokeWidth={2} style={{ color: 'var(--accent-amber)', flexShrink: 0 }} />
+                    <span style={{
+                      fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 15,
+                      color: 'var(--text-primary)', lineHeight: 1.1,
                       whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                     }}>
                       {v}
-                    </div>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.03em', marginTop: 2, whiteSpace: 'nowrap' }}>
-                      {label.toUpperCase()}
-                    </div>
+                    </span>
                   </div>
-                ))}
-              </div>
+                  <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', letterSpacing: '0.02em', marginTop: 2, whiteSpace: 'nowrap' }}>
+                    {label.toUpperCase()}
+                  </div>
+                </div>
+              ))}
             </div>
           );
         })()}

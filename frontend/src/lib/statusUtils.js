@@ -38,8 +38,7 @@ export function getStatusBg(status) {
 }
 
 export function getStatusLabel(status) {
-  const n = byStatus(status);
-  return n ? `${n.label} ${n.range}` : status;
+  return byStatus(status)?.label ?? status;
 }
 
 export function getStatusShortLabel(status) {

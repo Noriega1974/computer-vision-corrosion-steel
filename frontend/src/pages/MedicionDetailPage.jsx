@@ -127,57 +127,8 @@ const IMAGEN_FIT_STYLE = {
   objectFit: 'contain', display: 'block',
 };
 
-// ─── Área corroída: valor medido + banda ISO 10289 en un solo ítem ──────────
-// Reemplaza el texto suelto "ÁREA 0,05–<10 %" de la tarjeta de nivel y la
-// barra de área por separado: una barra con el porcentaje de la foto completa
-// y una barra segmentada con las cuatro bandas ISO, resaltando la del nivel.
-function AreaCorroidaItem({ valor, nivel }) {
-  const color = nivelColor(nivel);
-  return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--space-2)', marginBottom: 6 }}>
-        <MetaLabel>Área corroída (foto completa)</MetaLabel>
-        <span style={{ fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 'var(--text-lg)', color, lineHeight: 1 }}>
-          {(valor ?? 0).toFixed(1)}%
-        </span>
-      </div>
-      <BarraPorcentaje valor={valor ?? 0} color={color} mostrarValor={false} />
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-2)', marginTop: 'var(--space-2-5)', marginBottom: 4 }}>
-        <MetaLabel>Banda ISO 10289</MetaLabel>
-        <span style={{ fontFamily: 'var(--font-data)', fontSize: 'var(--text-2xs)', fontWeight: 600, color }}>
-          {nivelRange(nivel)}
-        </span>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${NIVELES.length}, minmax(0, 1fr))`, gap: 3 }}>
-        {NIVELES.map((n, i) => {
-          const activo = i === nivel;
-          const c = nivelColor(i);
-          return (
-            <div key={n.status} title={`${n.label} ${n.range}`}>
-              <div style={{
-                height: 8, borderRadius: 4,
-                background: activo ? c : `${c}30`,
-                boxShadow: activo ? `0 0 6px ${c}60` : 'none',
-              }} />
-              <div style={{
-                marginTop: 3, textAlign: 'center',
-                fontFamily: 'var(--font-data)', fontSize: 9, letterSpacing: '0.02em',
-                color: activo ? c : 'var(--text-faint)', fontWeight: activo ? 700 : 400,
-                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              }}>
-                {n.range}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 // ─── Barra de progreso para porcentaje ───────────────────────────────────────
-function BarraPorcentaje({ valor, color, max = 100, mostrarValor = true }) {
+function BarraPorcentaje({ valor, color, max = 100 }) {
   return (
     <div style={{ position: 'relative' }}>
       <div style={{
@@ -198,15 +149,6 @@ function BarraPorcentaje({ valor, color, max = 100, mostrarValor = true }) {
           boxShadow: `0 0 8px ${color}50`,
         }} />
       </div>
-      {mostrarValor && (
-        <div style={{
-          textAlign: 'right', marginTop: 3,
-          fontFamily: 'var(--font-data)', fontWeight: 700,
-          fontSize: 'var(--text-sm)', color,
-        }}>
-          {(valor ?? 0).toFixed(1)}%
-        </div>
-      )}
     </div>
   );
 }
@@ -517,32 +459,33 @@ export default function MedicionDetailPage() {
         {/* ── Columna derecha: veredicto normativo y resultados principales ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3-5)' }}>
 
-          {/* Badge de nivel grande según ISO 10289 */}
+          {/* Veredicto + porcentaje de área corroída unificados en una sola tarjeta */}
           <div style={{
             background: bg, border: `1px solid ${color}40`,
-            borderRadius: 12, padding: '16px 20px',
+            borderRadius: 12, padding: '14px 18px',
             borderTop: `3px solid ${color}`,
           }}>
-            <div style={{
-              fontFamily: 'var(--font-data)', fontWeight: 700,
-              fontSize: 'var(--text-xl)', color, marginBottom: 'var(--space-1)',
-              animation: nivel === 3 ? 'blink 1.2s ease-in-out infinite' : 'none',
-            }}>
-              {nivelLabel(nivel)}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, marginBottom: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ width: 9, height: 9, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                <span style={{
+                  fontFamily: 'var(--font-data)', fontWeight: 700,
+                  fontSize: 'var(--text-xl)', color,
+                  animation: nivel === 3 ? 'blink 1.2s ease-in-out infinite' : 'none',
+                }}>
+                  {nivelLabel(nivel)}
+                </span>
+              </div>
+              <span style={{ fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 'var(--text-lg)', color }}>
+                {(medicion.area_corroida_pct ?? 0).toFixed(1)}%
+              </span>
             </div>
-            <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)', letterSpacing: '0.08em' }}>
-              NORMA ISO 10289 · NIVEL {nivel} / 3
-            </div>
+            <BarraPorcentaje valor={medicion.area_corroida_pct ?? 0} color={color} />
           </div>
 
-          {/* Métricas principales */}
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px 20px' }}>
+          {/* Datos de ubicación y contexto */}
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 18px' }}>
             <SectionTitle>Resultados del análisis</SectionTitle>
-
-            <div style={{ marginBottom: 'var(--space-3-5)' }}>
-              <AreaCorroidaItem valor={medicion.area_corroida_pct ?? 0} nivel={nivel} />
-            </div>
-
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2-5)' }}>
               <MetaItem label="Zona" value={zonaNombre} />
               <MetaItem label="Punto" value={punto.sede ?? '—'} />
@@ -638,6 +581,31 @@ export default function MedicionDetailPage() {
                   </div>
                 </div>
               )}
+
+              {/* Referencia técnica ISO 10289: solo visible al abrir detalles técnicos */}
+              <div>
+                <SectionTitle>Criterio técnico (ISO 10289)</SectionTitle>
+                <div style={{
+                  display: 'flex', flexWrap: 'wrap', gap: '6px 12px',
+                  padding: '8px 10px', background: 'var(--bg-inset)',
+                  border: '1px solid var(--border)', borderRadius: 8,
+                  fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-data)',
+                }}>
+                  {NIVELES.map((n, i) => (
+                    <span
+                      key={n.status}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 5,
+                        color: i === nivel ? nivelColor(i) : 'var(--text-muted)',
+                        fontWeight: i === nivel ? 700 : 400,
+                      }}
+                    >
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: nivelColor(i), flexShrink: 0 }} />
+                      {n.label}: {n.range}
+                    </span>
+                  ))}
+                </div>
+              </div>
 
               {/* Acciones de gestión y navegación */}
               <div>
