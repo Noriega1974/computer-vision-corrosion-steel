@@ -211,7 +211,7 @@ export default function PlantDetail({ punto }) {
         <div
           style={{
             display: 'flex', flexDirection: 'column', gap: 'var(--space-1)',
-            maxHeight: 280, overflowY: 'auto', overscrollBehavior: 'contain',
+            flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain',
             paddingRight: 2,
           }}
         >

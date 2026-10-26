@@ -100,8 +100,7 @@ export default function DashboardPage() {
           display: 'flex',
           flexDirection: 'column',
           gap: 18,
-          maxWidth: 1800,
-          margin: '0 auto',
+          width: '100%',
         }}
       >
 
@@ -184,13 +183,9 @@ export default function DashboardPage() {
           className="main-grid"
           style={{
             display: 'grid',
-            // Mapa un poco más ancho (2.1fr). Las tres columnas viven en el mismo
-            // contenedor que las secciones de abajo, así que los bordes externos
-            // coinciden; el alto fijo (480px) mantiene la fila pareja.
             gridTemplateColumns: 'minmax(250px, 0.85fr) minmax(0, 2.1fr) minmax(320px, 1.05fr)',
             gap: 18,
-            height: 480,
-            maxHeight: 480,
+            height: 'clamp(480px, 56vh, 720px)',
           }}
         >
           {/* ======================================================
@@ -204,7 +199,7 @@ export default function DashboardPage() {
               flexDirection: 'column',
               gap: 'var(--space-2)',
               height: '100%',
-              maxHeight: 480,
+              minHeight: 0,
               overflow: 'hidden',
             }}
           >
@@ -233,7 +228,7 @@ export default function DashboardPage() {
               flexDirection: 'column',
               gap: 'var(--space-2-5)',
               height: '100%',
-              maxHeight: 480,
+              minHeight: 0,
               overflow: 'hidden',
             }}
           >
@@ -306,7 +301,7 @@ export default function DashboardPage() {
               flexDirection: 'column',
               gap: 'var(--space-2-5)',
               height: '100%',
-              maxHeight: 480,
+              minHeight: 0,
               overflow: 'hidden',
             }}
           >
@@ -422,11 +417,7 @@ export default function DashboardPage() {
           </span>
 
           <span>
-            Uninorte · Ing. Mecánica &amp; Electrónica
-          </span>
-
-          <span>
-            YOLOv8 Transfer Learning · ASTM B117
+            Uninorte · Ing. Electrónica
           </span>
 
           <Link

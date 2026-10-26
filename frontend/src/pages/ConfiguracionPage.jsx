@@ -349,7 +349,7 @@ export default function ConfiguracionPage() {
         @keyframes shimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
       `}</style>
 
-      <div style={{ padding: 'var(--space-5)', maxWidth: 1000, margin: '0 auto' }}>
+      <div style={{ padding: 'var(--space-5)', maxWidth: 1360, width: '100%', margin: '0 auto' }}>
 
         {/* ── Encabezado ── */}
         <div

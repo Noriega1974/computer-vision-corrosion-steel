@@ -303,15 +303,17 @@
 
 [data-theme="dark"] {
 
-  --bg-page: #07111C;
-  --bg-section: rgba(10, 23, 36, 0.68);
+  /* Modo oscuro suave (pizarra/gris azulado medio): descansa la vista del
+     blanco sin opacar ni volver negra la página. */
+  --bg-page: #18222F;
+  --bg-section: rgba(31, 44, 61, 0.78);
 
-  --bg-card: rgba(17, 31, 46, 0.72);
-  --bg-card-solid: #111F2E;
+  --bg-card: rgba(36, 50, 68, 0.88);
+  --bg-card-solid: #243244;
 
-  --bg-card-hover: rgba(24, 43, 62, 0.88);
+  --bg-card-hover: rgba(45, 62, 84, 0.94);
 
-  --bg-inset: #091724;
+  --bg-inset: #1D2939;
 
 
   /* Ambient */
@@ -319,31 +321,24 @@
   /* Mismo rebase que el tema claro: RGB del --accent-amber y --accent-cyan
      de este tema (antes #FF6B35, el naranja oscuro huerfano de antes del
      cambio a "PixelRust"). */
-  --ambient-blue: rgba(240, 87, 14, 0.14);
-  --ambient-cyan: rgba(247, 182, 129, 0.12);
-  --ambient-sky: rgba(240, 145, 122, 0.10);
+  --ambient-blue: rgba(240, 87, 14, 0.12);
+  --ambient-cyan: rgba(247, 182, 129, 0.10);
+  --ambient-sky: rgba(240, 145, 122, 0.09);
   --ambient-green: rgba(34, 197, 94, 0.045);
 
 
   /* Borders */
 
-  --border: rgba(111, 145, 174, 0.20);
-  --border-bright: rgba(111, 145, 174, 0.34);
-  --border-strong: rgba(111, 145, 174, 0.48);
+  --border: rgba(148, 179, 206, 0.24);
+  --border-bright: rgba(148, 179, 206, 0.38);
+  --border-strong: rgba(148, 179, 206, 0.52);
 
-  --border-glass: rgba(130, 170, 205, 0.18);
+  --border-glass: rgba(165, 196, 224, 0.22);
 
 
   /* Accents */
 
-  /* 2026-08-17: paleta "PixelRust". Sobre fondo oscuro el Oxido Primario de
-     la paleta (#F0570E) ya pasa AA sin oscurecer -- 5.5:1 contra --bg-page,
-     4.8:1 contra --bg-card -- asi que se usa tal cual, sin derivar un tono
-     mas claro como hacia falta con el naranja anterior. --accent-amber-dim
-     usa Deep-Core Luminoso (#D64A17), el escalon mas oscuro de la paleta que
-     sigue siendo legible sobre fondo oscuro (4.4:1 contra --bg-page); hoy no
-     esta referenciado en ningun selector, queda coherente para cuando se
-     use. */
+  /* 2026-08-17: paleta "PixelRust". */
   --accent-amber: #F0570E;
   --accent-amber-dim: #D64A17;
 
@@ -357,10 +352,10 @@
 
   /* Text */
 
-  --text-primary: #E5EEF6;
-  --text-secondary: #A7BED1;
-  --text-muted: #7190A8;
-  --text-faint: #4E6A80;
+  --text-primary: #F1F5F9;
+  --text-secondary: #CBD5E1;
+  --text-muted: #94A3B8;
+  --text-faint: #64748B;
 
 
   /* Sections */
@@ -368,70 +363,70 @@
   --section-kpi:
     linear-gradient(
       135deg,
-      rgba(16,31,47,0.74),
-      rgba(9,23,36,0.56)
+      rgba(36, 50, 68, 0.82),
+      rgba(27, 39, 54, 0.68)
     );
 
   --section-map:
     linear-gradient(
       135deg,
-      rgba(8,27,45,0.76),
-      rgba(10,22,35,0.56)
+      rgba(34, 49, 67, 0.84),
+      rgba(27, 39, 54, 0.68)
     );
 
   --section-detail:
     linear-gradient(
       135deg,
-      rgba(10,28,31,0.74),
-      rgba(10,22,35,0.55)
+      rgba(35, 50, 66, 0.82),
+      rgba(27, 39, 54, 0.68)
     );
 
   --section-charts:
     linear-gradient(
       135deg,
-      rgba(9,28,39,0.72),
-      rgba(10,23,35,0.54)
+      rgba(34, 49, 66, 0.80),
+      rgba(27, 39, 54, 0.66)
     );
 
 
   /* Navigation */
 
-  --nav-active-bg: rgba(255, 107, 53, 0.13);
+  --nav-active-bg: rgba(255, 107, 53, 0.15);
   --nav-active-text: #FFAB7A;
 
-  --sidebar-active-bg: rgba(255, 107, 53, 0.14);
-  --sidebar-active-border: rgba(255, 171, 122, 0.34);
+  --sidebar-active-bg: rgba(255, 107, 53, 0.16);
+  --sidebar-active-border: rgba(255, 171, 122, 0.36);
   --sidebar-active-shadow:
     0 0 0 1px rgba(255, 171, 122, 0.16),
-    0 2px 12px rgba(255, 107, 53, 0.22),
+    0 2px 12px rgba(255, 107, 53, 0.20),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 
-  --sidebar-hover-bg: rgba(255, 107, 53, 0.07);
-  --sidebar-hover-border: rgba(255, 171, 122, 0.16);
+  --sidebar-hover-bg: rgba(255, 107, 53, 0.08);
+  --sidebar-hover-border: rgba(255, 171, 122, 0.18);
 
 
   /* Shadows */
 
   --shadow-sm:
-    0 2px 10px rgba(0,0,0,0.18);
+    0 2px 10px rgba(0,0,0,0.14);
 
   --shadow-md:
-    0 8px 30px rgba(0,0,0,0.26);
+    0 8px 26px rgba(0,0,0,0.20);
 
   --shadow-lg:
-    0 16px 48px rgba(0,0,0,0.34);
+    0 16px 42px rgba(0,0,0,0.26);
 
   --shadow-glass:
-    0 10px 36px rgba(0,0,0,0.24),
-    inset 0 1px 0 rgba(255,255,255,0.055);
+    0 8px 28px rgba(0,0,0,0.18),
+    inset 0 1px 0 rgba(255,255,255,0.07);
 
 
   /* Glass */
 
-  --glass-bg: rgba(16, 31, 47, 0.58);
-  --glass-bg-strong: rgba(17, 34, 51, 0.74);
+  --glass-bg: rgba(33, 47, 64, 0.72);
+  --glass-bg-strong: rgba(38, 54, 73, 0.86);
 
-  --glass-border: rgba(139, 180, 215, 0.16);
+  --glass-border: rgba(160, 192, 220, 0.22);
 
 
   color-scheme: dark;
@@ -621,9 +616,9 @@ body {
 
     linear-gradient(
       135deg,
-      #07111C 0%,
-      #091724 48%,
-      #07121D 100%
+      #18222F 0%,
+      #1E2B3B 48%,
+      #17212E 100%
     );
 }
 
@@ -782,8 +777,8 @@ body {
   background:
     linear-gradient(
       135deg,
-      rgba(16,31,47,0.72),
-      rgba(8,22,35,0.52)
+      rgba(36, 50, 68, 0.84),
+      rgba(27, 39, 54, 0.68)
     );
 }
 
@@ -1188,11 +1183,9 @@ body {
 
 [data-theme="dark"] .leaflet-tile {
   filter:
-    brightness(0.65)
-    invert(1)
-    contrast(1.2)
-    hue-rotate(200deg)
-    saturate(0.4) !important;
+    brightness(0.88)
+    contrast(1.05)
+    saturate(0.75) !important;
 }
 
 
@@ -1212,7 +1205,7 @@ body {
 
 
 [data-theme="dark"] .leaflet-control-attribution {
-  background: rgba(7,17,28,0.82) !important;
+  background: rgba(24, 34, 47, 0.86) !important;
 }
 
 

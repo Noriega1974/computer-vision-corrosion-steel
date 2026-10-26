@@ -153,7 +153,7 @@ export default function LoginPage() {
             letterSpacing: '0.08em',
             textTransform: 'uppercase',
           }}>
-            Universidad del Norte · Ing. Mecánica &amp; Electrónica
+            Universidad del Norte · Ing. Electrónica
           </div>
         </div>
 

@@ -363,7 +363,7 @@ export default function MedicionDetailPage() {
   ];
 
   return (
-    <div style={{ padding: 'var(--space-5)', maxWidth: 1200, margin: '0 auto' }}>
+    <div style={{ padding: 'var(--space-5)', maxWidth: 1600, width: '100%', margin: '0 auto' }}>
 
       {/* Botón volver */}
       <button onClick={handleBack} style={{
