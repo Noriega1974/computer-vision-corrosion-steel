@@ -258,6 +258,14 @@ function MedicionRow({ medicion }) {
       )}
 
       <div style={{ flex: 1, minWidth: 0 }}>
+        {medicion.nombre && (
+          <div style={{
+            fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2,
+            fontFamily: 'var(--font-ui)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {medicion.nombre}
+          </div>
+        )}
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
           <span style={{ fontSize: 'var(--text-3xs)', fontWeight: 600, color, fontFamily: 'var(--font-data)' }}>
             {nivelLabel(nivel)}

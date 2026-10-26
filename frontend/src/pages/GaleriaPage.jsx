@@ -6,6 +6,7 @@ import { useEmpresas } from '../hooks/useEmpresas';
 import { useAuth } from '../auth/AuthContext';
 import { NIVELES, nivelColor, nivelLabel } from '../lib/statusUtils';
 import { formatFecha } from '../utils/dateFormat';
+import { normalizar } from '../lib/textUtils';
 
 // ─── Helper: tiempo relativo ─────────────────────────────────────────────────
 function tiempoRelativo(timestamp) {
@@ -26,6 +27,8 @@ function MedicionCard({ medicion, to, state }) {
   const nivel = medicion.nivel_corrosion ?? 0;
   const color = nivelColor(nivel);
   const nombrePunto = medicion.bloque_nombre ?? 'Sin punto asignado';
+  // Si la foto tiene nombre, es el título y el punto pasa al subtítulo.
+  const titulo = medicion.nombre || nombrePunto;
   const pct = (medicion.area_corroida_pct ?? 0).toFixed(1);
 
   return (
@@ -54,13 +57,13 @@ function MedicionCard({ medicion, to, state }) {
           color: 'var(--text-primary)', lineHeight: 1.2,
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
-          {nombrePunto}
+          {titulo}
         </div>
         <div style={{
           fontSize: 12, color: 'var(--text-muted)', marginTop: 2,
           fontFamily: 'var(--font-ui)',
         }}>
-          {tiempoRelativo(medicion.timestamp)}
+          {medicion.nombre ? `${nombrePunto} · ` : ''}{tiempoRelativo(medicion.timestamp)}
         </div>
       </div>
 
@@ -251,13 +254,15 @@ export default function GaleriaPage() {
   }, [loading]);
 
   // ─── Filtrado client-side ─────────────────────────────────────────────────
+  // Búsqueda por nombre de la foto y por notas, sin mayúsculas ni tildes.
+  const consulta = normalizar(debouncedQuery);
   const filtered = mediciones.filter(m => {
     if (nivelFilter !== 'all' && (m.nivel_corrosion ?? 0) !== Number(nivelFilter)) return false;
     if (bloqueFilter && m.bloque_id !== bloqueFilter) return false;
     if (empresaFilter && m.empresa_id !== empresaFilter) return false;
     if (fechaInicio && new Date(m.timestamp) < new Date(fechaInicio)) return false;
     if (fechaFin && new Date(m.timestamp) > new Date(fechaFin + 'T23:59:59')) return false;
-    if (debouncedQuery && !(m.notas ?? '').toLowerCase().includes(debouncedQuery.toLowerCase())) return false;
+    if (consulta && !normalizar(`${m.nombre ?? ''} ${m.notas ?? ''}`).includes(consulta)) return false;
     return true;
   });
 
@@ -343,10 +348,10 @@ export default function GaleriaPage() {
             />
             <input
               id="filtro-notas"
-              name="buscar-notas"
+              name="buscar-nombre-notas"
               type="search"
               spellCheck={false}
-              placeholder="Buscar en notas…"
+              placeholder="Buscar por nombre o notas…"
               value={notasQuery}
               onChange={e => setNotasQuery(e.target.value)}
               style={{

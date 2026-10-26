@@ -487,13 +487,13 @@ export default function MedicionDetailPage() {
               fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 20,
               color: 'var(--text-primary)', letterSpacing: '-0.01em', lineHeight: 1.15,
             }}>
-              {punto.sede ?? 'Punto sin nombre'}
+              {medicion.nombre || (punto.sede ?? 'Punto sin nombre')}
             </div>
             <div style={{
               fontSize: 13, color: 'var(--text-muted)', fontWeight: 400, marginTop: 4,
               fontFamily: 'var(--font-ui)',
             }}>
-              {zonaNombre} · {punto.ciudad ?? '—'} · {tiempoRelativo(medicion.timestamp)}
+              {medicion.nombre ? `${punto.sede || 'Punto sin nombre'} · ` : ''}{zonaNombre} · {punto.ciudad ?? '—'} · {tiempoRelativo(medicion.timestamp)}
             </div>
           </div>
 

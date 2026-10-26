@@ -11,6 +11,7 @@ import SearchableSelect from '../components/SearchableSelect';
 const MAX_FOTO_MB = 50;
 
 // ─── Componente: resultado del análisis ─────────────────────────────────────
+const NOMBRE_MAX = 80;
 const formatoPct = n => n.toFixed(1).replace('.', ',');
 
 function ResultadoAnalisis({ result, onReset, onDashboard }) {
@@ -27,7 +28,15 @@ function ResultadoAnalisis({ result, onReset, onDashboard }) {
         borderRadius: 14, padding: '24px 22px', marginBottom: 20,
         boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: 18,
       }}>
-        <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--text-muted)' }}>
+        {result.nombre && (
+          <div style={{
+            fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 20, lineHeight: 1.2,
+            color: 'var(--text-primary)', letterSpacing: '-0.01em', overflowWrap: 'anywhere',
+          }}>
+            {result.nombre}
+          </div>
+        )}
+        <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--text-muted)', marginTop: result.nombre ? -10 : 0 }}>
           <span aria-hidden="true">📍 </span>
           {bloque.nombre ?? '—'}{bloque.ciudad ? ` · ${bloque.ciudad}` : ''}
         </div>
@@ -117,6 +126,7 @@ export default function UploadPage() {
   const [dragOver, setDragOver] = useState(false);
 
   // Detalles opcionales
+  const [nombre, setNombre] = useState('');           // nombre de la foto (para buscarla luego)
   const [notas, setNotas] = useState('');
   const [esMedicionPasada, setEsMedicionPasada] = useState(false);
   const [fechaMedicion, setFechaMedicion] = useState(() => new Date().toISOString().slice(0, 10));
@@ -138,6 +148,8 @@ export default function UploadPage() {
     }
     setErrorLocal(null);
     setImagen(file);
+    // El nombre arranca con el del archivo (sin extensión); el usuario lo edita.
+    setNombre(file.name.replace(/\.[^.]+$/, '').slice(0, NOMBRE_MAX));
     // Preview
     const reader = new FileReader();
     reader.onload = e => setPreview(e.target.result);
@@ -187,6 +199,7 @@ export default function UploadPage() {
     const body = {
       fuente: 'movil',
       bloque_id: bloqueSeleccionado.id_bloque,
+      ...(nombre.trim() && { nombre: nombre.trim() }),
       ...(notas && { notas }),
       ...(exifGps && {
         latitud_real: exifGps.latitude,
@@ -206,7 +219,7 @@ export default function UploadPage() {
       <div style={{ minHeight: '100vh', background: 'var(--bg-page)', padding: '32px 20px' }}>
         <ResultadoAnalisis
           result={result}
-          onReset={() => { reset(); setImagen(null); setPreview(null); setExifGps(null); setBloqueSeleccionado(null); }}
+          onReset={() => { reset(); setImagen(null); setNombre(''); setPreview(null); setExifGps(null); setBloqueSeleccionado(null); }}
           onDashboard={() => navigate('/galeria')}
         />
       </div>
@@ -280,10 +293,23 @@ export default function UploadPage() {
                   width: '100%', maxHeight: 280, objectFit: 'cover',
                   borderRadius: 8, border: '1px solid var(--border)', marginBottom: 'var(--space-2-5)',
                 }} />
+                <div style={{ marginBottom: 'var(--space-2-5)' }}>
+                  <label htmlFor="upload-nombre" style={labelStyle}>Nombre de la foto (opcional)</label>
+                  <input
+                    id="upload-nombre" name="nombre-foto" type="text"
+                    value={nombre} onChange={e => setNombre(e.target.value)}
+                    maxLength={NOMBRE_MAX} autoComplete="off"
+                    placeholder="Ej.: Placa 12, lado norte"
+                    style={inputStyle}
+                  />
+                  <div style={{ marginTop: 4, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>
+                    Con este nombre podrás encontrar la foto en la galería.
+                  </div>
+                </div>
                 <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
                   <button
                     type="button"
-                    onClick={() => { setImagen(null); setPreview(null); setExifGps(null); }}
+                    onClick={() => { setImagen(null); setNombre(''); setPreview(null); setExifGps(null); }}
                     style={{ ...btnSecondaryStyle, flex: 'none', padding: '8px 16px', fontSize: 'var(--text-xs)' }}
                   >
                     Cambiar imagen
