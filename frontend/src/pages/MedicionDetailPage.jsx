@@ -336,6 +336,18 @@ export default function MedicionDetailPage() {
   const nivel = medicion.nivel_corrosion ?? 0;
   const color = nivelColor(nivel);
   const bg = nivelBg(nivel);
+  // Tiempo de análisis ≈ subida (medida en el navegador) + procesamiento del
+  // servidor. Solo existe en mediciones nuevas.
+  const fmtSeg = n => n.toFixed(1).replace('.', ',');
+  const tiempoAnalisis = (medicion.tiempo_subida_s != null && medicion.tiempo_procesamiento_ms != null)
+    ? (() => {
+        const subida = Number(medicion.tiempo_subida_s);
+        const proc = Number(medicion.tiempo_procesamiento_ms) / 1000;
+        return Number.isFinite(subida) && Number.isFinite(proc)
+          ? { total: fmtSeg(subida + proc), subida: fmtSeg(subida), procesamiento: fmtSeg(proc) }
+          : null;
+      })()
+    : null;
   // sede/ciudad ya no viajan denormalizados en la medición -- se resuelven
   // desde el bloque (punto) al que pertenece.
   const bloqueInfo = bloques.find(b => b.id_bloque === medicion.bloque_id) ?? {};
@@ -633,7 +645,7 @@ export default function MedicionDetailPage() {
           }}
         >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <Settings size={15} /> Más opciones y detalles técnicos (Ubicación, Descarga, Gestión)
+            <Settings size={15} /> Más opciones y detalles técnicos (Ubicación, Tiempo, Descarga, Gestión)
           </span>
           {showMasOpciones ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
         </button>
@@ -668,8 +680,20 @@ export default function MedicionDetailPage() {
               )}
             </div>
 
-            {/* Referencia ISO + Gestión */}
+            {/* Tiempo + Referencia ISO + Gestión */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Tiempo de análisis: solo en mediciones nuevas (las viejas no lo guardaron) */}
+              {tiempoAnalisis && (
+                <div>
+                  <SectionTitle>Tiempo de análisis</SectionTitle>
+                  <div style={{ fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 'var(--text-lg)', color: 'var(--text-primary)' }}>
+                    ≈ {tiempoAnalisis.total} s
+                  </div>
+                  <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', marginTop: 2 }}>
+                    subida {tiempoAnalisis.subida} s · procesamiento {tiempoAnalisis.procesamiento} s
+                  </div>
+                </div>
+              )}
               {/* Referencia técnica ISO 10289: tarjetas estructuradas con barra de color */}
               <div>
                 <SectionTitle>Escala de referencia (ISO 10289)</SectionTitle>
