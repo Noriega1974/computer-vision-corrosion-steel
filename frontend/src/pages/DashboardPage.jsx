@@ -184,7 +184,10 @@ export default function DashboardPage() {
           className="main-grid"
           style={{
             display: 'grid',
-            gridTemplateColumns: 'minmax(260px, 0.9fr) minmax(0, 1.8fr) minmax(320px, 1.1fr)',
+            // Mapa un poco más ancho (2.1fr). Las tres columnas viven en el mismo
+            // contenedor que las secciones de abajo, así que los bordes externos
+            // coinciden; el alto fijo (480px) mantiene la fila pareja.
+            gridTemplateColumns: 'minmax(250px, 0.85fr) minmax(0, 2.1fr) minmax(320px, 1.05fr)',
             gap: 18,
             height: 480,
             maxHeight: 480,

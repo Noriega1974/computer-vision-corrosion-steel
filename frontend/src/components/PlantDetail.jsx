@@ -5,6 +5,7 @@ import {
 } from '../lib/statusUtils';
 import { formatFecha } from '../utils/dateFormat';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { Camera, Thermometer, Droplets, CloudRain, Wind } from 'lucide-react';
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
@@ -63,20 +64,22 @@ export default function PlantDetail({ punto }) {
       background: 'var(--bg-card)', border: '1px solid var(--border)',
       height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden',
     }}>
-      {/* Header del punto */}
+      {/* Header del punto: nombre + nivel arriba y una sola franja de datos
+          (mediciones + clima de la última medición) en una grilla pareja, sin
+          bloques sueltos que dejen huecos a la derecha. */}
       <div style={{
-        padding: '14px 16px', borderBottom: '1px solid var(--border)',
+        padding: '10px 14px', borderBottom: '1px solid var(--border)',
         background: bg, flexShrink: 0,
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <div style={{
               fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 16,
               color, letterSpacing: '0.01em', lineHeight: 1.2,
             }}>
               {(punto.nombre ?? 'PUNTO SIN NOMBRE').toUpperCase()}
             </div>
-            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 4 }}>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 2 }}>
               {punto.ciudad} · {punto.departamento}
             </div>
           </div>
@@ -95,38 +98,49 @@ export default function PlantDetail({ punto }) {
           )}
         </div>
 
-        {/* Meta info */}
-        <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-2-5)', flexWrap: 'wrap' }}>
-          {[
-            { l: 'Mediciones', v: mediciones.length },
-          ].map(({ l, v }) => (
-            <div key={l} style={{ textAlign: 'center', minWidth: 50 }}>
-              <div style={{ fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', lineHeight: 1 }}>{v}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.02em', marginTop: 3 }}>{l.toUpperCase()}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Clima de la última medición */}
-        {ultimaMedicion?.clima && (
-          <div style={{ display: 'flex', gap: 'var(--space-3-5)', marginTop: 'var(--space-2-5)', flexWrap: 'wrap', paddingTop: 'var(--space-2)', borderTop: '1px solid var(--border)' }}>
-            {[
-              { icon: '🌡', label: 'Temp.', v: ultimaMedicion.clima.temperatura_c != null ? `${ultimaMedicion.clima.temperatura_c}°C` : null },
-              { icon: '💧', label: 'Humedad', v: ultimaMedicion.clima.humedad_pct != null ? `${ultimaMedicion.clima.humedad_pct}%` : null },
-              { icon: '🌧', label: 'Precip.', v: ultimaMedicion.clima.precipitacion_mm != null ? `${ultimaMedicion.clima.precipitacion_mm} mm` : null },
-              { icon: '💨', label: 'Viento', v: ultimaMedicion.clima.velocidad_viento_kmh != null ? `${ultimaMedicion.clima.velocidad_viento_kmh} km/h` : null },
-            ].filter(x => x.v).map(({ icon, label, v }) => (
-              <div key={label} style={{ textAlign: 'center', minWidth: 44 }}>
-                <div style={{ fontSize: 'var(--text-xs)', lineHeight: 1 }}>{icon}</div>
-                <div style={{ fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 'var(--text-2xs)', color: 'var(--text-primary)', marginTop: 2 }}>{v}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.02em' }}>{label.toUpperCase()}</div>
+        {/* Franja de datos: mediciones + clima de la última medición */}
+        {(() => {
+          const clima = ultimaMedicion?.clima;
+          const stats = [
+            { Icon: Camera, label: 'Mediciones', v: String(mediciones.length) },
+            ...(clima ? [
+              { Icon: Thermometer, label: 'Temp.', v: clima.temperatura_c != null ? `${clima.temperatura_c}°C` : null },
+              { Icon: Droplets, label: 'Humedad', v: clima.humedad_pct != null ? `${clima.humedad_pct}%` : null },
+              { Icon: CloudRain, label: 'Precip.', v: clima.precipitacion_mm != null ? `${clima.precipitacion_mm} mm` : null },
+              { Icon: Wind, label: 'Viento', v: clima.velocidad_viento_kmh != null ? `${clima.velocidad_viento_kmh} km/h` : null },
+            ] : []),
+          ].filter(x => x.v);
+          return (
+            <div style={{ marginTop: 'var(--space-2)', paddingTop: 'var(--space-2)', borderTop: '1px solid var(--border)' }}>
+              {clima && (
+                <div style={{ fontSize: 10, color: 'var(--text-faint)', letterSpacing: '0.04em', marginBottom: 6, textTransform: 'uppercase' }}>
+                  Clima de la última medición
+                </div>
+              )}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))`,
+                gap: 'var(--space-1)',
+              }}>
+                {stats.map(({ Icon, label, v }) => (
+                  <div key={label} style={{ textAlign: 'center', minWidth: 0 }}>
+                    <Icon size={20} strokeWidth={1.8} style={{ color: 'var(--accent-amber)', display: 'block', margin: '0 auto' }} />
+                    <div style={{
+                      fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 'var(--text-md)',
+                      color: 'var(--text-primary)', marginTop: 4, lineHeight: 1.1,
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    }}>
+                      {v}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.03em', marginTop: 2, whiteSpace: 'nowrap' }}>
+                      {label.toUpperCase()}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-            <div style={{ alignSelf: 'flex-end', fontSize: 10, color: 'var(--text-faint)', letterSpacing: '0.03em', marginLeft: 'auto' }}>
-              ÚLTIMA MEDICIÓN
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* Gráfica de tendencia */}
