@@ -22,6 +22,7 @@ const CustomTooltip = ({ active, payload, label }) => {
   );
 };
 
+// ─── Tarjeta Flashcard de Ubicación (Dashboard) ─────────────────────────────
 export default function PlantDetail({ punto }) {
   const { mediciones, loading, error } = useMedicionesPunto(punto?.id_bloque);
 
@@ -59,82 +60,100 @@ export default function PlantDetail({ punto }) {
       corrosion: parseFloat((m.area_corroida_pct ?? 0).toFixed(1)),
     }));
 
+  const clima = ultimaMedicion?.clima;
+  const stats = [
+    ...(clima ? [
+      { Icon: Thermometer, label: 'Temp.', v: clima.temperatura_c != null ? `${clima.temperatura_c}°C` : null },
+      { Icon: Droplets, label: 'Humedad', v: clima.humedad_pct != null ? `${clima.humedad_pct}%` : null },
+      { Icon: CloudRain, label: 'Precip.', v: clima.precipitacion_mm != null ? `${clima.precipitacion_mm} mm` : null },
+      { Icon: Wind, label: 'Viento', v: clima.velocidad_viento_kmh != null ? `${clima.velocidad_viento_kmh} km/h` : null },
+    ] : []),
+  ].filter(x => x.v);
+
   return (
     <div style={{
       background: 'var(--bg-card)', border: '1px solid var(--border)',
       height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden',
     }}>
-      {/* Header del punto: compacto y con textos más legibles */}
+      {/* Flashcard superior del punto: 1) Título + subtítulo, 2) Caja encuadrada
+          de clima en el centro, 3) Pie con total de mediciones y píldora de estado */}
       <div style={{
-        padding: '8px 12px', borderBottom: '1px solid var(--border)',
-        background: bg, flexShrink: 0,
+        padding: '10px 14px', borderBottom: '1px solid var(--border)',
+        background: bg, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8,
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-          <div style={{ minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{
-              fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 16,
-              color, letterSpacing: '0.01em', lineHeight: 1.15,
-            }}>
-              {(punto.nombre ?? 'PUNTO SIN NOMBRE').toUpperCase()}
-            </span>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>
-              {punto.ciudad} · {punto.departamento}
-            </span>
+        {/* 1. Título y subtítulo con pesos diferenciados */}
+        <div>
+          <div style={{
+            fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 17,
+            color: 'var(--text-primary)', letterSpacing: '-0.01em', lineHeight: 1.15,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>
+            {punto.nombre ?? 'Punto sin nombre'}
           </div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 400, marginTop: 2 }}>
+            {punto.ciudad ?? '—'}{punto.departamento ? ` · ${punto.departamento}` : ''}
+          </div>
+        </div>
+
+        {/* 2. Bloque central encuadrado: datos meteorológicos con iconos y textos grandes */}
+        {stats.length > 0 && (
+          <div style={{
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            borderRadius: 8, padding: '8px 10px',
+            display: 'grid',
+            gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))`,
+            gap: 6,
+          }}>
+            {stats.map(({ Icon, label, v }) => (
+              <div key={label} style={{ textAlign: 'center', minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                  <Icon size={16} strokeWidth={2} style={{ color: 'var(--accent-amber)', flexShrink: 0 }} />
+                  <span style={{
+                    fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 15,
+                    color: 'var(--text-primary)', lineHeight: 1.1,
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  }}>
+                    {v}
+                  </span>
+                </div>
+                <div style={{ fontSize: 10, fontWeight: 500, color: 'var(--text-muted)', marginTop: 2, whiteSpace: 'nowrap' }}>
+                  {label}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 3. Pie de la flashcard: métrica clave a la izquierda + píldora a la derecha */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <div>
+            <div style={{
+              fontFamily: 'var(--font-data)', fontWeight: 800, fontSize: 16,
+              color: 'var(--text-primary)', lineHeight: 1.1,
+            }}>
+              {mediciones.length} {mediciones.length === 1 ? 'medición' : 'mediciones'}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+              {ultimaMedicion?.area_corroida_pct != null
+                ? `Última área: ${ultimaMedicion.area_corroida_pct.toFixed(1)}%`
+                : 'Sin lecturas registradas'}
+            </div>
+          </div>
+
           {nivel >= 0 && (
             <div style={{
-              padding: '3px 9px',
-              background: `${color}15`,
-              border: `1px solid ${color}50`,
-              fontSize: 11, fontWeight: 700, color,
-              letterSpacing: '0.03em', borderRadius: 4,
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '5px 12px', borderRadius: 999,
+              background: 'var(--bg-card)', border: `1px solid ${color}60`,
+              fontSize: 12, fontWeight: 700, color,
               animation: nivel === 3 ? 'blink 1.2s ease-in-out infinite' : 'none',
               flexShrink: 0,
             }}>
-              {nivelLabel(nivel).toUpperCase()}
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: color }} />
+              {nivelLabel(nivel)}
             </div>
           )}
         </div>
-
-        {/* Franja de datos: mediciones + clima de la última medición */}
-        {(() => {
-          const clima = ultimaMedicion?.clima;
-          const stats = [
-            { Icon: Camera, label: 'Mediciones', v: String(mediciones.length) },
-            ...(clima ? [
-              { Icon: Thermometer, label: 'Temp.', v: clima.temperatura_c != null ? `${clima.temperatura_c}°C` : null },
-              { Icon: Droplets, label: 'Humedad', v: clima.humedad_pct != null ? `${clima.humedad_pct}%` : null },
-              { Icon: CloudRain, label: 'Precip.', v: clima.precipitacion_mm != null ? `${clima.precipitacion_mm} mm` : null },
-              { Icon: Wind, label: 'Viento', v: clima.velocidad_viento_kmh != null ? `${clima.velocidad_viento_kmh} km/h` : null },
-            ] : []),
-          ].filter(x => x.v);
-          return (
-            <div style={{
-              marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--border)',
-              display: 'grid',
-              gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))`,
-              gap: 'var(--space-1)',
-            }}>
-              {stats.map(({ Icon, label, v }) => (
-                <div key={label} style={{ textAlign: 'center', minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                    <Icon size={16} strokeWidth={2} style={{ color: 'var(--accent-amber)', flexShrink: 0 }} />
-                    <span style={{
-                      fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 15,
-                      color: 'var(--text-primary)', lineHeight: 1.1,
-                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                    }}>
-                      {v}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', letterSpacing: '0.02em', marginTop: 2, whiteSpace: 'nowrap' }}>
-                    {label.toUpperCase()}
-                  </div>
-                </div>
-              ))}
-            </div>
-          );
-        })()}
       </div>
 
       {/* Gráfica de tendencia */}

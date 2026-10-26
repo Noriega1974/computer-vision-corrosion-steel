@@ -456,50 +456,111 @@ export default function MedicionDetailPage() {
           )}
         </div>
 
-        {/* ── Columna derecha: veredicto normativo y resultados principales ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3-5)' }}>
+        {/* ── Columna derecha: Flashcard de la medición (sin huecos entre tarjetas) ── */}
+        <div style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border)',
+          borderRadius: 14,
+          padding: '18px 20px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
+          boxShadow: 'var(--shadow-sm)',
+        }}>
+          {/* 1. Cabecera: Título (Punto) + Subtítulo (Zona · Ciudad · Fecha) */}
+          <div>
+            <div style={{
+              fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 20,
+              color: 'var(--text-primary)', letterSpacing: '-0.01em', lineHeight: 1.15,
+            }}>
+              {punto.sede ?? 'Punto sin nombre'}
+            </div>
+            <div style={{
+              fontSize: 13, color: 'var(--text-muted)', fontWeight: 400, marginTop: 4,
+              fontFamily: 'var(--font-ui)',
+            }}>
+              {zonaNombre} · {punto.ciudad ?? '—'} · {tiempoRelativo(medicion.timestamp)}
+            </div>
+          </div>
 
-          {/* Veredicto + porcentaje de área corroída unificados en una sola tarjeta */}
+          {/* 2. Bloque central encuadrado: Veredicto + Barra de progreso de área corroída */}
           <div style={{
-            background: bg, border: `1px solid ${color}40`,
-            borderRadius: 12, padding: '14px 18px',
-            borderTop: `3px solid ${color}`,
+            background: bg,
+            border: `1px solid ${color}45`,
+            borderRadius: 10,
+            padding: '14px 16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, marginBottom: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ width: 9, height: 9, borderRadius: '50%', background: color, flexShrink: 0 }} />
                 <span style={{
-                  fontFamily: 'var(--font-data)', fontWeight: 700,
-                  fontSize: 'var(--text-xl)', color,
+                  fontFamily: 'var(--font-ui)', fontWeight: 700,
+                  fontSize: 17, color,
                   animation: nivel === 3 ? 'blink 1.2s ease-in-out infinite' : 'none',
                 }}>
                   {nivelLabel(nivel)}
                 </span>
               </div>
-              <span style={{ fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 'var(--text-lg)', color }}>
+              <span style={{
+                fontFamily: 'var(--font-data)', fontWeight: 800,
+                fontSize: 20, color, letterSpacing: '-0.02em',
+              }}>
                 {(medicion.area_corroida_pct ?? 0).toFixed(1)}%
               </span>
             </div>
             <BarraPorcentaje valor={medicion.area_corroida_pct ?? 0} color={color} />
-          </div>
 
-          {/* Datos de ubicación y contexto */}
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 18px' }}>
-            <SectionTitle>Resultados del análisis</SectionTitle>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2-5)' }}>
+            {/* Metadatos secundarios compactos dentro de la caja central */}
+            <div style={{
+              display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 14px',
+              paddingTop: 10, marginTop: 2, borderTop: `1px solid ${color}25`,
+            }}>
               <MetaItem label="Zona" value={zonaNombre} />
-              <MetaItem label="Punto" value={punto.sede ?? '—'} />
               <MetaItem label="Ciudad" value={punto.ciudad ?? '—'} />
-              <MetaItem label="Fecha" value={tiempoRelativo(medicion.timestamp)} />
+              <MetaItem label="Registro" value={formatFecha(medicion.timestamp, { conHora: true })} />
+              <MetaItem label="Antigüedad" value={tiempoRelativo(medicion.timestamp)} />
             </div>
           </div>
 
-          {/* Fecha y hora detallada */}
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 20px' }}>
-            <SectionTitle>Fecha y hora de registro</SectionTitle>
-            <div style={{ fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>
-              {formatFecha(medicion.timestamp, { conHora: true, conSegundos: true })}
-            </div>
+          {/* 3. Pie de la flashcard: Acciones rápidas (píldoras) */}
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            gap: 10, flexWrap: 'wrap',
+          }}>
+            <button
+              type="button"
+              onClick={() => navigate(`/dashboard?punto=${medicion.bloque_id}`)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '9px 14px', borderRadius: 999,
+                background: 'var(--bg-inset)', border: '1px solid var(--border)',
+                color: 'var(--text-primary)', fontFamily: 'var(--font-ui)',
+                fontWeight: 600, fontSize: 12, cursor: 'pointer',
+              }}
+            >
+              <MapPin size={14} /> Ver en mapa
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDescargarVistaActual}
+              disabled={!medicion.url_imagen || descargandoVista}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '9px 16px', borderRadius: 999,
+                background: 'var(--text-primary)', border: 'none',
+                color: 'var(--bg-card-solid)', fontFamily: 'var(--font-ui)',
+                fontWeight: 600, fontSize: 12,
+                cursor: (!medicion.url_imagen || descargandoVista) ? 'not-allowed' : 'pointer',
+                opacity: (!medicion.url_imagen || descargandoVista) ? 0.5 : 1,
+              }}
+            >
+              <Download size={14} />
+              {descargandoVista ? 'Generando…' : `Descargar (${TABS.find(t => t.key === activeTab)?.label})`}
+            </button>
           </div>
         </div>
       </div>

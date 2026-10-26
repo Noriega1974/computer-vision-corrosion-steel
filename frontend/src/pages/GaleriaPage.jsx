@@ -21,45 +21,57 @@ function tiempoRelativo(timestamp) {
   return formatFecha(timestamp);
 }
 
-// ─── Card de galería ─────────────────────────────────────────────────────────
+// ─── Card de galería (patrón Flashcard) ──────────────────────────────────────
 function MedicionCard({ medicion, to, state }) {
   const nivel = medicion.nivel_corrosion ?? 0;
   const color = nivelColor(nivel);
-  // sede/ciudad ya no viajan denormalizadas en la medición -- el nombre del
-  // punto (bloque) sí, resuelto y congelado al momento de subir la medición.
   const nombrePunto = medicion.bloque_nombre ?? 'Sin punto asignado';
+  const pct = (medicion.area_corroida_pct ?? 0).toFixed(1);
 
   return (
-    // Link y no <div onClick>: esto navega a la ficha de la medicion, asi que
-    // corresponde un ancla real. Ademas de ser accesible por teclado, habilita
-    // Cmd/Ctrl+click y click del medio para abrir en otra pestaña, que en un
-    // listado de mediciones se usa todo el tiempo.
     <Link
       to={to}
       state={state}
       className="medicion-card"
       style={{
-        display: 'block',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+        padding: 14,
         textDecoration: 'none',
         color: 'inherit',
         background: 'var(--bg-card)',
         border: '1px solid var(--border)',
-        borderRadius: 10,
+        borderRadius: 14,
         overflow: 'hidden',
         boxShadow: 'var(--shadow-sm)',
       }}
     >
-      {/* Imagen o placeholder */}
+      {/* 1. Cabecera: Título en negrita + subtítulo suave */}
+      <div>
+        <div style={{
+          fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 15,
+          color: 'var(--text-primary)', lineHeight: 1.2,
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>
+          {nombrePunto}
+        </div>
+        <div style={{
+          fontSize: 12, color: 'var(--text-muted)', marginTop: 2,
+          fontFamily: 'var(--font-ui)',
+        }}>
+          {tiempoRelativo(medicion.timestamp)}
+        </div>
+      </div>
+
+      {/* 2. Imagen encuadrada con bordes redondeados */}
       <div style={{
-        height: 170, background: 'var(--bg-inset)',
+        height: 164, background: 'var(--bg-inset)',
+        borderRadius: 10, border: '1px solid var(--border)',
         position: 'relative', overflow: 'hidden',
       }}>
         {medicion.url_imagen ? (
           <img
-            // Miniatura (~400px, unos 40KB) en vez de la foto original
-            // (hasta 4032x3024, 2-4MB) -- acá solo se muestra en un
-            // cuadrito de 170px. `url_thumbnail` cae a `url_imagen` para
-            // mediciones de antes de que existiera la miniatura.
             src={medicion.url_thumbnail || medicion.url_imagen}
             alt="Medición"
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
@@ -78,24 +90,11 @@ function MedicionCard({ medicion, to, state }) {
           </div>
         )}
 
-        {/* Badge de nivel */}
-        <div style={{
-          position: 'absolute', top: 8, right: 8,
-          padding: '3px 8px', borderRadius: 20,
-          background: `${color}ee`,
-          fontFamily: 'var(--font-data)', fontWeight: 700,
-          fontSize: 'var(--text-3xs)', color: 'white',
-          letterSpacing: '0.06em',
-          boxShadow: `0 2px 8px ${color}50`,
-        }}>
-          {nivelLabel(nivel).toUpperCase()}
-        </div>
-
-        {/* Barra de área corroída en la parte inferior */}
+        {/* Barra de progreso al pie de la imagen */}
         {medicion.area_corroida_pct != null && (
           <div style={{
-            position: 'absolute', bottom: 0, left: 0, right: 0, height: 3,
-            background: 'rgba(0,0,0,0.3)',
+            position: 'absolute', bottom: 0, left: 0, right: 0, height: 4,
+            background: 'rgba(0,0,0,0.35)',
           }}>
             <div style={{
               height: '100%',
@@ -109,33 +108,35 @@ function MedicionCard({ medicion, to, state }) {
         )}
       </div>
 
-      {/* Metadata */}
-      <div style={{ padding: '12px 14px' }}>
-        <div style={{
-          fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)',
-          color: 'var(--text-primary)', marginBottom: 'var(--space-2)',
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        }}>
-          {nombrePunto}
+      {/* 3. Pie: métrica grande + estado a la izquierda, botón píldora CTA a la derecha */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        gap: 10, marginTop: 2,
+      }}>
+        <div>
+          <div style={{
+            fontFamily: 'var(--font-data)', fontWeight: 800, fontSize: 18,
+            color: 'var(--text-primary)', lineHeight: 1.05, letterSpacing: '-0.02em',
+          }}>
+            {pct}%
+          </div>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 5, marginTop: 3,
+            fontSize: 11, color: 'var(--text-muted)', fontWeight: 500,
+          }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
+            <span>{nivelLabel(nivel)}</span>
+          </div>
         </div>
 
-        <div style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        <span style={{
+          padding: '7px 14px', borderRadius: 999,
+          background: 'var(--text-primary)', color: 'var(--bg-card-solid)',
+          fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 12,
+          lineHeight: 1, flexShrink: 0,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <div style={{
-              width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0,
-            }} />
-            <span style={{
-              fontFamily: 'var(--font-data)', fontSize: 'var(--text-2xs)', color,
-            }}>
-              {(medicion.area_corroida_pct ?? 0).toFixed(1)}%
-            </span>
-          </div>
-          <span style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', fontFamily: 'var(--font-data)' }}>
-            {tiempoRelativo(medicion.timestamp)}
-          </span>
-        </div>
+          Ver detalle
+        </span>
       </div>
     </Link>
   );
