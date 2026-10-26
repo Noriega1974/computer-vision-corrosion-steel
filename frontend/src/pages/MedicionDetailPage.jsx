@@ -633,7 +633,7 @@ export default function MedicionDetailPage() {
           }}
         >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <Settings size={15} /> Más opciones y detalles técnicos (Ubicación, Clima, Descarga, Gestión)
+            <Settings size={15} /> Más opciones y detalles técnicos (Ubicación, Descarga, Gestión)
           </span>
           {showMasOpciones ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
         </button>
@@ -647,7 +647,7 @@ export default function MedicionDetailPage() {
             gap: 20,
           }}>
             {/* Ubicación y mapa: la celda se estira al alto de la columna
-                derecha (clima + gestión) y el mapa llena ese alto. */}
+                derecha (referencia + gestión) y el mapa llena ese alto. */}
             <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
               <SectionTitle>Ubicación geográfica del espécimen</SectionTitle>
               <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -668,21 +668,8 @@ export default function MedicionDetailPage() {
               )}
             </div>
 
-            {/* Condiciones meteorológicas + Gestión */}
+            {/* Referencia ISO + Gestión */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Clima Open-Meteo: solo con coordenadas válidas y algún dato */}
-              {tieneClima && (
-                <div>
-                  <SectionTitle>Condiciones meteorológicas (Open-Meteo)</SectionTitle>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)' }}>
-                    {clima.temperatura_c != null && <ClimaItem icon={<Thermometer size={13} />} label="Temperatura" value={`${clima.temperatura_c} °C`} />}
-                    {clima.humedad_pct != null && <ClimaItem icon={<Droplets size={13} />} label="Humedad" value={`${clima.humedad_pct} %`} />}
-                    {vientoKmh != null && <ClimaItem icon={<Wind size={13} />} label="Viento" value={`${vientoKmh} km/h`} />}
-                    {clima.precipitacion_mm != null && <ClimaItem icon={<Droplets size={13} />} label="Precipitación" value={`${clima.precipitacion_mm} mm`} />}
-                  </div>
-                </div>
-              )}
-
               {/* Referencia técnica ISO 10289: tarjetas estructuradas con barra de color */}
               <div>
                 <SectionTitle>Escala de referencia (ISO 10289)</SectionTitle>
