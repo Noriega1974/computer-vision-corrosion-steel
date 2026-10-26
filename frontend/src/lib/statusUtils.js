@@ -7,10 +7,10 @@
 //   3: Severa          ≥25 %
 
 export const NIVELES = [
-  { status: 'OK',       label: 'Sin corrosión', short: 'Sin corrosión', range: '<0,05 %' },
-  { status: 'EARLY',    label: 'Leve',          short: 'Leve',          range: '0,05–<10 %' },
-  { status: 'MODERATE', label: 'Moderada',      short: 'Moderada',      range: '10–<25 %' },
-  { status: 'CRITICAL', label: 'Severa',        short: 'Severa',        range: '≥25 %' },
+  { status: 'OK',       label: 'Sin corrosión', short: 'Sin corrosión', range: 'Menor a 0,05%' },
+  { status: 'EARLY',    label: 'Leve',          short: 'Leve',          range: '0,05% a 10%' },
+  { status: 'MODERATE', label: 'Moderada',      short: 'Moderada',      range: '10% a 25%' },
+  { status: 'CRITICAL', label: 'Severa',        short: 'Severa',        range: '25% o más' },
 ];
 
 const byStatus = (status) => NIVELES.find(n => n.status === status);

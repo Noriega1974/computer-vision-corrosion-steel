@@ -643,28 +643,50 @@ export default function MedicionDetailPage() {
                 </div>
               )}
 
-              {/* Referencia técnica ISO 10289: solo visible al abrir detalles técnicos */}
+              {/* Referencia técnica ISO 10289: tarjetas estructuradas con barra de color */}
               <div>
-                <SectionTitle>Criterio técnico (ISO 10289)</SectionTitle>
+                <SectionTitle>Escala de referencia (ISO 10289)</SectionTitle>
                 <div style={{
-                  display: 'flex', flexWrap: 'wrap', gap: '6px 12px',
-                  padding: '8px 10px', background: 'var(--bg-inset)',
-                  border: '1px solid var(--border)', borderRadius: 8,
-                  fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-data)',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                  gap: 6,
                 }}>
-                  {NIVELES.map((n, i) => (
-                    <span
-                      key={n.status}
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 5,
-                        color: i === nivel ? nivelColor(i) : 'var(--text-muted)',
-                        fontWeight: i === nivel ? 700 : 400,
-                      }}
-                    >
-                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: nivelColor(i), flexShrink: 0 }} />
-                      {n.label}: {n.range}
-                    </span>
-                  ))}
+                  {NIVELES.map((n, i) => {
+                    const activo = i === nivel;
+                    const c = nivelColor(i);
+                    return (
+                      <div
+                        key={n.status}
+                        style={{
+                          padding: '8px 10px',
+                          background: activo ? nivelBg(i) : 'var(--bg-inset)',
+                          border: `1px solid ${activo ? `${c}60` : 'var(--border)'}`,
+                          borderRadius: 8,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 5,
+                        }}
+                      >
+                        <div style={{
+                          height: 4, borderRadius: 999,
+                          background: activo ? c : `${c}45`,
+                        }} />
+                        <div style={{
+                          fontFamily: 'var(--font-ui)', fontSize: 12,
+                          fontWeight: 700, color: activo ? c : 'var(--text-primary)',
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                        }}>
+                          {n.label}
+                        </div>
+                        <div style={{
+                          fontFamily: 'var(--font-data)', fontSize: 10,
+                          color: 'var(--text-muted)', lineHeight: 1.2,
+                        }}>
+                          {n.range}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
