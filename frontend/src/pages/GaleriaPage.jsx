@@ -6,7 +6,7 @@ import { useEmpresas } from '../hooks/useEmpresas';
 import { useAuth } from '../auth/AuthContext';
 import { NIVELES, nivelColor, nivelLabel } from '../lib/statusUtils';
 import { formatFecha } from '../utils/dateFormat';
-import { normalizar } from '../lib/textUtils';
+import { normalizar, formatoPct } from '../lib/textUtils';
 
 // ─── Helper: tiempo relativo ─────────────────────────────────────────────────
 function tiempoRelativo(timestamp) {
@@ -29,7 +29,6 @@ function MedicionCard({ medicion, to, state }) {
   const nombrePunto = medicion.bloque_nombre ?? 'Sin punto asignado';
   // Si la foto tiene nombre, es el título y el punto pasa al subtítulo.
   const titulo = medicion.nombre || nombrePunto;
-  const pct = (medicion.area_corroida_pct ?? 0).toFixed(1);
 
   return (
     <Link
@@ -121,7 +120,10 @@ function MedicionCard({ medicion, to, state }) {
             fontFamily: 'var(--font-data)', fontWeight: 800, fontSize: 18,
             color: 'var(--text-primary)', lineHeight: 1.05, letterSpacing: '-0.02em',
           }}>
-            {pct}%
+            {formatoPct(medicion.area_corroida_pct)}
+            <span style={{ fontFamily: 'var(--font-ui)', fontWeight: 500, fontSize: 11, color: 'var(--text-muted)', letterSpacing: 0, marginLeft: 6 }}>
+              Área corroída
+            </span>
           </div>
           <div style={{
             display: 'flex', alignItems: 'center', gap: 5, marginTop: 3,

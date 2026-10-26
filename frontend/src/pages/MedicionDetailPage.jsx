@@ -11,6 +11,8 @@ import { formatFecha } from '../utils/dateFormat';
 import { apiDelete, apiPatch } from '../lib/apiClient';
 import { useRefreshKey } from '../hooks/RefreshKeyContext';
 import SegmentationOverlay from '../components/SegmentationOverlay';
+import NivelIcon from '../components/NivelIcon';
+import { formatoPct } from '../lib/textUtils';
 
 // ─── Helper tiempo relativo ───────────────────────────────────────────────────
 function tiempoRelativo(timestamp) {
@@ -510,29 +512,37 @@ export default function MedicionDetailPage() {
             gap: 10,
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ width: 9, height: 9, borderRadius: '50%', background: color, flexShrink: 0 }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, color }}>
+                <NivelIcon nivel={nivel} size={30} />
                 <span style={{
-                  fontFamily: 'var(--font-ui)', fontWeight: 700,
-                  fontSize: 17, color,
+                  fontFamily: 'var(--font-ui)', fontWeight: 800,
+                  fontSize: 26, color, letterSpacing: '-0.01em', lineHeight: 1.1,
                   animation: nivel === 3 ? 'blink 1.2s ease-in-out infinite' : 'none',
                 }}>
                   {nivelLabel(nivel)}
                 </span>
               </div>
-              <span style={{
-                fontFamily: 'var(--font-data)', fontWeight: 800,
-                fontSize: 20, color, letterSpacing: '-0.02em',
-              }}>
-                {(medicion.area_corroida_pct ?? 0).toFixed(1)}%
-              </span>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{
+                  fontFamily: 'var(--font-data)', fontWeight: 800,
+                  fontSize: 30, color, letterSpacing: '-0.02em', lineHeight: 1.05,
+                }}>
+                  {formatoPct(medicion.area_corroida_pct)}
+                </div>
+                <div style={{
+                  fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 12,
+                  color: 'var(--text-muted)', marginTop: 2,
+                }}>
+                  Área corroída
+                </div>
+              </div>
             </div>
             <BarraPorcentaje valor={medicion.area_corroida_pct ?? 0} color={color} />
 
             {/* Metadatos secundarios compactos dentro de la caja central */}
             <div style={{
-              display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 14px',
-              paddingTop: 10, marginTop: 2, borderTop: `1px solid ${color}25`,
+              display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
+              paddingTop: 12, marginTop: 2, borderTop: `1px solid ${color}25`,
             }}>
               <MetaItem label="Zona" value={zonaNombre} />
               <MetaItem label="Ciudad" value={punto.ciudad ?? '—'} />
@@ -861,15 +871,12 @@ function MetaLabel({ children }) {
   );
 }
 
-function MetaItem({ label, value, wrap }) {
+function MetaItem({ label, value }) {
   return (
-    <div style={{ background: 'var(--bg-inset)', borderRadius: 6, padding: '8px 10px' }}>
-      <div style={{ fontSize: 9, color: 'var(--text-faint)', marginBottom: 2, fontFamily: 'var(--font-data)', letterSpacing: '0.08em' }}>{label}</div>
-      <div style={wrap ? {
-        fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 'var(--text-2xs)',
-        color: 'var(--text-primary)', wordBreak: 'break-all', lineHeight: 1.4,
-      } : {
-        fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 'var(--text-xs)',
+    <div style={{ background: 'var(--bg-inset)', borderRadius: 8, padding: '10px 12px', minWidth: 0 }}>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 3, fontFamily: 'var(--font-ui)', fontWeight: 500 }}>{label}</div>
+      <div style={{
+        fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 16, lineHeight: 1.25,
         color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>{value}</div>
     </div>
