@@ -1,16 +1,48 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import exifr from 'exifr';
 import { useBloques } from '../hooks/useBloques';
 import { useUploadMedicion } from '../hooks/useUploadMedicion';
 import { nivelColor, nivelLabel } from '../lib/statusUtils';
 import SearchableSelect from '../components/SearchableSelect';
+import { registrarTiempo, borrarTiempos, leerTiempos, descargarTiemposCsv } from '../lib/tiemposAnalisis';
+
+// Tope de la foto: lo impone también S3 (política del POST prefirmado) y el
+// backend; este chequeo solo evita subir 50+ MB para recibir un rechazo.
+const MAX_FOTO_MB = 50;
+const formatoSegundos = s => s.toFixed(2).replace('.', ',');
 
 // ─── Componente: resultado del análisis ─────────────────────────────────────
-function ResultadoAnalisis({ result, onReset, onDashboard }) {
+function ResultadoAnalisis({ result, tiempos, archivo, onReset, onDashboard }) {
   const nivel = result.nivel_corrosion ?? 0;
   const color = nivelColor(nivel);
   const bloque = result.bloque_info ?? {};
+
+  // Tiempo de análisis percibido: del clic en "Analizar imagen" hasta que la
+  // imagen del resultado termina de cargar (si la respuesta no trae imagen,
+  // hasta que el resultado se muestra). Se mide una sola vez por resultado.
+  const [totalS, setTotalS] = useState(null);
+  const [nFilas, setNFilas] = useState(() => leerTiempos().length);
+  const medido = useRef(false);
+  const cerrarTiempo = useCallback(() => {
+    if (medido.current) return;
+    medido.current = true;
+    const total = (performance.now() - tiempos.inicio) / 1000;
+    setTotalS(total);
+    registrarTiempo({
+      fecha_iso: new Date().toISOString(),
+      archivo: archivo.name,
+      tamano_bytes: archivo.size,
+      total_s: Number(total.toFixed(3)),
+      subida_s: Number(tiempos.subidaS.toFixed(3)),
+      analisis_s: Number(tiempos.analisisS.toFixed(3)),
+      modelo: result.modelo ?? '',
+    });
+    setNFilas(leerTiempos().length);
+  }, [tiempos, archivo, result.modelo]);
+  useEffect(() => {
+    if (!result.url_imagen) cerrarTiempo();
+  }, [result.url_imagen, cerrarTiempo]);
 
   return (
     <div style={{ maxWidth: 560, margin: '0 auto', animation: 'fade-in-up 0.4s ease' }}>
@@ -36,6 +68,8 @@ function ResultadoAnalisis({ result, onReset, onDashboard }) {
         <img
           src={result.url_imagen}
           alt="Resultado"
+          onLoad={cerrarTiempo}
+          onError={cerrarTiempo}
           style={{ width: '100%', borderRadius: 10, marginBottom: 'var(--space-4)', border: `2px solid ${color}40`, maxHeight: 280, objectFit: 'cover' }}
         />
       )}
@@ -72,6 +106,33 @@ function ResultadoAnalisis({ result, onReset, onDashboard }) {
         </div>
       </div>
 
+      {/* Tiempo de análisis (estudio de latencia) */}
+      {totalS !== null && (
+        <div style={{ marginBottom: 20, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
+          <div style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
+            Tiempo de análisis: {formatoSegundos(totalS)} s
+          </div>
+          <div>
+            Subida {formatoSegundos(tiempos.subidaS)} s · Análisis {formatoSegundos(tiempos.analisisS)} s
+          </div>
+          <div style={{ marginTop: 4 }}>
+            <button type="button" onClick={descargarTiemposCsv} style={linkBtnStyle}>
+              Descargar tiempos (CSV)
+            </button>
+            {' · '}
+            <button
+              type="button"
+              onClick={() => { borrarTiempos(); setNFilas(0); }}
+              disabled={nFilas === 0}
+              style={{ ...linkBtnStyle, opacity: nFilas === 0 ? 0.5 : 1 }}
+            >
+              Borrar tiempos
+            </button>
+            {' '}({nFilas} guardados en este navegador)
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 'var(--space-2-5)' }}>
         <button onClick={onReset} style={btnSecondaryStyle}>
           Subir otra imagen
@@ -96,6 +157,11 @@ const btnSecondaryStyle = {
   color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)',
   fontWeight: 500, fontSize: 14, cursor: 'pointer',
 };
+const linkBtnStyle = {
+  background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+  color: 'var(--accent-blue)', fontFamily: 'var(--font-ui)',
+  fontSize: 'inherit', textDecoration: 'underline',
+};
 const labelStyle = {
   display: 'block', fontFamily: 'var(--font-data)', fontSize: 'var(--text-2xs)',
   fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.1em',
@@ -111,7 +177,8 @@ const inputStyle = {
 // ─── Página principal ─────────────────────────────────────────────────────────
 export default function UploadPage() {
   const navigate = useNavigate();
-  const { upload, loading: uploading, error: uploadError, result, reset } = useUploadMedicion();
+  const { upload, loading: uploading, fase, error: uploadError, result, tiempos, reset } = useUploadMedicion();
+  const [errorLocal, setErrorLocal] = useState(null);  // validación previa a la subida
 
   // Lista de puntos (bloques) para elegir dónde se tomó la medición -- ya
   // scopeada por el backend a la empresa de quien sube (admin/tecnico).
@@ -145,10 +212,7 @@ export default function UploadPage() {
       alert('Solo se aceptan imágenes JPG o PNG.');
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      alert('La imagen no puede superar 10 MB.');
-      return;
-    }
+    setErrorLocal(null);
     setImagen(file);
     // Preview
     const reader = new FileReader();
@@ -175,16 +239,6 @@ export default function UploadPage() {
     if (file) procesarImagen(file);
   }, [procesarImagen]);
 
-  // Convertir imagen a base64 (sin el prefijo data:...)
-  async function imagenABase64(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = e => resolve(e.target.result.split(',')[1]);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }
-
   // Enviar formulario
   //
   // bloque_id viaja en la RAÍZ del body y es obligatorio -- el punto ya
@@ -196,10 +250,17 @@ export default function UploadPage() {
     if (!imagen) { alert('Selecciona una imagen primero.'); return; }
     if (!bloqueSeleccionado) { alert('Selecciona el punto donde se tomó la medición.'); return; }
 
-    const imagen_base64 = await imagenABase64(imagen);
+    // El tiempo de análisis cuenta desde este clic, antes de subir la foto.
+    const inicio = performance.now();
+    if (imagen.size > MAX_FOTO_MB * 1024 * 1024) {
+      const mb = (imagen.size / (1024 * 1024)).toFixed(1).replace('.', ',');
+      setErrorLocal(`La foto pesa ${mb} MB; el máximo es ${MAX_FOTO_MB} MB.`);
+      return;
+    }
+    setErrorLocal(null);
 
+    // La foto NO viaja en este body: el hook la sube a S3 y agrega `imagen_key`.
     const body = {
-      imagen_base64,
       fuente: 'movil',
       bloque_id: bloqueSeleccionado.id_bloque,
       ...(notas && { notas }),
@@ -211,7 +272,7 @@ export default function UploadPage() {
     };
 
     try {
-      await upload(body);
+      await upload(imagen, body, inicio);
     } catch { /* error ya en state */ }
   }
 
@@ -221,6 +282,8 @@ export default function UploadPage() {
       <div style={{ minHeight: '100vh', background: 'var(--bg-page)', padding: '32px 20px' }}>
         <ResultadoAnalisis
           result={result}
+          tiempos={tiempos}
+          archivo={{ name: imagen?.name ?? '', size: imagen?.size ?? 0 }}
           onReset={() => { reset(); setImagen(null); setPreview(null); setExifGps(null); setBloqueSeleccionado(null); }}
           onDashboard={() => navigate('/galeria')}
         />
@@ -260,7 +323,7 @@ export default function UploadPage() {
               <div
                 role="button"
                 tabIndex={0}
-                aria-label="Seleccionar imagen: JPG o PNG, máximo 10 MB"
+                aria-label="Seleccionar imagen: JPG o PNG, máximo 50 MB"
                 onDrop={handleDrop}
                 onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
@@ -282,7 +345,7 @@ export default function UploadPage() {
                 <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 'var(--space-1)' }}>
                   Arrastra una imagen aquí o haz clic para seleccionar
                 </div>
-                <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>JPG o PNG · Máximo 10 MB</div>
+                <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>JPG o PNG · Máximo 50 MB</div>
                 <input
                   id="file-input" name="imagen" type="file"
                   accept="image/jpeg,image/png" tabIndex={-1}
@@ -414,14 +477,14 @@ export default function UploadPage() {
           </Section>
 
           {/* Error de upload */}
-          {uploadError && (
+          {(errorLocal || uploadError) && (
             <div style={{
               padding: '12px 16px', marginBottom: 'var(--space-4)',
               background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.3)',
               borderLeft: '3px solid var(--accent-red)', borderRadius: '0 8px 8px 0',
               fontSize: 'var(--text-sm)', color: 'var(--accent-red)',
             }}>
-              {uploadError}
+              {errorLocal || uploadError}
             </div>
           )}
 
@@ -442,7 +505,7 @@ export default function UploadPage() {
                   width: 18, height: 18, border: '2px solid rgba(255,255,255,0.3)',
                   borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.8s linear infinite',
                 }} />
-                Analizando con IA… (puede tomar 15-30s)
+                {fase === 'subiendo' ? 'Subiendo foto…' : 'Analizando con IA… (puede tomar 15-30s)'}
               </>
             ) : (
               '🔬 Analizar imagen'
