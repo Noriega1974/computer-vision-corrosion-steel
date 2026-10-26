@@ -1,137 +1,77 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { MapPin, Check, ImagePlus, Microscope } from 'lucide-react';
 import exifr from 'exifr';
 import { useBloques } from '../hooks/useBloques';
 import { useUploadMedicion } from '../hooks/useUploadMedicion';
-import { nivelColor, nivelLabel } from '../lib/statusUtils';
+import { nivelColor, nivelBg, nivelLabel } from '../lib/statusUtils';
 import SearchableSelect from '../components/SearchableSelect';
-import { registrarTiempo, borrarTiempos, leerTiempos, descargarTiemposCsv } from '../lib/tiemposAnalisis';
+import NivelIcon from '../components/NivelIcon';
 
 // Tope de la foto: lo impone también S3 (política del POST prefirmado) y el
 // backend; este chequeo solo evita subir 50+ MB para recibir un rechazo.
 const MAX_FOTO_MB = 50;
-const formatoSegundos = s => s.toFixed(2).replace('.', ',');
 
 // ─── Componente: resultado del análisis ─────────────────────────────────────
-function ResultadoAnalisis({ result, tiempos, archivo, onReset, onDashboard }) {
+const NOMBRE_MAX = 80;
+const formatoPct = n => n.toFixed(1).replace('.', ',');
+
+function ResultadoAnalisis({ result, onReset, onDashboard }) {
   const nivel = result.nivel_corrosion ?? 0;
   const color = nivelColor(nivel);
   const bloque = result.bloque_info ?? {};
-
-  // Tiempo de análisis percibido: del clic en "Analizar imagen" hasta que la
-  // imagen del resultado termina de cargar (si la respuesta no trae imagen,
-  // hasta que el resultado se muestra). Se mide una sola vez por resultado.
-  const [totalS, setTotalS] = useState(null);
-  const [nFilas, setNFilas] = useState(() => leerTiempos().length);
-  const medido = useRef(false);
-  const cerrarTiempo = useCallback(() => {
-    if (medido.current) return;
-    medido.current = true;
-    const total = (performance.now() - tiempos.inicio) / 1000;
-    setTotalS(total);
-    registrarTiempo({
-      fecha_iso: new Date().toISOString(),
-      archivo: archivo.name,
-      tamano_bytes: archivo.size,
-      total_s: Number(total.toFixed(3)),
-      subida_s: Number(tiempos.subidaS.toFixed(3)),
-      analisis_s: Number(tiempos.analisisS.toFixed(3)),
-      modelo: result.modelo ?? '',
-    });
-    setNFilas(leerTiempos().length);
-  }, [tiempos, archivo, result.modelo]);
-  useEffect(() => {
-    if (!result.url_imagen) cerrarTiempo();
-  }, [result.url_imagen, cerrarTiempo]);
+  const areaPct = result.area_corroida_pct ?? 0;
 
   return (
     <div style={{ maxWidth: 560, margin: '0 auto', animation: 'fade-in-up 0.4s ease' }}>
-      {/* Banner de resultado */}
+      {/* Tarjeta única de resultado */}
       <div style={{
-        textAlign: 'center', padding: '28px 24px 20px',
-        background: `${color}10`, border: `1px solid ${color}40`,
-        borderRadius: 12, marginBottom: 20,
+        background: 'var(--bg-card)', border: '1px solid var(--border)',
+        borderRadius: 14, padding: '24px 22px', marginBottom: 20,
+        boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: 18,
       }}>
-        <div style={{ fontSize: 40, marginBottom: 'var(--space-2)' }}>
-          {nivel === 0 ? '✅' : nivel === 1 ? '⚠️' : nivel === 2 ? '🔶' : '🚨'}
-        </div>
-        <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 'var(--text-xl)', color, marginBottom: 'var(--space-1)' }}>
-          {nivelLabel(nivel)}
-        </div>
-        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-          Análisis completado — {bloque.nombre ?? '—'}{bloque.ciudad ? ` · ${bloque.ciudad}` : ''}
-        </div>
-      </div>
-
-      {/* Imagen analizada */}
-      {result.url_imagen && (
-        <img
-          src={result.url_imagen}
-          alt="Resultado"
-          onLoad={cerrarTiempo}
-          onError={cerrarTiempo}
-          style={{ width: '100%', borderRadius: 10, marginBottom: 'var(--space-4)', border: `2px solid ${color}40`, maxHeight: 280, objectFit: 'cover' }}
-        />
-      )}
-
-      {/* Métricas */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2-5)', marginBottom: 20 }}>
-        {[
-          { label: 'Área corroída', value: `${(result.area_corroida_pct ?? 0).toFixed(1)}%`, color },
-          { label: 'Nivel ISO 10289', value: `${nivel}/3`, color },
-        ].map(({ label, value, color: c }) => (
-          <div key={label} style={{
-            background: 'var(--bg-inset)', border: '1px solid var(--border)',
-            borderRadius: 8, padding: '12px 14px', textAlign: 'center',
+        {result.nombre && (
+          <div style={{
+            fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 20, lineHeight: 1.2,
+            color: 'var(--text-primary)', letterSpacing: '-0.01em', overflowWrap: 'anywhere',
           }}>
-            <div style={{ fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 'var(--text-xl)', color: c }}>{value}</div>
-            <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)', marginTop: 3, letterSpacing: '0.06em' }}>{label.toUpperCase()}</div>
+            {result.nombre}
           </div>
-        ))}
-      </div>
-
-      {/* Info del punto */}
-      <div style={{ background: 'var(--bg-inset)', borderRadius: 8, padding: '12px 16px', marginBottom: 20, border: '1px solid var(--border)' }}>
-        <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)', marginBottom: 'var(--space-2)', letterSpacing: '0.08em' }}>PUNTO DE MEDICIÓN</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-          {[
-            ['Punto', bloque.nombre ?? '—'],
-            ['Ciudad', bloque.ciudad ?? '—'],
-          ].map(([l, v]) => (
-            <div key={l}>
-              <span style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)' }}>{l}: </span>
-              <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-primary)', fontWeight: 500 }}>{v}</span>
-            </div>
-          ))}
+        )}
+        <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--text-muted)', marginTop: result.nombre ? -10 : 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <MapPin size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
+          <span>{bloque.nombre ?? '—'}{bloque.ciudad ? ` · ${bloque.ciudad}` : ''}</span>
         </div>
-      </div>
 
-      {/* Tiempo de análisis (estudio de latencia) */}
-      {totalS !== null && (
-        <div style={{ marginBottom: 20, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
-          <div style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
-            Tiempo de análisis: {formatoSegundos(totalS)} s
+        <div style={{
+          background: nivelBg(nivel), border: `1px solid ${color}45`, borderRadius: 12,
+          padding: '22px 18px', textAlign: 'center',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'var(--space-2)' }}>
+            <NivelIcon nivel={nivel} size={44} color={color} />
           </div>
-          <div>
-            Subida {formatoSegundos(tiempos.subidaS)} s · Análisis {formatoSegundos(tiempos.analisisS)} s
+          <div style={{ fontFamily: 'var(--font-ui)', fontSize: 20, color, letterSpacing: '-0.01em' }}>
+            Tipo de corrosión: <span style={{ fontWeight: 800, fontSize: 28 }}>{nivelLabel(nivel)}</span>
           </div>
-          <div style={{ marginTop: 4 }}>
-            <button type="button" onClick={descargarTiemposCsv} style={linkBtnStyle}>
-              Descargar tiempos (CSV)
-            </button>
-            {' · '}
-            <button
-              type="button"
-              onClick={() => { borrarTiempos(); setNFilas(0); }}
-              disabled={nFilas === 0}
-              style={{ ...linkBtnStyle, opacity: nFilas === 0 ? 0.5 : 1 }}
-            >
-              Borrar tiempos
-            </button>
-            {' '}({nFilas} guardados en este navegador)
+          {/* Fuente de interfaz con cifras tabulares: la monoespaciada dejaba
+              un hueco visible alrededor de la coma decimal. */}
+          <div style={{ fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 52, color, letterSpacing: '-0.02em', lineHeight: 1.1, marginTop: 10 }}>
+            {formatoPct(areaPct)}%
+          </div>
+          <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', marginTop: 6, letterSpacing: '0.08em', fontWeight: 600 }}>
+            ÁREA CORROÍDA
           </div>
         </div>
-      )}
+
+        {/* Imagen analizada */}
+        {result.url_imagen && (
+          <img
+            src={result.url_imagen}
+            alt="Resultado"
+            style={{ width: '100%', borderRadius: 10, border: `2px solid ${color}40`, maxHeight: 280, objectFit: 'cover' }}
+          />
+        )}
+      </div>
 
       <div style={{ display: 'flex', gap: 'var(--space-2-5)' }}>
         <button onClick={onReset} style={btnSecondaryStyle}>
@@ -157,11 +97,6 @@ const btnSecondaryStyle = {
   color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)',
   fontWeight: 500, fontSize: 14, cursor: 'pointer',
 };
-const linkBtnStyle = {
-  background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-  color: 'var(--accent-blue)', fontFamily: 'var(--font-ui)',
-  fontSize: 'inherit', textDecoration: 'underline',
-};
 const labelStyle = {
   display: 'block', fontFamily: 'var(--font-data)', fontSize: 'var(--text-2xs)',
   fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.1em',
@@ -177,7 +112,7 @@ const inputStyle = {
 // ─── Página principal ─────────────────────────────────────────────────────────
 export default function UploadPage() {
   const navigate = useNavigate();
-  const { upload, loading: uploading, fase, error: uploadError, result, tiempos, reset } = useUploadMedicion();
+  const { upload, loading: uploading, fase, error: uploadError, result, reset } = useUploadMedicion();
   const [errorLocal, setErrorLocal] = useState(null);  // validación previa a la subida
 
   // Lista de puntos (bloques) para elegir dónde se tomó la medición -- ya
@@ -193,6 +128,7 @@ export default function UploadPage() {
   const [dragOver, setDragOver] = useState(false);
 
   // Detalles opcionales
+  const [nombre, setNombre] = useState('');           // nombre de la foto (para buscarla luego)
   const [notas, setNotas] = useState('');
   const [esMedicionPasada, setEsMedicionPasada] = useState(false);
   const [fechaMedicion, setFechaMedicion] = useState(() => new Date().toISOString().slice(0, 10));
@@ -214,6 +150,8 @@ export default function UploadPage() {
     }
     setErrorLocal(null);
     setImagen(file);
+    // El nombre arranca con el del archivo (sin extensión); el usuario lo edita.
+    setNombre(file.name.replace(/\.[^.]+$/, '').slice(0, NOMBRE_MAX));
     // Preview
     const reader = new FileReader();
     reader.onload = e => setPreview(e.target.result);
@@ -263,6 +201,7 @@ export default function UploadPage() {
     const body = {
       fuente: 'movil',
       bloque_id: bloqueSeleccionado.id_bloque,
+      ...(nombre.trim() && { nombre: nombre.trim() }),
       ...(notas && { notas }),
       ...(exifGps && {
         latitud_real: exifGps.latitude,
@@ -282,9 +221,7 @@ export default function UploadPage() {
       <div style={{ minHeight: '100vh', background: 'var(--bg-page)', padding: '32px 20px' }}>
         <ResultadoAnalisis
           result={result}
-          tiempos={tiempos}
-          archivo={{ name: imagen?.name ?? '', size: imagen?.size ?? 0 }}
-          onReset={() => { reset(); setImagen(null); setPreview(null); setExifGps(null); setBloqueSeleccionado(null); }}
+          onReset={() => { reset(); setImagen(null); setNombre(''); setPreview(null); setExifGps(null); setBloqueSeleccionado(null); }}
           onDashboard={() => navigate('/galeria')}
         />
       </div>
@@ -341,7 +278,9 @@ export default function UploadPage() {
                   }
                 }}
               >
-                <div style={{ fontSize: 36, marginBottom: 'var(--space-2-5)' }} aria-hidden="true">📸</div>
+                <div style={{ display: 'flex', justifyContent: 'center', color: 'var(--text-muted)', marginBottom: 'var(--space-2-5)' }}>
+                  <ImagePlus size={36} aria-hidden="true" />
+                </div>
                 <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 'var(--space-1)' }}>
                   Arrastra una imagen aquí o haz clic para seleccionar
                 </div>
@@ -358,10 +297,23 @@ export default function UploadPage() {
                   width: '100%', maxHeight: 280, objectFit: 'cover',
                   borderRadius: 8, border: '1px solid var(--border)', marginBottom: 'var(--space-2-5)',
                 }} />
+                <div style={{ marginBottom: 'var(--space-2-5)' }}>
+                  <label htmlFor="upload-nombre" style={labelStyle}>Nombre de la foto (opcional)</label>
+                  <input
+                    id="upload-nombre" name="nombre-foto" type="text"
+                    value={nombre} onChange={e => setNombre(e.target.value)}
+                    maxLength={NOMBRE_MAX} autoComplete="off"
+                    placeholder="Ej.: Placa 12, lado norte"
+                    style={inputStyle}
+                  />
+                  <div style={{ marginTop: 4, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>
+                    Con este nombre podrás encontrar la foto en la galería.
+                  </div>
+                </div>
                 <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
                   <button
                     type="button"
-                    onClick={() => { setImagen(null); setPreview(null); setExifGps(null); }}
+                    onClick={() => { setImagen(null); setNombre(''); setPreview(null); setExifGps(null); }}
                     style={{ ...btnSecondaryStyle, flex: 'none', padding: '8px 16px', fontSize: 'var(--text-xs)' }}
                   >
                     Cambiar imagen
@@ -372,7 +324,7 @@ export default function UploadPage() {
                       border: '1px solid rgba(22,163,74,0.3)', borderRadius: 7,
                       fontSize: 'var(--text-2xs)', color: 'var(--accent-green)', display: 'flex', alignItems: 'center', gap: 6,
                     }}>
-                      <span>📍</span>
+                      <MapPin size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
                       <span>GPS detectado en la foto: {exifGps.latitude.toFixed(5)}, {exifGps.longitude.toFixed(5)}</span>
                     </div>
                   )}
@@ -398,8 +350,10 @@ export default function UploadPage() {
                 marginTop: 'var(--space-2-5)', padding: '10px 14px',
                 background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.3)',
                 borderRadius: 7, fontSize: 'var(--text-xs)', color: 'var(--accent-green)',
+                display: 'flex', alignItems: 'center', gap: 6,
               }}>
-                ✓ Punto seleccionado: <strong>{bloqueSeleccionado.nombre}</strong>{bloqueSeleccionado.ciudad ? ` — ${bloqueSeleccionado.ciudad}` : ''}
+                <Check size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
+                <span>Punto seleccionado: <strong>{bloqueSeleccionado.nombre}</strong>{bloqueSeleccionado.ciudad ? ` — ${bloqueSeleccionado.ciudad}` : ''}</span>
               </div>
             )}
             {bloques.length === 0 && (
@@ -508,7 +462,10 @@ export default function UploadPage() {
                 {fase === 'subiendo' ? 'Subiendo foto…' : 'Analizando con IA… (puede tomar 15-30s)'}
               </>
             ) : (
-              '🔬 Analizar imagen'
+              <>
+                <Microscope size={18} aria-hidden="true" />
+                Analizar imagen
+              </>
             )}
           </button>
         </form>

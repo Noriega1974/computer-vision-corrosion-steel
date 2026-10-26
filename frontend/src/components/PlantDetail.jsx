@@ -5,7 +5,7 @@ import {
 } from '../lib/statusUtils';
 import { formatFecha } from '../utils/dateFormat';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Thermometer, Droplets, CloudRain, Wind } from 'lucide-react';
+import { Thermometer, Droplets, CloudRain, Wind, Camera } from 'lucide-react';
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
@@ -251,13 +251,21 @@ function MedicionRow({ medicion }) {
           width: 36, height: 36, borderRadius: 4, flexShrink: 0,
           background: `${color}15`, border: `1px solid ${color}30`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 16,
+          color,
         }}>
-          📷
+          <Camera size={16} aria-hidden="true" />
         </div>
       )}
 
       <div style={{ flex: 1, minWidth: 0 }}>
+        {medicion.nombre && (
+          <div style={{
+            fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2,
+            fontFamily: 'var(--font-ui)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {medicion.nombre}
+          </div>
+        )}
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
           <span style={{ fontSize: 'var(--text-3xs)', fontWeight: 600, color, fontFamily: 'var(--font-data)' }}>
             {nivelLabel(nivel)}

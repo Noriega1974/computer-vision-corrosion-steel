@@ -302,8 +302,9 @@ function ZonaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
           </div>
         )}
         {!geoLoading && hayCoordenadas && (
-          <div style={{ padding: '8px 12px', background: 'rgba(156,54,16,0.05)', border: '1px solid rgba(156,54,16,0.15)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>
-            📍 {latitud}, {longitud}
+          <div style={{ padding: '8px 12px', background: 'rgba(156,54,16,0.05)', border: '1px solid rgba(156,54,16,0.15)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <MapPin size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
+            <span>{latitud}, {longitud}</span>
           </div>
         )}
         {geoError && (

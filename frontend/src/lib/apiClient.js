@@ -97,7 +97,7 @@ async function request(method, path, body) {
 // cache persistente: la entrada se borra apenas la promesa resuelve (éxito
 // o error), así que solo colapsa llamadas simultáneas idénticas -- nunca
 // sirve datos viejos a una llamada posterior. Nunca se aplica a
-// POST/PUT/DELETE (esas son mutaciones y jamás deben deduplicarse).
+// POST/PUT/PATCH/DELETE (esas son mutaciones y jamás deben deduplicarse).
 const getsEnVuelo = new Map();
 
 export const apiGet = (path) => {
@@ -112,6 +112,7 @@ export const apiGet = (path) => {
 };
 export const apiPost = (path, body) => request('POST', path, body);
 export const apiPut = (path, body) => request('PUT', path, body);
+export const apiPatch = (path, body) => request('PATCH', path, body);
 export const apiDelete = (path) => request('DELETE', path);
 
 // Sube un archivo a S3 con un POST prefirmado ({url, fields} de

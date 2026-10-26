@@ -8,7 +8,8 @@ import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
 import { NIVELES, nivelColor, nivelBg, nivelLabel } from '../lib/statusUtils';
 import { formatFecha } from '../utils/dateFormat';
-import { apiDelete } from '../lib/apiClient';
+import { apiDelete, apiPatch } from '../lib/apiClient';
+import { useRefreshKey } from '../hooks/RefreshKeyContext';
 import SegmentationOverlay from '../components/SegmentationOverlay';
 
 // ─── Helper tiempo relativo ───────────────────────────────────────────────────
@@ -172,6 +173,7 @@ export default function MedicionDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [eliminando, setEliminando] = useState(false);
   const [errorEliminar, setErrorEliminar] = useState('');
+  const { invalidate } = useRefreshKey();
 
   const isAdmin =
     user?.groups?.includes('super_admin') ||
@@ -336,6 +338,18 @@ export default function MedicionDetailPage() {
   const nivel = medicion.nivel_corrosion ?? 0;
   const color = nivelColor(nivel);
   const bg = nivelBg(nivel);
+  // Tiempo de análisis ≈ subida (medida en el navegador) + procesamiento del
+  // servidor. Solo existe en mediciones nuevas.
+  const fmtSeg = n => n.toFixed(1).replace('.', ',');
+  const tiempoAnalisis = (medicion.tiempo_subida_s != null && medicion.tiempo_procesamiento_ms != null)
+    ? (() => {
+        const subida = Number(medicion.tiempo_subida_s);
+        const proc = Number(medicion.tiempo_procesamiento_ms) / 1000;
+        return Number.isFinite(subida) && Number.isFinite(proc)
+          ? { total: fmtSeg(subida + proc), subida: fmtSeg(subida), procesamiento: fmtSeg(proc) }
+          : null;
+      })()
+    : null;
   // sede/ciudad ya no viajan denormalizados en la medición -- se resuelven
   // desde el bloque (punto) al que pertenece.
   const bloqueInfo = bloques.find(b => b.id_bloque === medicion.bloque_id) ?? {};
@@ -475,13 +489,13 @@ export default function MedicionDetailPage() {
               fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 20,
               color: 'var(--text-primary)', letterSpacing: '-0.01em', lineHeight: 1.15,
             }}>
-              {punto.sede ?? 'Punto sin nombre'}
+              {medicion.nombre || (punto.sede ?? 'Punto sin nombre')}
             </div>
             <div style={{
               fontSize: 13, color: 'var(--text-muted)', fontWeight: 400, marginTop: 4,
               fontFamily: 'var(--font-ui)',
             }}>
-              {zonaNombre} · {punto.ciudad ?? '—'} · {tiempoRelativo(medicion.timestamp)}
+              {medicion.nombre ? `${punto.sede || 'Punto sin nombre'} · ` : ''}{zonaNombre} · {punto.ciudad ?? '—'} · {tiempoRelativo(medicion.timestamp)}
             </div>
           </div>
 
@@ -633,7 +647,7 @@ export default function MedicionDetailPage() {
           }}
         >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <Settings size={15} /> Más opciones y detalles técnicos (Ubicación, Descarga, Gestión)
+            <Settings size={15} /> Más opciones y detalles técnicos
           </span>
           {showMasOpciones ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
         </button>
@@ -668,8 +682,20 @@ export default function MedicionDetailPage() {
               )}
             </div>
 
-            {/* Referencia ISO + Gestión */}
+            {/* Tiempo + Referencia ISO + Gestión */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Tiempo de análisis: solo en mediciones nuevas (las viejas no lo guardaron) */}
+              {tiempoAnalisis && (
+                <div>
+                  <SectionTitle>Tiempo de análisis</SectionTitle>
+                  <div style={{ fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 'var(--text-lg)', color: 'var(--text-primary)' }}>
+                    ≈ {tiempoAnalisis.total} s
+                  </div>
+                  <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', marginTop: 2 }}>
+                    subida {tiempoAnalisis.subida} s · procesamiento {tiempoAnalisis.procesamiento} s
+                  </div>
+                </div>
+              )}
               {/* Referencia técnica ISO 10289: tarjetas estructuradas con barra de color */}
               <div>
                 <SectionTitle>Escala de referencia (ISO 10289)</SectionTitle>
@@ -721,6 +747,15 @@ export default function MedicionDetailPage() {
               <div>
                 <SectionTitle>Gestión del espécimen</SectionTitle>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                  {/* Renombrar la foto: mismos roles que eliminar (el backend lo exige). */}
+                  {isAdmin && (
+                    <NombreFoto
+                      idMedicion={idMedicion}
+                      bloqueId={medicion.bloque_id}
+                      actual={medicion.nombre ?? ''}
+                      onGuardado={invalidate}
+                    />
+                  )}
                   <ActionButton icon={<Download size={15} />} onClick={handleDescargarVistaActual} disabled={!medicion.url_imagen || descargandoVista}>
                     {descargandoVista ? 'Generando…' : `Descargar vista (${TABS.find(t => t.key === activeTab)?.label})`}
                   </ActionButton>
@@ -838,6 +873,78 @@ function MetaItem({ label, value, wrap }) {
         color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>{value}</div>
     </div>
+  );
+}
+
+const NOMBRE_MAX = 80;
+
+// Campo para renombrar la foto (PATCH). Guardar queda inactivo mientras el
+// texto no cambie; vacío quita el nombre. Tras guardar se invalida la caché
+// global y el título de la cabecera se actualiza solo.
+function NombreFoto({ idMedicion, bloqueId, actual, onGuardado }) {
+  const [valor, setValor] = useState(actual);
+  const [guardando, setGuardando] = useState(false);
+  const [estado, setEstado] = useState(null); // { ok: bool, msg: string }
+  const sinCambios = valor.split(/\s+/).join(' ').trim() === actual;  // el backend también colapsa espacios
+
+  async function guardar(e) {
+    e.preventDefault();
+    setGuardando(true);
+    setEstado(null);
+    try {
+      await apiPatch(`/mediciones/${bloqueId}?id_medicion=${encodeURIComponent(idMedicion)}`, { nombre: valor });
+      setEstado({ ok: true, msg: 'Nombre guardado.' });
+      onGuardado();
+    } catch (err) {
+      setEstado({ ok: false, msg: err.message || 'No se pudo guardar el nombre.' });
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <form onSubmit={guardar} style={{ marginBottom: 'var(--space-2)' }}>
+      <label htmlFor="detalle-nombre" style={{
+        display: 'block', fontFamily: 'var(--font-data)', fontSize: 'var(--text-2xs)',
+        fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.1em',
+        textTransform: 'uppercase', marginBottom: 6,
+      }}>
+        Nombre de la foto
+      </label>
+      <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+        <input
+          id="detalle-nombre" name="nombre-foto" type="text"
+          value={valor} onChange={e => { setValor(e.target.value); setEstado(null); }}
+          maxLength={NOMBRE_MAX} autoComplete="off" placeholder="Sin nombre"
+          style={{
+            flex: 1, minWidth: 0, padding: '8px 12px', background: 'var(--bg-inset)',
+            border: '1px solid var(--border)', borderRadius: 7,
+            color: 'var(--text-primary)', fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)',
+          }}
+        />
+        <button
+          type="submit"
+          disabled={sinCambios || guardando}
+          style={{
+            padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)',
+            borderRadius: 7, fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)', fontWeight: 600,
+            color: sinCambios || guardando ? 'var(--text-faint)' : 'var(--text-secondary)',
+            cursor: sinCambios || guardando ? 'not-allowed' : 'pointer',
+            opacity: sinCambios || guardando ? 0.5 : 1,
+          }}
+        >
+          {guardando ? 'Guardando…' : 'Guardar'}
+        </button>
+      </div>
+      {estado && (
+        <div role="status" style={{
+          marginTop: 4, fontSize: 'var(--text-2xs)',
+          color: estado.ok ? 'var(--text-muted)' : 'var(--accent-red)',
+        }}>
+          {estado.msg}
+        </div>
+      )}
+    </form>
   );
 }
 

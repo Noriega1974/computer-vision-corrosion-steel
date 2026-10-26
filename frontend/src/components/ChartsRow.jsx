@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { BarChart3 } from 'lucide-react';
 import {
   XAxis,
   YAxis,
@@ -86,11 +87,10 @@ function EmptyChart({ message }) {
     >
       <div
         style={{
-          fontSize: 24,
           opacity: 0.3,
         }}
       >
-        📊
+        <BarChart3 size={24} aria-hidden="true" />
       </div>
 
       <div
