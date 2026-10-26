@@ -5,7 +5,7 @@ import {
 } from '../lib/statusUtils';
 import { formatFecha } from '../utils/dateFormat';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Camera, Thermometer, Droplets, CloudRain, Wind } from 'lucide-react';
+import { Thermometer, Droplets, CloudRain, Wind } from 'lucide-react';
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
@@ -66,7 +66,7 @@ export default function PlantDetail({ punto }) {
       { Icon: Thermometer, label: 'Temp.', v: clima.temperatura_c != null ? `${clima.temperatura_c}°C` : null },
       { Icon: Droplets, label: 'Humedad', v: clima.humedad_pct != null ? `${clima.humedad_pct}%` : null },
       { Icon: CloudRain, label: 'Precip.', v: clima.precipitacion_mm != null ? `${clima.precipitacion_mm} mm` : null },
-      { Icon: Wind, label: 'Viento', v: clima.velocidad_viento_kmh != null ? `${clima.velocidad_viento_kmh} km/h` : null },
+      { Icon: Wind, label: 'Viento', v: (clima.viento_kmh ?? clima.velocidad_viento_kmh) != null ? `${clima.viento_kmh ?? clima.velocidad_viento_kmh} km/h` : null },
     ] : []),
   ].filter(x => x.v);
 

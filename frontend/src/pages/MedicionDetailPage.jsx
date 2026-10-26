@@ -6,7 +6,7 @@ import { useBloques } from '../hooks/useBloques';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
-import { NIVELES, nivelColor, nivelBg, nivelLabel, nivelRange } from '../lib/statusUtils';
+import { NIVELES, nivelColor, nivelBg, nivelLabel } from '../lib/statusUtils';
 import { formatFecha } from '../utils/dateFormat';
 import { apiDelete } from '../lib/apiClient';
 import SegmentationOverlay from '../components/SegmentationOverlay';
