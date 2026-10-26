@@ -1,6 +1,5 @@
 import React from 'react';
 import { useMediciones } from '../hooks/useMediciones';
-import { useAlertas } from '../hooks/useAlertas';
 
 
 // ================================================================
@@ -209,12 +208,7 @@ export default function KPIBar() {
     loading: loadingMed,
   } = useMediciones(100);
 
-  const {
-    alertas,
-    loading: loadingAlt,
-  } = useAlertas();
-
-  const loading = loadingMed || loadingAlt;
+  const loading = loadingMed;
 
 
   // ==============================================================
@@ -260,14 +254,6 @@ export default function KPIBar() {
           0
         ) / conDatos.length
       : 0;
-
-
-  // Alertas activas: nivel moderado o peor.
-  const alertasActivas =
-    alertas.filter(
-      a =>
-        (a.nivel_corrosion ?? 0) >= 2
-    ).length;
 
 
   // ==============================================================
@@ -326,23 +312,6 @@ export default function KPIBar() {
 
     {
       label:
-        'Alertas Activas',
-
-      value:
-        alertasActivas,
-
-      sub:
-        'nivel moderado+',
-
-      color:
-        alertasActivas > 0
-          ? 'var(--accent-orange)'
-          : 'var(--accent-green)',
-    },
-
-
-    {
-      label:
         'Estado Crítico',
 
       value:
@@ -387,7 +356,7 @@ export default function KPIBar() {
         display: 'grid',
 
         gridTemplateColumns:
-          'repeat(6, minmax(0, 1fr))',
+          'repeat(5, minmax(0, 1fr))',
 
         gap: 'var(--space-3)',
       }}

@@ -69,7 +69,7 @@
      El naranja de marca (matiz ~18°, rojizo) se eligio deliberadamente mas
      corrido hacia el rojo que --accent-orange (matiz ~38°, amarillento) y
      que "Corrosion Moderada" en statusUtils.js (matiz ~20°, mas claro). Ese
-     naranja YA es semantico en la app: KPI de alertas, area corroida,
+     naranja YA es semantico en la app: area corroida,
      niveles de severidad. Si la marca usara el mismo tono, un boton
      cualquiera se confundiria a simple vista con un aviso de corrosion.
      accent-orange y los colores de severidad NO se tocan.
