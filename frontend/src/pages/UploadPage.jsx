@@ -1,52 +1,23 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import exifr from 'exifr';
 import { useBloques } from '../hooks/useBloques';
 import { useUploadMedicion } from '../hooks/useUploadMedicion';
 import { nivelColor, nivelBg, nivelLabel } from '../lib/statusUtils';
 import SearchableSelect from '../components/SearchableSelect';
-import { registrarTiempo, borrarTiempos, leerTiempos, descargarTiemposCsv } from '../lib/tiemposAnalisis';
 
 // Tope de la foto: lo impone también S3 (política del POST prefirmado) y el
 // backend; este chequeo solo evita subir 50+ MB para recibir un rechazo.
 const MAX_FOTO_MB = 50;
 
 // ─── Componente: resultado del análisis ─────────────────────────────────────
-// Los controles del CSV de tiempos son solo para el equipo: aparecen con ?dev=1.
-const modoDev = () => new URLSearchParams(window.location.search).get('dev') === '1';
 const formatoPct = n => n.toFixed(1).replace('.', ',');
 
-function ResultadoAnalisis({ result, tiempos, archivo, onReset, onDashboard }) {
+function ResultadoAnalisis({ result, onReset, onDashboard }) {
   const nivel = result.nivel_corrosion ?? 0;
   const color = nivelColor(nivel);
   const bloque = result.bloque_info ?? {};
   const areaPct = result.area_corroida_pct ?? 0;
-  const dev = modoDev();
-
-  // Tiempo de análisis percibido: del clic en "Analizar imagen" hasta que la
-  // imagen del resultado termina de cargar (si la respuesta no trae imagen,
-  // hasta que el resultado se muestra). Se mide una sola vez por resultado y
-  // se guarda en localStorage; el usuario no lo ve (solo el equipo con ?dev=1).
-  const [nFilas, setNFilas] = useState(() => leerTiempos().length);
-  const medido = useRef(false);
-  const cerrarTiempo = useCallback(() => {
-    if (medido.current) return;
-    medido.current = true;
-    const total = (performance.now() - tiempos.inicio) / 1000;
-    registrarTiempo({
-      fecha_iso: new Date().toISOString(),
-      archivo: archivo.name,
-      tamano_bytes: archivo.size,
-      total_s: Number(total.toFixed(3)),
-      subida_s: Number(tiempos.subidaS.toFixed(3)),
-      analisis_s: Number(tiempos.analisisS.toFixed(3)),
-      modelo: result.modelo ?? '',
-    });
-    setNFilas(leerTiempos().length);
-  }, [tiempos, archivo, result.modelo]);
-  useEffect(() => {
-    if (!result.url_imagen) cerrarTiempo();
-  }, [result.url_imagen, cerrarTiempo]);
 
   return (
     <div style={{ maxWidth: 560, margin: '0 auto', animation: 'fade-in-up 0.4s ease' }}>
@@ -86,31 +57,10 @@ function ResultadoAnalisis({ result, tiempos, archivo, onReset, onDashboard }) {
           <img
             src={result.url_imagen}
             alt="Resultado"
-            onLoad={cerrarTiempo}
-            onError={cerrarTiempo}
             style={{ width: '100%', borderRadius: 10, border: `2px solid ${color}40`, maxHeight: 280, objectFit: 'cover' }}
           />
         )}
       </div>
-
-      {/* Solo con ?dev=1: CSV de tiempos para el estudio de latencia */}
-      {dev && (
-        <div style={{ marginBottom: 20, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
-          <button type="button" onClick={descargarTiemposCsv} style={linkBtnStyle}>
-            Descargar tiempos (CSV)
-          </button>
-          {' · '}
-          <button
-            type="button"
-            onClick={() => { borrarTiempos(); setNFilas(0); }}
-            disabled={nFilas === 0}
-            style={{ ...linkBtnStyle, opacity: nFilas === 0 ? 0.5 : 1 }}
-          >
-            Borrar tiempos
-          </button>
-          {' '}({nFilas} guardados en este navegador)
-        </div>
-      )}
 
       <div style={{ display: 'flex', gap: 'var(--space-2-5)' }}>
         <button onClick={onReset} style={btnSecondaryStyle}>
@@ -136,11 +86,6 @@ const btnSecondaryStyle = {
   color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)',
   fontWeight: 500, fontSize: 14, cursor: 'pointer',
 };
-const linkBtnStyle = {
-  background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-  color: 'var(--accent-blue)', fontFamily: 'var(--font-ui)',
-  fontSize: 'inherit', textDecoration: 'underline',
-};
 const labelStyle = {
   display: 'block', fontFamily: 'var(--font-data)', fontSize: 'var(--text-2xs)',
   fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.1em',
@@ -156,7 +101,7 @@ const inputStyle = {
 // ─── Página principal ─────────────────────────────────────────────────────────
 export default function UploadPage() {
   const navigate = useNavigate();
-  const { upload, loading: uploading, fase, error: uploadError, result, tiempos, reset } = useUploadMedicion();
+  const { upload, loading: uploading, fase, error: uploadError, result, reset } = useUploadMedicion();
   const [errorLocal, setErrorLocal] = useState(null);  // validación previa a la subida
 
   // Lista de puntos (bloques) para elegir dónde se tomó la medición -- ya
@@ -261,8 +206,6 @@ export default function UploadPage() {
       <div style={{ minHeight: '100vh', background: 'var(--bg-page)', padding: '32px 20px' }}>
         <ResultadoAnalisis
           result={result}
-          tiempos={tiempos}
-          archivo={{ name: imagen?.name ?? '', size: imagen?.size ?? 0 }}
           onReset={() => { reset(); setImagen(null); setPreview(null); setExifGps(null); setBloqueSeleccionado(null); }}
           onDashboard={() => navigate('/galeria')}
         />

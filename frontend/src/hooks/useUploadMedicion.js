@@ -8,9 +8,6 @@ export function useUploadMedicion() {
   const [fase, setFase] = useState(null);     // 'subiendo' | 'analizando' | null
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
-  // { inicio, subidaS, analisisS }: `inicio` es el performance.now() del clic;
-  // la pantalla de resultado cierra el total cuando la foto termina de cargar.
-  const [tiempos, setTiempos] = useState(null);
 
   // `inicio` = performance.now() tomado en el clic de "Analizar imagen".
   // La foto va directo a S3 (POST prefirmado) y el body de /medicion solo
@@ -32,13 +29,6 @@ export function useUploadMedicion() {
         imagen_key: post.imagen_key,
         tiempo_subida_s: Number(((finSubida - inicio) / 1000).toFixed(2)),
       });
-      const finAnalisis = performance.now();
-
-      setTiempos({
-        inicio,
-        subidaS: (finSubida - inicio) / 1000,
-        analisisS: (finAnalisis - finSubida) / 1000,
-      });
       setResult(res);
       // Invalidar cache global para que todos los hooks refresquen
       invalidate();
@@ -54,9 +44,8 @@ export function useUploadMedicion() {
 
   const reset = useCallback(() => {
     setResult(null);
-    setTiempos(null);
     setError(null);
   }, []);
 
-  return { upload, loading, fase, error, result, tiempos, reset };
+  return { upload, loading, fase, error, result, reset };
 }
