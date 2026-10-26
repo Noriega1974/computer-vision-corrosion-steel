@@ -18,9 +18,9 @@ export function RefreshKeyProvider({ children }) {
   const invalidate = useCallback(() => setKey(k => k + 1), []);
 
   // Preferencia de Configuración > Preferencias del sistema. Por defecto
-  // activada (así se comportaba la app antes de que este switch existiera).
+  // desactivada para evitar recargas automáticas inesperadas mientras el usuario inspecciona.
   const [autoRefresh, setAutoRefreshState] = useState(
-    () => localStorage.getItem(AUTOREFRESH_STORAGE_KEY) !== 'false'
+    () => localStorage.getItem(AUTOREFRESH_STORAGE_KEY) === 'true'
   );
 
   const setAutoRefresh = useCallback((value) => {

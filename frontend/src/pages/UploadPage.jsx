@@ -41,11 +41,10 @@ function ResultadoAnalisis({ result, onReset, onDashboard }) {
       )}
 
       {/* Métricas */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--space-2-5)', marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2-5)', marginBottom: 20 }}>
         {[
           { label: 'Área corroída', value: `${(result.area_corroida_pct ?? 0).toFixed(1)}%`, color },
-          { label: 'Confianza IA', value: result.confianza_promedio ? `${(result.confianza_promedio * 100).toFixed(0)}%` : '—', color: 'var(--accent-blue)' },
-          { label: 'Nivel', value: `${nivel}/3`, color },
+          { label: 'Nivel ISO 10289', value: `${nivel}/3`, color },
         ].map(({ label, value, color: c }) => (
           <div key={label} style={{
             background: 'var(--bg-inset)', border: '1px solid var(--border)',

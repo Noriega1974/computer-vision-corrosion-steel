@@ -269,13 +269,13 @@ export default function GaleriaPage() {
         {/* Chips de nivel */}
         <div>
           <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', marginBottom: 5, fontFamily: 'var(--font-data)', letterSpacing: '0.1em' }}>NIVEL</div>
-          <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
+          <div style={{ display: 'flex', gap: 'var(--space-1)', flexWrap: 'wrap' }}>
             {[
               { key: 'all', label: 'Todos', color: 'var(--text-muted)' },
-              { key: '0', label: 'Sin corrosión', color: '#16a34a' },
-              { key: '1', label: 'Leve', color: '#d97706' },
-              { key: '2', label: 'Moderada', color: '#ea580c' },
-              { key: '3', label: 'Severa', color: '#dc2626' },
+              { key: '0', label: 'Sin corrosión (<0.05%)', color: '#16a34a' },
+              { key: '1', label: 'Leve (<10%)', color: '#d97706' },
+              { key: '2', label: 'Moderada (<25%)', color: '#ea580c' },
+              { key: '3', label: 'Severa (≥25%)', color: '#dc2626' },
             ].map(({ key, label, color }) => (
               <button
                 key={key}

@@ -208,11 +208,10 @@ export default function DeteccionIAPage() {
           </div>
 
           {/* Métricas */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--space-3)', marginBottom: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--space-3)', marginBottom: 20 }}>
             {[
               { label: 'Área corroída', value: `${result.area_corroida_pct?.toFixed(1)}%`, color: 'var(--accent-orange)' },
-              { label: 'Confianza promedio', value: `${((result.confianza_promedio ?? 0) * 100).toFixed(0)}%`, color: 'var(--accent-blue)' },
-              { label: 'Detecciones', value: result.detecciones?.length ?? 0, color },
+              { label: 'Nivel ISO 10289', value: NIVEL_LABELS[nivel], color },
             ].map((m) => (
               <div key={m.label} style={{
                 background: 'var(--bg-card)', borderRadius: 8, padding: '14px 16px',
