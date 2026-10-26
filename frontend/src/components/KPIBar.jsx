@@ -17,7 +17,6 @@ function KPICard({
   sub,
   color,
   loading,
-  featured,
 }) {
 
   return (
@@ -37,14 +36,6 @@ function KPICard({
 
         borderTop:
           `2px solid ${color}`,
-
-        // La unica tarjeta de KPI que lleva el brillo de marca -- es la
-        // metrica central del producto (area corroida). El resto queda sin
-        // tocar a proposito: si todas brillan, ninguna se distingue.
-        boxShadow:
-          featured
-            ? '0 0 28px rgba(240,87,14,0.16), var(--shadow-sm)'
-            : undefined,
       }}
     >
 
@@ -109,11 +100,6 @@ function KPICard({
 
           letterSpacing:
             '-0.035em',
-
-          textShadow:
-            featured
-              ? '0 0 20px rgba(240,87,14,0.45)'
-              : undefined,
         }}
       >
 
@@ -206,10 +192,8 @@ export default function KPIBar() {
 
   const {
     mediciones,
-    loading: loadingMed,
+    loading,
   } = useMediciones(100);
-
-  const loading = loadingMed;
 
 
   // ==============================================================
@@ -240,21 +224,6 @@ export default function KPIBar() {
       m =>
         (m.nivel_corrosion ?? 0) === 0
     ).length;
-
-
-  // Promedio de area corroida, solo sobre mediciones que tienen el dato.
-  const conDatos =
-    mediciones.filter(
-      m => m.area_corroida_pct != null
-    );
-
-  const avgArea =
-    conDatos.length
-      ? conDatos.reduce(
-          (s, m) => s + m.area_corroida_pct,
-          0
-        ) / conDatos.length
-      : 0;
 
 
   // ==============================================================
@@ -290,24 +259,6 @@ export default function KPIBar() {
 
       color:
         'var(--accent-green)',
-    },
-
-
-    {
-      label:
-        'Área Corroída Prom.',
-
-      value:
-        `${avgArea.toFixed(1)}%`,
-
-      sub:
-        'promedio general',
-
-      color:
-        'var(--accent-amber)',
-
-      // La metrica central del producto -- la unica con el brillo de marca.
-      featured: true,
     },
 
 
@@ -357,7 +308,7 @@ export default function KPIBar() {
         display: 'grid',
 
         gridTemplateColumns:
-          'repeat(5, minmax(0, 1fr))',
+          'repeat(4, minmax(0, 1fr))',
 
         gap: 'var(--space-3)',
       }}

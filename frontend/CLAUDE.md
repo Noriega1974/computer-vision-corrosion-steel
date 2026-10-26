@@ -20,14 +20,14 @@ React 18 SPA (Vite) that communicates with an AWS backend (API Gateway + Cognito
 
 - **`src/auth/`** — AWS Amplify v6 Cognito auth. `AuthContext.jsx` holds the session and user groups. `amplifyConfig.js` reads Cognito pool IDs from env vars. A global `auth:unauthorized` event triggers auto-logout on any 401.
 - **`src/lib/apiClient.js`** — Thin HTTP client. All requests attach `Authorization: Bearer {idToken}`. Single place to change base URL or auth headers.
-- **`src/hooks/`** — One hook per API resource (e.g., `useMediciones`, `usePuntos`). They use `RefreshKeyContext` (`hooks/RefreshKeyContext.jsx`) for cache invalidation instead of React Query/SWR—call `triggerRefresh()` after mutations to refetch.
-- **`src/pages/`** — One file per route. Pages compose hooks + components and own their local state.
+- **`src/hooks/`** — One hook per API resource (e.g., `useMediciones`, `useBloques`, `useEmpresas`, `useUsuarios`). They use `RefreshKeyContext` (`hooks/RefreshKeyContext.jsx`) for cache invalidation instead of React Query/SWR—call `triggerRefresh()` after mutations to refetch.
+- **`src/pages/`** — One file per route. Pages compose hooks + components and own their local state. The `Zonas*` pages/components (`ZonasPage.jsx`, `ZonasList.jsx`, `ZonaMapPicker.jsx`) are the UI for what the backend calls a `bloque` — `useBloques` is the hook behind them.
 - **`src/components/`** — Reusable widgets (map, charts, KPI cards, sidebar).
 - **`src/layouts/AppLayout.jsx`** — Wraps authenticated pages: collapsible sidebar + top header.
 
 ### Routing & auth
 
-`App.jsx` wraps every non-login route in `<ProtectedRoute>`, which redirects to `/login` if no session. Role-based UI visibility is driven by Cognito groups (`admin`, `tecnico`, `cliente`) read from the JWT claims in `AuthContext`.
+`App.jsx` wraps every non-login route in `<ProtectedRoute>`, which redirects to `/login` if no session. Role-based UI visibility is driven by Cognito groups (`super_admin`, `admin`, `tecnico`, `cliente` — see the root `CLAUDE.md` for what each role can do server-side) read from the JWT claims in `AuthContext`. `super_admin` has no `empresa_id` of its own and can see/act across every empresa; the other three roles are scoped to one empresa.
 
 ### Styling
 

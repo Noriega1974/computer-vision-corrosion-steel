@@ -1,7 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useBloques } from '../hooks/useBloques';
 import { useMediciones } from '../hooks/useMediciones';
 import { useEmpresas } from '../hooks/useEmpresas';
+import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
 import {
   NIVELES,
@@ -23,6 +24,32 @@ function buildNivelMap(mediciones) {
   return map;
 }
 
+// Tamaño "fijo en el mundo": antes el pin media 40px (52px seleccionado) en
+// TODOS los zooms -- gigante y sin relación con el nivel de acercamiento,
+// como si fuera un elemento de UI en vez de un objeto sobre el mapa. Ahora
+// el tamaño base es más chico y escala geométricamente con el zoom (cada
+// nivel de zoom multiplica el tamaño), acotado entre MIN/MAX_ESCALA para que
+// no desaparezca al alejar del todo ni tape el mapa al acercar al máximo.
+// El factor/tope anteriores (1.16 y 2.1x) saturaban el tope de crecimiento
+// apenas 5 niveles de zoom por encima del base -- es decir, desde "vista de
+// ciudad" en adelante el pin YA estaba en su tamaño máximo (26px -> 55px,
+// 34px -> 71px seleccionado), por eso se veían gigantes y se pisaban entre
+// sí al acercar a nivel de calle/cuadra. El crecimiento ahora es más lento
+// y el tope mucho más bajo, para que nunca deje de verse como un pin y
+// empiece a tapar el mapa.
+const ZOOM_BASE = 6; // mismo zoom inicial del mapa -- ahí la escala es 1x
+const FACTOR_POR_NIVEL = 1.10;
+const MIN_ESCALA = 0.6;
+const MAX_ESCALA = 1.35;
+// Diámetro base del punto (px) a zoom ZOOM_BASE.
+const TAMANO_BASE = 12;
+const TAMANO_BASE_SELECCIONADO = 16;
+
+function escalaParaZoom(zoom) {
+  const cruda = Math.pow(FACTOR_POR_NIVEL, zoom - ZOOM_BASE);
+  return Math.min(MAX_ESCALA, Math.max(MIN_ESCALA, cruda));
+}
+
 export default function ColombiaMap({
   selectedPunto,
   onSelectPunto,
@@ -35,16 +62,23 @@ export default function ColombiaMap({
 
   const { mediciones } = useMediciones(100);
 
-  // Zonas de empresa (círculos que delimitan su área en el mapa) -- solo
-  // disponibles vía GET /empresas, restringido a super_admin en el backend.
-  // Para el resto de los roles no hay hoy ningún hook que exponga la zona de
-  // la propia empresa (el perfil de usuario -- useUsuarioPerfil -- no la
-  // trae), así que por ahora las zonas solo se dibujan para super_admin;
-  // completar esto para los demás roles requiere que el backend/perfil
-  // exponga la zona de la empresa propia.
+  // Zonas de empresa (polígonos que delimitan su área en el mapa). Para
+  // super_admin vienen de GET /empresas (todas). Para admin/tecnico/cliente
+  // ese endpoint es exclusivo de super_admin, así que se arma un array de
+  // una sola "empresa" con la zona propia expuesta en GET /usuarios/me
+  // (`empresa_zonas`, ver commit del botón "Centrar en mi zona") -- mismo
+  // shape ({nombre, zonas}) para que el efecto de dibujo de abajo no tenga
+  // que distinguir el caso.
   const { user } = useAuth();
   const esSuperAdmin = user?.groups?.includes('super_admin');
-  const { empresas } = useEmpresas(esSuperAdmin);
+  const { empresas: empresasTodas } = useEmpresas(esSuperAdmin);
+  const { perfil } = useUsuarioPerfil();
+
+  const empresas = esSuperAdmin
+    ? empresasTodas
+    : (perfil?.empresa_zonas?.length
+        ? [{ id_empresa: 'propia', nombre: perfil.empresa_nombre, zonas: perfil.empresa_zonas }]
+        : []);
 
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -52,6 +86,10 @@ export default function ColombiaMap({
   const zonasRef = useRef([]);
   // El encuadre automático a todos los puntos se hace una sola vez.
   const encuadreInicialRef = useRef(false);
+
+  // Nivel de zoom actual -- se usa para recalcular el tamaño de los pines
+  // "a tamaño fijo en el mundo" (ver escalaParaZoom más arriba).
+  const [zoom, setZoom] = useState(6);
 
   // Inicializar mapa Leaflet una sola vez
   useEffect(() => {
@@ -75,6 +113,8 @@ export default function ColombiaMap({
         maxZoom: 18,
       }
     ).addTo(map);
+
+    map.on('zoomend', () => setZoom(map.getZoom()));
 
     mapInstanceRef.current = map;
 
@@ -136,8 +176,11 @@ export default function ColombiaMap({
 
       const isCritical = nivel === 3;
 
-      // Marcador tipo "punto" geoespacial limpio (12px / 16px seleccionado)
-      const dotSize = isSelected ? 16 : 12;
+      // Marcador tipo "punto" geoespacial limpio. El tamaño escala con el
+      // zoom (ver escalaParaZoom), acotado por MIN/MAX_ESCALA para que el
+      // punto nunca tape el mapa al acercar.
+      const escala = escalaParaZoom(zoom);
+      const dotSize = Math.round((isSelected ? TAMANO_BASE_SELECCIONADO : TAMANO_BASE) * escala);
       const wrapperSize = dotSize * 2;
 
       const iconHtml = `
@@ -280,7 +323,8 @@ export default function ColombiaMap({
     puntos,
     mediciones,
     selectedPunto,
-    onSelectPunto
+    onSelectPunto,
+    zoom
   ]);
 
   // Zonas de empresa: un polígono por cada {puntos: [{lat,lng}, ...]}

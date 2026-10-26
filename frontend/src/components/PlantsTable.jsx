@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Factory, Globe, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
+import { Factory, Globe, MapPin, ChevronDown, ChevronUp, Crosshair } from 'lucide-react';
+import { useUsuarioPerfil } from '../hooks/useUsuario';
 
 // ─── Lista jerárquica de Zonas y Puntos en el Dashboard ───────────────────────
 export default function PlantsTable({
@@ -30,6 +31,18 @@ export default function PlantsTable({
   };
 
   const tieneEmpresas = empresas && empresas.length > 0;
+
+  // admin/tecnico/cliente no reciben `empresas` (GET /empresas es exclusivo de
+  // super_admin). Su zona propia llega por GET /usuarios/me (`empresa_zonas`)
+  // y se ofrece como un único botón "Centrar en mi zona".
+  const { perfil, loading: loadingPerfil } = useUsuarioPerfil();
+  const zonasPropias = perfil?.empresa_zonas ?? [];
+  const mostrarMiZona = !tieneEmpresas && (loadingPerfil || zonasPropias.length > 0);
+  const miZonaSeleccionada = zonasPropias.length > 0 && selectedZona?.zonas === zonasPropias;
+  const centrarEnMiZona = () => {
+    if (!onSelectZona || zonasPropias.length === 0) return;
+    onSelectZona({ id_empresa: 'propia', nombre: perfil?.empresa_nombre, zonas: zonasPropias });
+  };
 
   // Agrupamos puntos por empresa_id
   const puntosPorEmpresa = {};
@@ -235,6 +248,28 @@ export default function PlantsTable({
         ) : (
           /* Modo directo para afiliación única */
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+            {!loading && mostrarMiZona && (
+              <button
+                type="button"
+                disabled={loadingPerfil}
+                onClick={centrarEnMiZona}
+                aria-pressed={miZonaSeleccionada}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 'var(--space-2)', width: '100%',
+                  padding: '8px 10px', font: 'inherit', textAlign: 'left',
+                  cursor: loadingPerfil ? 'not-allowed' : 'pointer',
+                  background: miZonaSeleccionada ? 'rgba(0,185,255,0.1)' : 'var(--bg-page)',
+                  border: `1px solid ${miZonaSeleccionada ? 'var(--accent-blue)' : 'var(--border)'}`,
+                  borderLeft: `3px solid ${miZonaSeleccionada ? 'var(--accent-blue)' : 'var(--border-bright)'}`,
+                  borderRadius: 4, opacity: loadingPerfil ? 0.6 : 1,
+                }}
+              >
+                <Crosshair size={13} color="var(--text-muted)" />
+                <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  {loadingPerfil ? 'Cargando…' : 'Centrar en mi zona'}
+                </span>
+              </button>
+            )}
             {puntos.map((p, i) => (
               <PlantRow
                 key={p.id_bloque}
