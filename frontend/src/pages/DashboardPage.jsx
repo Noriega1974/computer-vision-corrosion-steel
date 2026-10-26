@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Upload } from 'lucide-react';
+import { Upload, ChevronDown, ChevronUp } from 'lucide-react';
 
 import KPIBar from '../components/KPIBar';
 import ColombiaMap from '../components/ColombiaMap';
 import PlantDetail from '../components/PlantDetail';
 import PlantsTable from '../components/PlantsTable';
-import ZonasList from '../components/ZonasList';
 import ChartsRow from '../components/ChartsRow';
 
 import { useBloques } from '../hooks/useBloques';
+import { useEmpresas } from '../hooks/useEmpresas';
+import { useAuth } from '../auth/AuthContext';
 
 
 // ================================================================
@@ -51,16 +52,14 @@ function useLeaflet() {
 // ================================================================
 
 export default function DashboardPage() {
-
-  const [
-    selectedPunto,
-    setSelectedPunto
-  ] = useState(null);
-
+  const [selectedPunto, setSelectedPunto] = useState(null);
   const [selectedZona, setSelectedZona] = useState(null);
+  const [showAnalisis, setShowAnalisis] = useState(false);
 
-  const leafletReady =
-    useLeaflet();
+  const leafletReady = useLeaflet();
+  const { user } = useAuth();
+  const esSuperAdmin = user?.groups?.includes('super_admin');
+  const { empresas } = useEmpresas(esSuperAdmin);
 
   // "puntos" aquí son bloques (el "Punto" viejo fue absorbido por "Bloque",
   // ver hooks/useBloques.js) -- se mantiene el nombre de variable para no
@@ -176,334 +175,210 @@ export default function DashboardPage() {
 
 
         {/* ========================================================
-            PUNTOS + MAP + DETAIL
-
-            Las tres columnas son la misma tarea: elegir un punto,
-            ubicarla y leer su detalle. Estaban partidas en dos filas,
-            con la lista debajo del mapa, asi que seleccionar obligaba a
-            bajar y volver a subir. El mapa manda al centro por ser el
-            unico que necesita ancho real.
+            ZONAS/PUNTOS + MAPA + DETALLE
+            Las 3 columnas tienen la misma altura exacta (480px)
+            con scroll interno independiente.
             ======================================================== */}
 
         <div
           className="main-grid"
           style={{
             display: 'grid',
-
-            gridTemplateColumns:
-              'minmax(210px, 0.8fr) minmax(0, 2fr) minmax(320px, 1fr)',
-
+            gridTemplateColumns: 'minmax(260px, 0.9fr) minmax(0, 1.8fr) minmax(320px, 1.1fr)',
             gap: 18,
-
-            minHeight: 0,
+            height: 480,
+            maxHeight: 480,
           }}
         >
-
-
           {/* ======================================================
-              PLANTAS
+              ZONAS Y PUNTOS (DESPLEGABLE JERÁRQUICO)
               ====================================================== */}
-
           <section
             className="dashboard-section section-plants"
             style={{
-              padding: '18px',
-
+              padding: '16px',
               display: 'flex',
               flexDirection: 'column',
-
-              gap: 'var(--space-3)',
-
-              minHeight: 520,
-
+              gap: 'var(--space-2)',
+              height: '100%',
+              maxHeight: 480,
               overflow: 'hidden',
             }}
           >
-
-            {/* Title */}
-
-            <div style={{ flexShrink: 0 }}>
-
-              <div className="dashboard-section-title">
-                Puntos
-              </div>
-
-              <div
-                style={{
-                  marginTop: 5,
-
-                  fontSize: 'var(--text-2xs)',
-
-                  color: 'var(--text-faint)',
-                }}
-              >
-                Seleccioná uno para ver su detalle
-              </div>
-
-            </div>
-
-
-            {/* Table */}
-
-            <div
-              style={{
-                flex: 1,
-
-                minHeight: 0,
-
-                overflow: 'auto',
-
-                paddingRight: 2,
-              }}
-            >
-
+            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
               <PlantsTable
                 puntos={puntos}
                 loading={loadingPuntos}
                 error={errorPuntos}
                 selectedPunto={selectedPunto}
                 onSelectPunto={setSelectedPunto}
+                empresas={empresas}
+                selectedZona={selectedZona}
+                onSelectZona={setSelectedZona}
               />
-
             </div>
-
-            {/* Zonas dibujadas -- clic centra el mapa en esa zona */}
-            <ZonasList
-              selectedZona={selectedZona}
-              onSelectZona={setSelectedZona}
-            />
-
           </section>
 
-
           {/* ======================================================
-              MAP
+              MAPA DE UBICACIONES
               ====================================================== */}
-
           <section
             className="dashboard-section section-map"
             style={{
-              padding: '18px',
-
+              padding: '16px',
               display: 'flex',
               flexDirection: 'column',
-
-              gap: 'var(--space-3)',
-
-              minHeight: 520,
+              gap: 'var(--space-2-5)',
+              height: '100%',
+              maxHeight: 480,
+              overflow: 'hidden',
             }}
           >
-
-            {/* Title */}
-
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-
                 gap: 'var(--space-2-5)',
-
                 flexShrink: 0,
               }}
             >
-
-              <div
-                className="dashboard-section-title"
-              >
+              <div className="dashboard-section-title">
                 Mapa de ubicaciones
               </div>
-
-
               <div
                 style={{
                   fontFamily: 'var(--font-data)',
-                  fontSize: 9,
-                  letterSpacing: '0.08em',
+                  fontSize: 10,
+                  letterSpacing: '0.04em',
                   color: 'var(--text-faint)',
                   textTransform: 'uppercase',
                 }}
               >
                 {puntos?.length ?? 0} ubicaciones
               </div>
-
             </div>
-
-
-            {/* Map */}
 
             <div
               style={{
                 flex: 1,
-
                 minHeight: 0,
-
-                borderRadius: 14,
-
+                borderRadius: 10,
                 overflow: 'hidden',
-
-                border:
-                  '1px solid var(--border)',
-
-                boxShadow:
-                  'inset 0 1px 0 rgba(255,255,255,0.45)',
-
-                background:
-                  'var(--bg-inset)',
+                border: '1px solid var(--border)',
+                background: 'var(--bg-inset)',
               }}
             >
-
               {leafletReady ? (
-
                 <ColombiaMap
                   selectedPunto={selectedPunto}
                   onSelectPunto={setSelectedPunto}
                   selectedZona={selectedZona}
                 />
-
               ) : (
-
                 <div
                   style={{
                     height: '100%',
-
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-
-                    color:
-                      'var(--text-muted)',
-
+                    color: 'var(--text-muted)',
                     fontSize: 'var(--text-sm)',
                   }}
                 >
-
                   Cargando mapa…
-
                 </div>
-
               )}
-
             </div>
-
           </section>
 
-
-
           {/* ======================================================
-              LOCATION DETAIL
+              DETALLE DE UBICACIÓN
               ====================================================== */}
-
           <section
             className="dashboard-section section-detail"
             style={{
-              padding: '18px',
-
+              padding: '16px',
               display: 'flex',
               flexDirection: 'column',
-
-              gap: 'var(--space-3)',
-
-              minHeight: 520,
-
+              gap: 'var(--space-2-5)',
+              height: '100%',
+              maxHeight: 480,
               overflow: 'hidden',
             }}
           >
-
-            {/* Title */}
-
             <div
               className="dashboard-section-title"
-              style={{
-                flexShrink: 0,
-              }}
+              style={{ flexShrink: 0 }}
             >
               Detalle de ubicación
             </div>
 
-
-            {/* Detail */}
-
             <div
               style={{
                 flex: 1,
-
                 minHeight: 0,
-
-                overflow: 'auto',
-
-                paddingRight: 2,
+                overflow: 'hidden',
               }}
             >
-
-              <PlantDetail
-                punto={selectedPunto}
-              />
-
+              <PlantDetail punto={selectedPunto} />
             </div>
-
           </section>
-
         </div>
 
-
-
         {/* ========================================================
-            ANALYSIS
-            TENTATIVA DE ELIMINACIÓN -- el usuario planea sacar esta
-            sección, no tocar/mejorar por ahora.
+            ANÁLISIS Y MÉTRICAS (DESPLEGABLE / EN DESARROLLO)
             ======================================================== */}
-
         <section
           className="dashboard-section section-charts"
           style={{
-            padding: '18px 20px 20px',
+            padding: 0,
+            overflow: 'hidden',
+            borderRadius: 12,
           }}
         >
-
-          {/* Header */}
-
-          <div
+          <button
+            type="button"
+            onClick={() => setShowAnalisis(s => !s)}
             style={{
+              width: '100%',
+              padding: '16px 20px',
               display: 'flex',
               alignItems: 'center',
-
-              gap: 'var(--space-2-5)',
-
-              marginBottom: 'var(--space-4)',
+              justifyContent: 'space-between',
+              background: showAnalisis ? 'var(--bg-inset)' : 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              fontFamily: 'var(--font-ui)',
+              textAlign: 'left',
+              transition: 'background-color 0.15s ease',
             }}
           >
-
             <div>
-
               <div
                 className="dashboard-section-title"
+                style={{ display: 'flex', alignItems: 'center', gap: 8 }}
               >
-                Análisis y métricas
+                <span>📊</span> Análisis y métricas avanzadas (en desarrollo)
               </div>
-
               <div
                 style={{
-                  marginTop: 5,
-
+                  marginTop: 4,
                   fontSize: 'var(--text-2xs)',
-
-                  color:
-                    'var(--text-faint)',
+                  color: 'var(--text-faint)',
                 }}
               >
-                Comportamiento y distribución de la corrosión
+                Comportamiento y distribución de la corrosión por ciudad y severidad
               </div>
-
             </div>
+            {showAnalisis ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+          </button>
 
-          </div>
-
-
-          {/* Charts */}
-
-          <ChartsRow />
-
+          {showAnalisis && (
+            <div style={{ padding: '18px 20px 20px', borderTop: '1px solid var(--border)' }}>
+              <ChartsRow />
+            </div>
+          )}
         </section>
 
 

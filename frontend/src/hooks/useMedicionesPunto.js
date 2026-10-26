@@ -16,7 +16,9 @@ export function useMedicionesPunto(idPunto) {
       return;
     }
     let cancelled = false;
-    setLoading(true);
+    if (mediciones.length === 0) {
+      setLoading(true);
+    }
     setError(null);
     apiGet(`/mediciones/${idPunto}`)
       .then(data => {

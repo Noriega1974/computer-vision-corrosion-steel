@@ -27,7 +27,9 @@ export function useBloques(enabled = true, empresaId) {
       return;
     }
     let cancelled = false;
-    setLoading(true);
+    if (bloques.length === 0) {
+      setLoading(true);
+    }
     setError(null);
     const query = empresaId ? `?empresa_id=${encodeURIComponent(empresaId)}` : '';
     apiGet(`/bloques${query}`)

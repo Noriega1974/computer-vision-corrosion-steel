@@ -59,8 +59,8 @@ export default function ColombiaMap({
     if (!L) return;
 
     const map = L.map(mapRef.current, {
-      center: [6.5, -74.5],
-      zoom: 6,
+      center: [10.9685, -74.7813], // Centrado de bienvenida en Barranquilla
+      zoom: 12,
       zoomControl: true,
       attributionControl: true,
       scrollWheelZoom: true,
@@ -75,6 +75,23 @@ export default function ColombiaMap({
     ).addTo(map);
 
     mapInstanceRef.current = map;
+
+    // Asegurar que Leaflet recalcule el tamaño del contenedor para evitar zonas grises
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 250);
+
+    let resizeObserver = null;
+    if (window.ResizeObserver && mapRef.current) {
+      resizeObserver = new ResizeObserver(() => {
+        map.invalidateSize();
+      });
+      resizeObserver.observe(mapRef.current);
+    }
+
+    return () => {
+      if (resizeObserver) resizeObserver.disconnect();
+    };
   }, []);
 
   // Actualizar marcadores
@@ -108,20 +125,26 @@ export default function ColombiaMap({
 
       const isCritical = nivel === 3;
 
+      // Marcador tipo "punto" geoespacial limpio (12px / 16px seleccionado)
+      const dotSize = isSelected ? 16 : 12;
+      const wrapperSize = dotSize * 2;
+
       const iconHtml = `
         <div style="
           position:relative;
-          width:${isSelected ? 52 : 40}px;
-          height:${isSelected ? 52 : 40}px;
+          width:${wrapperSize}px;
+          height:${wrapperSize}px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
           cursor:pointer;
         ">
-
           ${
             isCritical
               ? `
                 <div style="
                   position:absolute;
-                  inset:0;
+                  inset:2px;
                   border-radius:50%;
                   border:2px solid ${color};
                   animation:ping-ring 1.4s ease-out infinite;
@@ -129,53 +152,23 @@ export default function ColombiaMap({
               `
               : ''
           }
-
           <div style="
-            position:absolute;
-            inset:${isSelected ? 2 : 4}px;
+            width:${dotSize}px;
+            height:${dotSize}px;
             border-radius:50%;
-            background:rgba(8,12,15,0.9);
-            border:2px solid ${color};
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            box-shadow:0 0 ${isSelected ? 20 : 12}px ${color}60;
-          ">
-
-            <svg
-              width="${isSelected ? 18 : 14}"
-              height="${isSelected ? 18 : 14}"
-              viewBox="0 0 24 24"
-              fill="none"
-            >
-              <path
-                d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"
-                fill="${color}"
-                opacity="0.9"
-              />
-
-              <circle
-                cx="12"
-                cy="9"
-                r="2.5"
-                fill="#080c0f"
-              />
-            </svg>
-          </div>
+            background:${color};
+            border:${isSelected ? 3 : 2}px solid #ffffff;
+            box-shadow:0 1px 4px rgba(0,0,0,0.4), 0 0 ${isSelected ? 10 : 4}px ${color}80;
+            transition:transform 0.15s ease;
+          "></div>
         </div>
       `;
 
       const icon = L.divIcon({
         html: iconHtml,
-        className: '',
-        iconSize: [
-          isSelected ? 52 : 40,
-          isSelected ? 52 : 40
-        ],
-        iconAnchor: [
-          isSelected ? 26 : 20,
-          isSelected ? 26 : 20
-        ],
+        className: 'leaflet-dot-marker',
+        iconSize: [wrapperSize, wrapperSize],
+        iconAnchor: [wrapperSize / 2, wrapperSize / 2],
       });
 
       const nivelStr =

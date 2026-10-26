@@ -1188,12 +1188,11 @@ body {
 
 [data-theme="dark"] .leaflet-tile {
   filter:
-    grayscale(100%)
+    brightness(0.65)
     invert(1)
-    brightness(0.17)
-    sepia(0.4)
-    hue-rotate(170deg)
-    saturate(2) !important;
+    contrast(1.2)
+    hue-rotate(200deg)
+    saturate(0.4) !important;
 }
 
 

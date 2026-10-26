@@ -36,7 +36,7 @@ export default function PlantDetail({ punto }) {
           <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="#7a9ab5" strokeWidth="1.5"/>
           <circle cx="12" cy="9" r="2.5" stroke="#7a9ab5" strokeWidth="1.5"/>
         </svg>
-        <div style={{ fontSize: 'var(--text-2xs)', letterSpacing: '0.15em', textTransform: 'uppercase', textAlign: 'center', padding: '0 16px' }}>
+        <div style={{ fontSize: 'var(--text-xs)', letterSpacing: '0.02em', textTransform: 'uppercase', textAlign: 'center', padding: '0 16px', fontWeight: 500 }}>
           Selecciona un punto en el mapa
         </div>
       </div>
@@ -68,15 +68,15 @@ export default function PlantDetail({ punto }) {
         padding: '14px 16px', borderBottom: '1px solid var(--border)',
         background: bg, flexShrink: 0,
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
           <div>
             <div style={{
               fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 16,
-              color, letterSpacing: '0.04em', lineHeight: 1,
+              color, letterSpacing: '0.01em', lineHeight: 1.2,
             }}>
               {(punto.nombre ?? 'PUNTO SIN NOMBRE').toUpperCase()}
             </div>
-            <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)', marginTop: 'var(--space-1)', letterSpacing: '0.08em' }}>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 4 }}>
               {punto.ciudad} · {punto.departamento}
             </div>
           </div>
@@ -85,9 +85,10 @@ export default function PlantDetail({ punto }) {
               padding: '4px 10px',
               background: `${color}15`,
               border: `1px solid ${color}50`,
-              fontSize: 'var(--text-3xs)', fontWeight: 700, color,
-              letterSpacing: '0.1em',
+              fontSize: 'var(--text-2xs)', fontWeight: 700, color,
+              letterSpacing: '0.03em', borderRadius: 4,
               animation: nivel === 3 ? 'blink 1.2s ease-in-out infinite' : 'none',
+              flexShrink: 0,
             }}>
               {nivelLabel(nivel).toUpperCase()}
             </div>
@@ -95,13 +96,13 @@ export default function PlantDetail({ punto }) {
         </div>
 
         {/* Meta info */}
-        <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-2)', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-2-5)', flexWrap: 'wrap' }}>
           {[
             { l: 'Mediciones', v: mediciones.length },
           ].map(({ l, v }) => (
             <div key={l} style={{ textAlign: 'center', minWidth: 50 }}>
               <div style={{ fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', lineHeight: 1 }}>{v}</div>
-              <div style={{ fontSize: 8, color: 'var(--text-muted)', letterSpacing: '0.1em', marginTop: 2 }}>{l.toUpperCase()}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.02em', marginTop: 3 }}>{l.toUpperCase()}</div>
             </div>
           ))}
         </div>
@@ -118,10 +119,10 @@ export default function PlantDetail({ punto }) {
               <div key={label} style={{ textAlign: 'center', minWidth: 44 }}>
                 <div style={{ fontSize: 'var(--text-xs)', lineHeight: 1 }}>{icon}</div>
                 <div style={{ fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 'var(--text-2xs)', color: 'var(--text-primary)', marginTop: 2 }}>{v}</div>
-                <div style={{ fontSize: 8, color: 'var(--text-muted)', letterSpacing: '0.08em' }}>{label.toUpperCase()}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.02em' }}>{label.toUpperCase()}</div>
               </div>
             ))}
-            <div style={{ alignSelf: 'flex-end', fontSize: 8, color: 'var(--text-faint)', letterSpacing: '0.08em', marginLeft: 'auto' }}>
+            <div style={{ alignSelf: 'flex-end', fontSize: 10, color: 'var(--text-faint)', letterSpacing: '0.03em', marginLeft: 'auto' }}>
               ÚLTIMA MEDICIÓN
             </div>
           </div>
@@ -131,7 +132,7 @@ export default function PlantDetail({ punto }) {
       {/* Gráfica de tendencia */}
       {trendData.length > 1 && (
         <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-          <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)', letterSpacing: '0.12em', marginBottom: 'var(--space-2)' }}>
+          <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', letterSpacing: '0.04em', marginBottom: 'var(--space-2)', fontWeight: 600 }}>
             TENDENCIA — ÁREA CORROÍDA (%)
           </div>
           <ResponsiveContainer width="100%" height={70}>
@@ -153,7 +154,7 @@ export default function PlantDetail({ punto }) {
 
       {/* Historial de mediciones */}
       <div style={{ flex: 1, overflow: 'auto', padding: 'var(--space-2)' }}>
-        <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)', letterSpacing: '0.12em', padding: '4px 8px 8px' }}>
+        <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', letterSpacing: '0.04em', padding: '4px 8px 8px', fontWeight: 600 }}>
           HISTORIAL DE MEDICIONES
         </div>
 
