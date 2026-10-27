@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, X, AlertCircle, Check, Power, MapPin, ChevronDown } from 'lucide-react';
 import { useGestionEmpresas } from '../hooks/useEmpresas';
 import ZonaMapPicker from '../components/ZonaMapPicker';
+import ImagenUploader from '../components/ImagenUploader';
+import { aplicarCambioImagen } from '../lib/imagenesApi';
 import SearchableSelect from '../components/SearchableSelect';
 import colombiaData from '../data/colombia-divipola.json';
 
@@ -133,6 +135,7 @@ function ZonaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoError, setGeoError] = useState(null);
   const [showManual, setShowManual] = useState(false);
+  const [logo, setLogo] = useState({ archivo: null, quitar: false });
 
   useEffect(() => {
     const yaHayCoordenadas = initial.coordenadas?.lat;
@@ -189,7 +192,7 @@ function ZonaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
       ciudad,
       tipo_material: tipoMaterial === 'otro' ? tipoMaterialOtro.trim() : tipoMaterial,
       zonas,
-    });
+    }, logo);
   };
 
   return (
@@ -231,6 +234,14 @@ function ZonaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
           placeholder={departamento ? 'Buscar ciudad' : 'Selecciona un departamento primero'}
           disabled={!departamento}
           emptyMessage="Sin coincidencias"
+        />
+      </div>
+
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
+        <ImagenUploader
+          id="zona-logo" etiqueta="Logo (opcional)" forma="logo"
+          url={initial.logo_url} valor={logo} onChange={setLogo} disabled={saving}
+          ayuda="Se muestra en la carpeta de la galería. JPEG, PNG o WebP, máximo 5 MB."
         />
       </div>
 
@@ -390,7 +401,7 @@ function ZonaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
 // Puntos (antes Bloques) viven DENTRO de una zona y se administran aparte,
 // en /puntos.
 export default function ZonasPage() {
-  const { empresas, loading, mutating, mutError, crearEmpresa, editarEmpresa } = useGestionEmpresas();
+  const { empresas, loading, mutating, mutError, crearEmpresa, editarEmpresa, refetch } = useGestionEmpresas();
 
   const [showCreate, setShowCreate] = useState(false);
   const [editZona, setEditZona] = useState(null);
@@ -398,23 +409,38 @@ export default function ZonasPage() {
   const [formError, setFormError] = useState(null);
   const [toast, setToast] = useState(null);
 
-  const handleCrear = async (payload) => {
+  // El logo se aplica después de guardar la zona. Si falla, la zona ya quedó
+  // guardada: se avisa en el aviso final en vez de dejar el formulario abierto.
+  const guardarLogo = async (idEmpresa, logo) => {
+    if (!logo.archivo && !logo.quitar) return null;
+    try {
+      await aplicarCambioImagen(`/empresas/${idEmpresa}/logo`, 'logo_key', logo);
+      refetch();
+      return null;
+    } catch (err) {
+      return err.message;
+    }
+  };
+
+  const handleCrear = async (payload, logo) => {
     setFormError(null);
     try {
-      await crearEmpresa(payload);
+      const creada = await crearEmpresa(payload);
+      const falloLogo = await guardarLogo(creada.id_empresa, logo);
       setShowCreate(false);
-      setToast('Zona creada correctamente.');
+      setToast(falloLogo ? `Zona creada, pero no se pudo guardar el logo: ${falloLogo}` : 'Zona creada correctamente.');
     } catch (err) {
       setFormError(err.message);
     }
   };
 
-  const handleEditar = async (payload) => {
+  const handleEditar = async (payload, logo) => {
     setFormError(null);
     try {
       await editarEmpresa(editZona.id_empresa, payload);
+      const falloLogo = await guardarLogo(editZona.id_empresa, logo);
       setEditZona(null);
-      setToast('Zona actualizada correctamente.');
+      setToast(falloLogo ? `Zona actualizada, pero no se pudo guardar el logo: ${falloLogo}` : 'Zona actualizada correctamente.');
     } catch (err) {
       setFormError(err.message);
     }

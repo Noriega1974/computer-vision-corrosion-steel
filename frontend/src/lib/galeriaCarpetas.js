@@ -9,6 +9,13 @@ export const SIN_ASIGNAR = '_sin';
 export const claveEmpresa = (m) => m.empresa_id || SIN_ASIGNAR;
 export const clavePunto = (m) => m.bloque_id || SIN_ASIGNAR;
 
+// Iniciales para el círculo de respaldo de una empresa sin logo ("Universidad del Norte" -> "UN").
+export function iniciales(nombre) {
+  const palabras = (nombre ?? '').split(/\s+/).filter(p => /^[\p{L}\p{N}]/u.test(p));
+  const letras = palabras.length > 1 ? [palabras[0], palabras[1]] : palabras.slice(0, 1);
+  return letras.map(p => Array.from(p)[0]).join('').toUpperCase() || '?';
+}
+
 const tiempo = (m) => new Date(m.timestamp).getTime() || 0;
 
 // Agrupa por la clave dada y devuelve, por grupo, sus mediciones y la más reciente.

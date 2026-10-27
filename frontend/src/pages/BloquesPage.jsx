@@ -5,6 +5,8 @@ import { useEmpresas } from '../hooks/useEmpresas';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
 import SearchableSelect from '../components/SearchableSelect';
+import ImagenUploader from '../components/ImagenUploader';
+import { aplicarCambioImagen } from '../lib/imagenesApi';
 import colombiaData from '../data/colombia-divipola.json';
 
 const DEPARTAMENTOS = colombiaData.departamentos.map(d => d.nombre);
@@ -147,6 +149,7 @@ const labelStyle = {
 // ZonasPage), no de cada punto individual.
 function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, esSuperAdmin, empresasDisponibles, perfil }) {
   const [showOptional, setShowOptional] = useState(() => Boolean(initial.tipo_estructura || initial.grosor_mm || initial.descripcion));
+  const [portada, setPortada] = useState({ archivo: null, quitar: false });
   const [form, setForm] = useState({
     nombre: initial.nombre ?? '',
     descripcion: initial.descripcion ?? '',
@@ -245,7 +248,7 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, esSuperAdmi
     };
     if (esSuperAdmin) payload.empresa_id = form.empresa_id;
 
-    onSubmit(payload);
+    onSubmit(payload, portada);
   };
 
   return (
@@ -258,6 +261,14 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, esSuperAdmi
           id="punto-nombre" name="nombre" autoComplete="off"
           required value={form.nombre} onChange={set('nombre')}
           placeholder="ej: Nave A" style={inputStyle}
+        />
+      </div>
+
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
+        <ImagenUploader
+          id="punto-portada" etiqueta="Foto del punto (opcional)" forma="foto"
+          url={initial.portada_url} valor={portada} onChange={setPortada} disabled={saving}
+          ayuda="Es la portada de la carpeta del punto en la galería. JPEG, PNG o WebP, máximo 5 MB."
         />
       </div>
 
@@ -487,7 +498,7 @@ export default function BloquesPage() {
   // desde acá (GET /usuarios/me), nunca los elige la persona.
   const { perfil } = useUsuarioPerfil();
 
-  const { bloques, loading, mutating, mutError, crearBloque, editarBloque, eliminarBloque } = useGestionBloques();
+  const { bloques, loading, mutating, mutError, crearBloque, editarBloque, eliminarBloque, refetch } = useGestionBloques();
   // `enabled=esSuperAdmin`: evita el fetch (y el 403) de /empresas para
   // admin -- solo hace falta la lista completa para el selector y la
   // columna "Afiliación" de super_admin.
@@ -504,23 +515,38 @@ export default function BloquesPage() {
   const [formError, setFormError] = useState(null);
   const [toast, setToast] = useState(null);
 
-  const handleCrear = async (payload) => {
+  // La foto se aplica después de guardar el punto (la clave lleva su id). Si
+  // falla, el punto ya quedó guardado: se avisa en el aviso final.
+  const guardarPortada = async (idBloque, portada) => {
+    if (!portada.archivo && !portada.quitar) return null;
+    try {
+      await aplicarCambioImagen(`/bloques/${idBloque}/portada`, 'portada_key', portada);
+      refetch();
+      return null;
+    } catch (err) {
+      return err.message;
+    }
+  };
+
+  const handleCrear = async (payload, portada) => {
     setFormError(null);
     try {
-      await crearBloque(payload);
+      const creado = await crearBloque(payload);
+      const falloFoto = await guardarPortada(creado.id_bloque, portada);
       setShowCreate(false);
-      setToast('Punto creado correctamente.');
+      setToast(falloFoto ? `Punto creado, pero no se pudo guardar la foto: ${falloFoto}` : 'Punto creado correctamente.');
     } catch (err) {
       setFormError(err.message);
     }
   };
 
-  const handleEditar = async (payload) => {
+  const handleEditar = async (payload, portada) => {
     setFormError(null);
     try {
       await editarBloque(editBloque.id_bloque, payload);
+      const falloFoto = await guardarPortada(editBloque.id_bloque, portada);
       setEditBloque(null);
-      setToast('Punto actualizado correctamente.');
+      setToast(falloFoto ? `Punto actualizado, pero no se pudo guardar la foto: ${falloFoto}` : 'Punto actualizado correctamente.');
     } catch (err) {
       setFormError(err.message);
     }

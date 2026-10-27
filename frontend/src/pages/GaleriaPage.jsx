@@ -10,7 +10,7 @@ import { useAuth } from '../auth/AuthContext';
 import { normalizar } from '../lib/textUtils';
 import { formatFecha } from '../utils/dateFormat';
 import {
-  SIN_ASIGNAR, claveEmpresa, clavePunto, carpetasDeEmpresas, carpetasDePuntos,
+  SIN_ASIGNAR, claveEmpresa, clavePunto, carpetasDeEmpresas, carpetasDePuntos, iniciales,
 } from '../lib/galeriaCarpetas';
 import GaleriaBreadcrumb from '../components/GaleriaBreadcrumb';
 import GaleriaCarpetas from '../components/GaleriaCarpetas';
@@ -103,7 +103,16 @@ export default function GaleriaPage() {
       : perfil?.empresa_nombre;
     return nombre ?? 'Afiliación';
   };
+  // Logo de la empresa (URL prefirmada de corta vigencia): super_admin lo toma de
+  // la lista de empresas; el resto, de su propia afiliación en el perfil.
+  const logoEmpresa = (id) => {
+    if (id === SIN_ASIGNAR) return null;
+    return (esSuperAdmin
+      ? empresas.find(e => e.id_empresa === id)?.logo_url
+      : (perfil?.empresa_id === id ? perfil?.empresa_logo_url : null)) ?? null;
+  };
   const ciudadDe = (id) => bloques.find(b => b.id_bloque === id)?.ciudad ?? null;
+  const portadaPunto = (id) => bloques.find(b => b.id_bloque === id)?.portada_url ?? null;
   const nombrePunto = (m) => m.bloque_nombre ?? 'Sin punto asignado';
 
   // ─── Carpetas ─────────────────────────────────────────────────────────────
@@ -159,7 +168,8 @@ export default function GaleriaPage() {
     to: `/galeria/zona/${c.id}`,
     titulo: nombreEmpresa(c.id),
     subtitulo: `${c.puntos} ${c.puntos === 1 ? 'punto' : 'puntos'} · ${c.fotos} fotos`,
-    portada: portadaDe(c.ultima),
+    logo: logoEmpresa(c.id),
+    iniciales: iniciales(nombreEmpresa(c.id)),
     detalle: `Última medición ${formatFecha(c.ultima.timestamp)}`,
   }));
   const itemsPunto = carpetasPunto.map(c => ({
@@ -167,7 +177,7 @@ export default function GaleriaPage() {
     to: `/galeria/zona/${empresaActual}/${c.id}`,
     titulo: nombrePunto(c.ultima),
     subtitulo: ciudadDe(c.id) ?? 'Sin ciudad',
-    portada: portadaDe(c.ultima),
+    portada: portadaPunto(c.id) ?? portadaDe(c.ultima),
     detalle: `${c.fotos} ${c.fotos === 1 ? 'foto' : 'fotos'}`,
     nivel: c.ultima.nivel_corrosion ?? 0,
   }));

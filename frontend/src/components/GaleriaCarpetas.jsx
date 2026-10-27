@@ -1,13 +1,45 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Folder } from 'lucide-react';
 import NivelIcon from './NivelIcon';
 import { nivelColor, nivelLabel } from '../lib/statusUtils';
 
-// Tarjeta de carpeta (patrón flashcard): título en negrita + subtítulo suave,
-// portada encuadrada con la última foto, pie con detalle y botón píldora.
+// Imagen de la carpeta. Punto: su foto de portada (o la última medición),
+// recortada a cubrir. Empresa: su logo completo (contain) sobre fondo neutro,
+// o un círculo con sus iniciales. Si la URL falla (p. ej. vencida) cae al respaldo.
+function CarpetaMedia({ portada, logo, iniciales }) {
+  const [fallo, setFallo] = useState(false);
+  const esEmpresa = logo !== undefined;
+  const src = fallo ? null : (esEmpresa ? logo : portada);
+
+  if (src) {
+    return (
+      <img src={src} alt="" loading="lazy" onError={() => setFallo(true)}
+        style={esEmpresa
+          ? { width: '100%', height: '100%', objectFit: 'contain', display: 'block', padding: 14, boxSizing: 'border-box' }
+          : { width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+    );
+  }
+  if (esEmpresa) {
+    return (
+      <div aria-hidden="true" style={{
+        width: 84, height: 84, borderRadius: '50%', background: 'var(--bg-card-solid)',
+        border: '1px solid var(--border-strong)', color: 'var(--text-secondary)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 28, letterSpacing: '0.02em',
+      }}>
+        {iniciales}
+      </div>
+    );
+  }
+  return <Folder size={30} strokeWidth={1.5} aria-hidden="true" style={{ color: 'var(--text-faint)' }} />;
+}
+
+// Tarjeta de carpeta (patrón flashcard): imagen + nombre en negrita + subtítulo
+// suave (nunca la imagen sola), pie con detalle y botón píldora.
+// `logo` definido (url o null) la vuelve tarjeta de empresa; `iniciales` es su respaldo.
 function CarpetaCard({ item }) {
-  const { to, titulo, subtitulo, portada, detalle, nivel } = item;
+  const { to, titulo, subtitulo, portada, logo, iniciales, detalle, nivel } = item;
   return (
     <Link
       to={to}
@@ -40,12 +72,7 @@ function CarpetaCard({ item }) {
         border: '1px solid var(--border)', overflow: 'hidden',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        {portada ? (
-          <img src={portada} alt="" loading="lazy"
-            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-        ) : (
-          <Folder size={30} strokeWidth={1.5} aria-hidden="true" style={{ color: 'var(--text-faint)' }} />
-        )}
+        <CarpetaMedia portada={portada} logo={logo} iniciales={iniciales} />
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 2 }}>
@@ -75,7 +102,7 @@ function CarpetaCard({ item }) {
   );
 }
 
-// Rejilla de carpetas. `items`: [{ key, to, titulo, subtitulo, portada, detalle, nivel? }]
+// Rejilla de carpetas. `items`: [{ key, to, titulo, subtitulo, portada, logo?, iniciales?, detalle, nivel? }]
 export default function GaleriaCarpetas({ items }) {
   return (
     <div style={{
