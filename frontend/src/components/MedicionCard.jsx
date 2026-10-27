@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, CheckSquare, Square } from 'lucide-react';
 import NivelIcon from './NivelIcon';
 import { nivelColor, nivelLabel } from '../lib/statusUtils';
 import { formatFecha } from '../utils/dateFormat';
@@ -24,7 +24,9 @@ function tiempoRelativo(timestamp) {
 // `contexto` (opcional): texto que antecede a la fecha en el subtítulo, p. ej.
 // "Empresa · Punto" en los resultados de búsqueda; por defecto el punto, solo si
 // la foto tiene nombre propio (el nombre pasa a ser el título).
-export default function MedicionCard({ medicion, to, state, contexto }) {
+// `seleccion` (opcional): { marcada, onToggle } en modo selección. La tarjeta
+// deja de navegar, muestra una casilla y un clic alterna la selección.
+export default function MedicionCard({ medicion, to, state, contexto, seleccion }) {
   const nivel = medicion.nivel_corrosion ?? 0;
   const color = nivelColor(nivel);
   const nombrePunto = medicion.bloque_nombre ?? 'Sin punto asignado';
@@ -37,7 +39,11 @@ export default function MedicionCard({ medicion, to, state, contexto }) {
       to={to}
       state={state}
       className="medicion-card"
+      role={seleccion ? 'checkbox' : undefined}
+      aria-checked={seleccion ? seleccion.marcada : undefined}
+      onClick={seleccion ? (e) => { e.preventDefault(); seleccion.onToggle(); } : undefined}
       style={{
+        position: 'relative',
         display: 'flex',
         flexDirection: 'column',
         gap: 10,
@@ -48,9 +54,21 @@ export default function MedicionCard({ medicion, to, state, contexto }) {
         border: '1px solid var(--border)',
         borderRadius: 14,
         overflow: 'hidden',
-        boxShadow: 'var(--shadow-sm)',
+        ...(seleccion?.marcada
+          ? { border: '1px solid var(--accent-amber)', boxShadow: '0 0 0 2px var(--accent-amber)' }
+          : { boxShadow: 'var(--shadow-sm)' }),
       }}
     >
+      {seleccion && (
+        <span aria-hidden="true" style={{
+          position: 'absolute', top: 10, right: 10, zIndex: 2, display: 'flex',
+          padding: 3, borderRadius: 6, background: 'var(--bg-card-solid)', border: '1px solid var(--border-strong)',
+          color: seleccion.marcada ? 'var(--accent-amber)' : 'var(--text-faint)',
+        }}>
+          {seleccion.marcada ? <CheckSquare size={20} /> : <Square size={20} />}
+        </span>
+      )}
+
       {/* 1. Cabecera: Título en negrita + subtítulo suave */}
       <div>
         <div style={{

@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { apiGet } from '../lib/apiClient';
 import { useRefreshKey } from './RefreshKeyContext';
 
-export function useMediciones(limit = 20) {
+// `resumen` pide al backend omitir máscaras y detecciones (la galería no las
+// usa y así caben 1000 mediciones en una respuesta).
+export function useMediciones(limit = 20, { resumen = false } = {}) {
   const { key: globalKey } = useRefreshKey();
   const [localKey, setLocalKey] = useState(0);
   const [mediciones, setMediciones] = useState([]);
@@ -16,7 +18,7 @@ export function useMediciones(limit = 20) {
       setLoading(true);
     }
     setError(null);
-    apiGet(`/mediciones/recientes?limit=${limit}`)
+    apiGet(`/mediciones/recientes?limit=${limit}${resumen ? '&resumen=1' : ''}`)
       .then(data => {
         if (!cancelled) {
           setMediciones(data?.mediciones ?? []);
@@ -30,7 +32,7 @@ export function useMediciones(limit = 20) {
         }
       });
     return () => { cancelled = true; };
-  }, [limit, globalKey, localKey]);
+  }, [limit, resumen, globalKey, localKey]);
 
   const refetch = useCallback(() => setLocalKey(k => k + 1), []);
   return { mediciones, loading, error, refetch };

@@ -180,6 +180,8 @@ export default function MedicionDetailPage() {
   const isAdmin =
     user?.groups?.includes('super_admin') ||
     user?.groups?.includes('admin');
+  // Eliminar también lo puede tecnico (renombrar sigue siendo de admins).
+  const puedeEliminar = isAdmin || user?.groups?.includes('tecnico');
   const esSuperAdmin = user?.groups?.includes('super_admin');
   // Zona: nombre de la afiliación dueña de la medición. Un no-super_admin
   // solo ve mediciones de su propia empresa (scopeado por el backend), así
@@ -758,7 +760,7 @@ export default function MedicionDetailPage() {
               <div>
                 <SectionTitle>Gestión del espécimen</SectionTitle>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-                  {/* Renombrar la foto: mismos roles que eliminar (el backend lo exige). */}
+                  {/* Renombrar la foto: solo admins (el backend lo exige). */}
                   {isAdmin && (
                     <NombreFoto
                       idMedicion={idMedicion}
@@ -780,8 +782,8 @@ export default function MedicionDetailPage() {
                     Ver punto en dashboard
                   </ActionButton>
 
-                  {/* Eliminar: solo admins */}
-                  {isAdmin && (
+                  {/* Eliminar: super_admin, admin y tecnico */}
+                  {puedeEliminar && (
                     <>
                       <ActionButton
                         icon={<Trash2 size={15} />}

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, useParams, useSearchParams, Link } from 'react-router-dom';
 import { Upload, AlertCircle, Search, X, ImageOff } from 'lucide-react';
 import { useMediciones } from '../hooks/useMediciones';
+import { useMedicionesPunto } from '../hooks/useMedicionesPunto';
 import { useBloques } from '../hooks/useBloques';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
@@ -15,9 +16,10 @@ import GaleriaBreadcrumb from '../components/GaleriaBreadcrumb';
 import GaleriaCarpetas from '../components/GaleriaCarpetas';
 import GaleriaFotos from '../components/GaleriaFotos';
 
-// El backend entrega como máximo las 100 mediciones más recientes
-// (api_mediciones: límite 100), así que pedir más no trae más.
-const LIMITE_MEDICIONES = 100;
+// El resumen de carpetas y la búsqueda usan las 1000 mediciones más recientes
+// (máximo del backend, sin máscaras ni detecciones). Las fotos de un punto se
+// piden aparte a /mediciones/{id_punto} para no quedar truncadas.
+const LIMITE_MEDICIONES = 1000;
 
 const portadaDe = (m) => m?.url_thumbnail || m?.url_imagen || null;
 
@@ -68,7 +70,11 @@ export default function GaleriaPage() {
   const { empresaId, bloqueId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const { mediciones, loading, error } = useMediciones(LIMITE_MEDICIONES);
+  const { mediciones, loading, error } = useMediciones(LIMITE_MEDICIONES, { resumen: true });
+  // Las fotos sin punto ("_sin") no tienen id que consultar: salen del resumen.
+  const idPuntoApi = bloqueId && bloqueId !== SIN_ASIGNAR ? bloqueId : null;
+  const { mediciones: medicionesPunto, loading: cargandoPunto, error: errorPunto } =
+    useMedicionesPunto(idPuntoApi, { completo: true });
   const { bloques } = useBloques(true);
   const { user } = useAuth();
   const esSuperAdmin = user?.groups?.includes('super_admin');
@@ -107,7 +113,8 @@ export default function GaleriaPage() {
   const empresaActual = empresaId ?? carpetasEmpresa[0]?.id;
   const deEmpresa = mediciones.filter(m => claveEmpresa(m) === empresaActual);
   const carpetasPunto = carpetasDePuntos(deEmpresa);
-  const fotosDelPunto = bloqueId ? deEmpresa.filter(m => clavePunto(m) === bloqueId) : [];
+  const fotosDelPunto = idPuntoApi ? medicionesPunto
+    : bloqueId ? deEmpresa.filter(m => clavePunto(m) === bloqueId) : [];
 
   const nivelVista = consulta ? 'busqueda'
     : bloqueId ? 'fotos'
@@ -165,12 +172,18 @@ export default function GaleriaPage() {
     nivel: c.ultima.nivel_corrosion ?? 0,
   }));
 
+  // En la página de un punto manda la carga de ese punto, no la del resumen.
+  const enPunto = nivelVista === 'fotos' && idPuntoApi;
+  const cargando = enPunto ? cargandoPunto && medicionesPunto.length === 0 : loading && mediciones.length === 0;
+  const fallo = enPunto ? errorPunto : error;
+  const sinDatos = enPunto ? medicionesPunto.length === 0 : mediciones.length === 0;
+
   let contenido;
-  if (loading && mediciones.length === 0) {
+  if (cargando) {
     contenido = <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>Cargando…</p>;
-  } else if (error && mediciones.length === 0) {
-    contenido = <EstadoVacio icono={AlertCircle} titulo="No se pudo cargar la galería" texto={error} />;
-  } else if (mediciones.length === 0) {
+  } else if (fallo && sinDatos) {
+    contenido = <EstadoVacio icono={AlertCircle} titulo="No se pudo cargar la galería" texto={fallo} />;
+  } else if (!enPunto && mediciones.length === 0) {
     contenido = (
       <EstadoVacio icono={ImageOff} titulo="Sin mediciones todavía" texto="Sube tu primera imagen para comenzar el monitoreo de corrosión.">
         <button onClick={() => navigate('/upload')} style={botonAmbarStyle}>
@@ -202,7 +215,7 @@ export default function GaleriaPage() {
       <EstadoVacio icono={ImageOff} titulo="Este punto no tiene fotos" texto="La carpeta no existe o no tiene mediciones cargadas.">
         <Link to={variasEmpresas ? rutaEmpresa : '/galeria'} style={botonAmbarStyle}>Volver</Link>
       </EstadoVacio>
-    ) : <GaleriaFotos mediciones={fotosDelPunto} volverA={volverA} />;
+    ) : <GaleriaFotos mediciones={fotosDelPunto} volverA={volverA} puntoActual={idPuntoApi} />;
   }
 
   return (
@@ -222,7 +235,7 @@ export default function GaleriaPage() {
             {titulo}
           </h2>
           <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: '3px 0 0', fontFamily: 'var(--font-ui)' }}>
-            {loading && mediciones.length === 0 ? 'Cargando…' : subtitulo}
+            {cargando ? 'Cargando…' : subtitulo}
           </p>
         </div>
         <button

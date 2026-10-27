@@ -1,7 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { SearchX } from 'lucide-react';
+import { SearchX, CheckSquare } from 'lucide-react';
 import MedicionCard from './MedicionCard';
+import BarraSeleccion from './BarraSeleccion';
+import { EliminarLoteDialog, MoverLoteDialog } from './LoteDialogs';
+import { useAuth } from '../auth/AuthContext';
+import { useAccionesLote } from '../hooks/useAccionesLote';
 import { NIVELES, nivelColor, nivelLabel } from '../lib/statusUtils';
 
 const ORDENES = [
@@ -20,6 +24,11 @@ const COMPARADORES = {
   menor: (a, b) => pct(a) - pct(b),
 };
 
+// Roles que pueden eliminar y mover fotos (cliente solo mira).
+const ROLES_GESTION = ['super_admin', 'admin', 'tecnico'];
+// La partition key de la medición; si el ítem no la trae, el bloque al que pertenece.
+const idPuntoDe = (m) => m.id_punto || m.bloque_id;
+
 const controlStyle = {
   padding: '5px 10px', background: 'var(--bg-inset)',
   border: '1px solid var(--border)', borderRadius: 7,
@@ -37,8 +46,18 @@ const etiquetaStyle = {
 //  - mediciones: las fotos a mostrar (ya acotadas por punto o por búsqueda).
 //  - contexto: función opcional (medicion) => "Empresa · Punto" para el subtítulo.
 //  - volverA: ruta (con query) a la que regresa la ficha de una medición.
-export default function GaleriaFotos({ mediciones, contexto, volverA }) {
+//  - puntoActual: id del punto que se está viendo (se excluye como destino de "Mover").
+// Roles con permiso (super_admin/admin/tecnico) pueden entrar en modo selección
+// para eliminar o mover varias fotos a la vez.
+export default function GaleriaFotos({ mediciones, contexto, volverA, puntoActual }) {
   const location = useLocation();
+  const { user } = useAuth();
+  const puedeGestionar = ROLES_GESTION.some(r => user?.groups?.includes(r));
+  const { eliminar, mover, procesando } = useAccionesLote();
+  const [seleccionando, setSeleccionando] = useState(false);
+  const [marcadas, setMarcadas] = useState(() => new Set());
+  const [dialogo, setDialogo] = useState(null); // 'mover' | 'eliminar'
+  const [resumen, setResumen] = useState(null); // { texto, errores: [...] }
   // Al volver desde la ficha de una medición, los filtros llegan por el state
   // de navegación (ver handleBack en MedicionDetailPage). Se leen una sola vez.
   const [restored] = useState(() => location.state ?? {});
@@ -56,6 +75,44 @@ export default function GaleriaFotos({ mediciones, contexto, volverA }) {
       return true;
     })
     .sort(COMPARADORES[orden]);
+
+  // Solo cuentan las marcadas que siguen visibles tras los filtros.
+  const elegibles = visibles.filter(m => idPuntoDe(m));
+  const elegidas = elegibles.filter(m => marcadas.has(m.id_medicion));
+
+  const salirDeSeleccion = () => { setSeleccionando(false); setMarcadas(new Set()); setDialogo(null); };
+  const alternar = (id) => setMarcadas(prev => {
+    const sig = new Set(prev);
+    if (sig.has(id)) sig.delete(id); else sig.add(id);
+    return sig;
+  });
+  const alternarTodas = () => setMarcadas(
+    elegidas.length === elegibles.length ? new Set() : new Set(elegibles.map(m => m.id_medicion)),
+  );
+
+  // Escape cierra el diálogo abierto o, si no hay, sale del modo selección.
+  useEffect(() => {
+    if (!seleccionando) return undefined;
+    const alTecla = (e) => {
+      if (e.key !== 'Escape' || procesando) return;
+      if (dialogo) setDialogo(null); else salirDeSeleccion();
+    };
+    window.addEventListener('keydown', alTecla);
+    return () => window.removeEventListener('keydown', alTecla);
+  }, [seleccionando, dialogo, procesando]);
+
+  async function ejecutar(accion, verbo) {
+    const nombres = new Map(elegidas.map(m => [m.id_medicion, m.nombre || m.bloque_nombre || m.id_medicion]));
+    const { ok, error } = await accion(elegidas.map(m => ({ id_punto: idPuntoDe(m), id_medicion: m.id_medicion })));
+    const partes = [`${ok.length} ${ok.length === 1 ? verbo.sing : verbo.plur}`];
+    if (error.length) partes.push(`${error.length} con error`);
+    setResumen({
+      texto: partes.join(', '),
+      errores: error.map(e => `${nombres.get(e.id_medicion) ?? e.id_medicion}: ${e.motivo}`),
+      conError: error.length > 0,
+    });
+    salirDeSeleccion();
+  }
 
   return (
     <>
@@ -118,10 +175,48 @@ export default function GaleriaFotos({ mediciones, contexto, volverA }) {
         </div>
       </div>
 
-      <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: '0 0 12px', fontFamily: 'var(--font-ui)' }}>
-        {visibles.length} {visibles.length === 1 ? 'foto' : 'fotos'}
-        {visibles.length !== mediciones.length ? ` de ${mediciones.length}` : ''}
-      </p>
+      {resumen && (
+        <div role="status" style={{
+          display: 'flex', alignItems: 'flex-start', gap: 'var(--space-3)', marginBottom: 12,
+          padding: '10px 14px', borderRadius: 10, background: 'var(--bg-card)',
+          border: `1px solid ${resumen.conError ? 'var(--accent-red)' : 'var(--border)'}`,
+          fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)', color: 'var(--text-primary)',
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <strong>{resumen.texto}</strong>
+            {resumen.errores.map(t => (
+              <div key={t} style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 3 }}>{t}</div>
+            ))}
+          </div>
+          <button
+            type="button" onClick={() => setResumen(null)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-3)', margin: '0 0 12px' }}>
+        <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: 0, fontFamily: 'var(--font-ui)' }}>
+          {visibles.length} {visibles.length === 1 ? 'foto' : 'fotos'}
+          {visibles.length !== mediciones.length ? ` de ${mediciones.length}` : ''}
+        </p>
+        {puedeGestionar && !seleccionando && visibles.length > 0 && (
+          <button
+            type="button" onClick={() => { setSeleccionando(true); setResumen(null); }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+              background: 'transparent', border: '1px solid var(--border-strong)', borderRadius: 8,
+              cursor: 'pointer', color: 'var(--text-primary)',
+              fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
+            }}
+          >
+            <CheckSquare size={15} aria-hidden="true" />
+            Seleccionar
+          </button>
+        )}
+      </div>
 
       {visibles.length === 0 ? (
         <div style={{
@@ -144,9 +239,42 @@ export default function GaleriaFotos({ mediciones, contexto, volverA }) {
               contexto={contexto?.(m)}
               to={`/galeria/${m.id_medicion}`}
               state={{ filters: { nivelFilter, fechaInicio, fechaFin, orden }, volver: volverA }}
+              seleccion={seleccionando && idPuntoDe(m) ? {
+                marcada: marcadas.has(m.id_medicion),
+                onToggle: () => alternar(m.id_medicion),
+              } : undefined}
             />
           ))}
         </div>
+      )}
+
+      {seleccionando && (
+        <BarraSeleccion
+          cantidad={elegidas.length}
+          total={elegibles.length}
+          deshabilitado={procesando}
+          onSeleccionarTodo={alternarTodas}
+          onMover={() => setDialogo('mover')}
+          onEliminar={() => setDialogo('eliminar')}
+          onCancelar={salirDeSeleccion}
+        />
+      )}
+      {dialogo === 'eliminar' && (
+        <EliminarLoteDialog
+          cantidad={elegidas.length}
+          procesando={procesando}
+          onCancelar={() => setDialogo(null)}
+          onConfirmar={() => ejecutar(eliminar, { sing: 'eliminada', plur: 'eliminadas' })}
+        />
+      )}
+      {dialogo === 'mover' && (
+        <MoverLoteDialog
+          cantidad={elegidas.length}
+          puntoActual={puntoActual}
+          procesando={procesando}
+          onCancelar={() => setDialogo(null)}
+          onConfirmar={(destino) => ejecutar(items => mover(items, destino), { sing: 'movida', plur: 'movidas' })}
+        />
       )}
     </>
   );

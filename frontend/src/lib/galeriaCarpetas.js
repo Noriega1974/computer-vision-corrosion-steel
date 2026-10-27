@@ -1,7 +1,7 @@
 // Agrupación de la galería en carpetas (empresa -> punto) a partir de la lista
 // de mediciones que ya trae el backend. No hay endpoint de resumen, así que
 // los conteos salen de las mediciones cargadas (el backend entrega como
-// máximo las 100 más recientes).
+// máximo las 1000 más recientes).
 
 // Clave de carpeta para mediciones sin punto o sin empresa asignada.
 export const SIN_ASIGNAR = '_sin';
