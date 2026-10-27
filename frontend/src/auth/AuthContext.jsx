@@ -21,13 +21,34 @@ function parseAuthError(err) {
   return err?.message || 'Error de autenticación. Intenta de nuevo.';
 }
 
-// Extrae email, nombre y grupos del idToken de Cognito
+// Extrae sub, email, nombre y grupos del idToken de Cognito
 function buildUserFromSession(session) {
   const payload = session.tokens?.idToken?.payload || {};
+  const sub = payload.sub || '';
   const groups = payload['cognito:groups'] || [];
   const email = payload.email || '';
   const name = payload.name || payload.given_name || email.split('@')[0];
-  return { email, name, groups };
+  return { sub, email, name, groups };
+}
+
+// Determina la ruta inicial tras autenticarse o entrar a "/":
+// la primera vez que esta cuenta ingresa en el navegador (o tras completar
+// el cambio de contraseña inicial) va a /que-es-pixelrust; en ingresos
+// posteriores va directo a /dashboard.
+export function obtenerRutaInicial(user, forzarBienvenida = false) {
+  const id = user?.sub || user?.email || user?.name;
+  if (!id) return '/dashboard';
+  const key = `pixelrust:welcomed:${id}`;
+  try {
+    const yaVio = localStorage.getItem(key) === '1';
+    if (forzarBienvenida || !yaVio) {
+      localStorage.setItem(key, '1');
+      return '/que-es-pixelrust';
+    }
+  } catch {
+    if (forzarBienvenida) return '/que-es-pixelrust';
+  }
+  return '/dashboard';
 }
 
 export function AuthProvider({ children }) {

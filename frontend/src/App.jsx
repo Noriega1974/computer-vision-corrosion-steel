@@ -1,11 +1,16 @@
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './auth/AuthContext';
+import { AuthProvider, useAuth, obtenerRutaInicial } from './auth/AuthContext';
 import { RefreshKeyProvider } from './hooks/RefreshKeyContext';
 import ProtectedRoute from './auth/ProtectedRoute';
 import RoleRoute from './auth/RoleRoute';
 import AppLayout from './layouts/AppLayout';
 import RouteFallback from './components/RouteFallback';
+
+function HomeRedirect() {
+  const { user } = useAuth();
+  return <Navigate to={obtenerRutaInicial(user)} replace />;
+}
 
 // LoginPage se importa de forma normal: es la primera pantalla que ve alguien
 // sin sesion, asi que diferirla solo agrega un salto antes del formulario.
@@ -45,6 +50,7 @@ export default function App() {
                   </ProtectedRoute>
                 }
               >
+                <Route path="/"                    element={<HomeRedirect />} />
                 <Route path="/que-es-pixelrust"    element={<QuePixelRustPage />} />
                 <Route path="/dashboard"           element={<DashboardPage />} />
                 {/* Galería por carpetas: empresa -> punto -> fotos. Se prefija con
@@ -93,8 +99,6 @@ export default function App() {
                     ProtectedRoute manda a /login antes de llegar aca. */}
                 <Route path="*" element={<NotFoundPage />} />
               </Route>
-
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </Suspense>
         </RefreshKeyProvider>

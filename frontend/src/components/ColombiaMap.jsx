@@ -51,7 +51,7 @@ function escalaParaZoom(zoom) {
 }
 
 // Centro y zoom con los que abre el mapa (Universidad del Norte, Barranquilla).
-const VISTA_INICIAL = { centro: [11.0195, -74.8505], zoom: 16 };
+const VISTA_INICIAL = { centro: [11.0188, -74.8505], zoom: 17 };
 
 export default function ColombiaMap({
   selectedPunto,
@@ -90,7 +90,7 @@ export default function ColombiaMap({
 
   // Nivel de zoom actual -- se usa para recalcular el tamaño de los pines
   // "a tamaño fijo en el mundo" (ver escalaParaZoom más arriba).
-  const [zoom, setZoom] = useState(6);
+  const [zoom, setZoom] = useState(VISTA_INICIAL.zoom);
 
   // Inicializar mapa Leaflet una sola vez
   useEffect(() => {
@@ -357,7 +357,7 @@ export default function ColombiaMap({
 
     mapInstanceRef.current.flyTo(
       [lat, lng],
-      13,
+      Math.max(mapInstanceRef.current.getZoom(), 17),
       { duration: 0.8 }
     );
   }, [selectedPunto]);
