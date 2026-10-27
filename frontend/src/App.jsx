@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth, obtenerRutaInicial } from './auth/AuthContext';
 import { RefreshKeyProvider } from './hooks/RefreshKeyContext';
@@ -9,7 +9,11 @@ import RouteFallback from './components/RouteFallback';
 
 function HomeRedirect() {
   const { user } = useAuth();
-  return <Navigate to={obtenerRutaInicial(user)} replace />;
+  const [destino] = useState(() => obtenerRutaInicial(user, false, false));
+  useEffect(() => {
+    obtenerRutaInicial(user, false, true);
+  }, [user]);
+  return <Navigate to={destino} replace />;
 }
 
 // LoginPage se importa de forma normal: es la primera pantalla que ve alguien

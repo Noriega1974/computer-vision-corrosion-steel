@@ -35,14 +35,14 @@ function buildUserFromSession(session) {
 // la primera vez que esta cuenta ingresa en el navegador (o tras completar
 // el cambio de contraseña inicial) va a /que-es-pixelrust; en ingresos
 // posteriores va directo a /dashboard.
-export function obtenerRutaInicial(user, forzarBienvenida = false) {
+export function obtenerRutaInicial(user, forzarBienvenida = false, marcarVista = true) {
   const id = user?.sub || user?.email || user?.name;
   if (!id) return '/dashboard';
   const key = `pixelrust:welcomed:${id}`;
   try {
     const yaVio = localStorage.getItem(key) === '1';
     if (forzarBienvenida || !yaVio) {
-      localStorage.setItem(key, '1');
+      if (marcarVista) localStorage.setItem(key, '1');
       return '/que-es-pixelrust';
     }
   } catch {
