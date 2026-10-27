@@ -51,7 +51,7 @@ function escalaParaZoom(zoom) {
 }
 
 // Centro y zoom con los que abre el mapa (Universidad del Norte, Barranquilla).
-const VISTA_INICIAL = { centro: [11.0198, -74.8505], zoom: 17 };
+const VISTA_INICIAL = { centro: [11.0190, -74.8503], zoom: 17 };
 
 export default function ColombiaMap({
   selectedPunto,
