@@ -80,10 +80,10 @@ function CarpetaCard({ item }) {
           </div>
           {nivel != null && (
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 5, marginTop: 3,
-              fontSize: 11, color: 'var(--text-muted)', fontWeight: 500,
+              display: 'flex', alignItems: 'center', gap: 6, marginTop: 4,
+              fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600,
             }}>
-              <NivelIcon nivel={nivel} size={14} color={nivelColor(nivel)} />
+              <NivelIcon nivel={nivel} size={20} color={nivelColor(nivel)} />
               <span>{nivelLabel(nivel)}</span>
             </div>
           )}

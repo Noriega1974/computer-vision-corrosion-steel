@@ -146,10 +146,10 @@ export default function MedicionCard({ medicion, to, state, contexto, seleccion 
             </span>
           </div>
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 5, marginTop: 3,
-            fontSize: 11, color: 'var(--text-muted)', fontWeight: 500,
+            display: 'flex', alignItems: 'center', gap: 6, marginTop: 4,
+            fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600,
           }}>
-            <NivelIcon nivel={nivel} size={14} color={color} />
+            <NivelIcon nivel={nivel} size={20} color={color} />
             <span>{nivelLabel(nivel)}</span>
           </div>
         </div>
