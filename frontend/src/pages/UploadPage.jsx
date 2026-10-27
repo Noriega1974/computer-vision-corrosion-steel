@@ -222,7 +222,11 @@ export default function UploadPage() {
         <ResultadoAnalisis
           result={result}
           onReset={() => { reset(); setImagen(null); setNombre(''); setPreview(null); setExifGps(null); setBloqueSeleccionado(null); }}
-          onDashboard={() => navigate('/galeria')}
+          onDashboard={() => navigate(
+            bloqueSeleccionado?.empresa_id && bloqueSeleccionado?.id_bloque
+              ? `/galeria/zona/${bloqueSeleccionado.empresa_id}/${bloqueSeleccionado.id_bloque}`
+              : '/galeria'
+          )}
         />
       </div>
     );

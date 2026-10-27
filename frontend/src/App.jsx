@@ -47,7 +47,11 @@ export default function App() {
               >
                 <Route path="/que-es-pixelrust"    element={<QuePixelRustPage />} />
                 <Route path="/dashboard"           element={<DashboardPage />} />
+                {/* Galería por carpetas: empresa -> punto -> fotos. Se prefija con
+                    "zona" para no chocar con /galeria/:idMedicion (la ficha). */}
                 <Route path="/galeria"             element={<GaleriaPage />} />
+                <Route path="/galeria/zona/:empresaId" element={<GaleriaPage />} />
+                <Route path="/galeria/zona/:empresaId/:bloqueId" element={<GaleriaPage />} />
                 <Route path="/galeria/:idMedicion" element={<MedicionDetailPage />} />
                 {/* "Mi perfil" se fusionó dentro de Configuración -- se deja un
                     redirect para no romper enlaces/marcadores viejos a /perfil. */}

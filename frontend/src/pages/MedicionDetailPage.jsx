@@ -187,10 +187,11 @@ export default function MedicionDetailPage() {
   const { perfil } = useUsuarioPerfil();
   const { empresas } = useEmpresas(esSuperAdmin);
 
-  // Volver a galería preservando filtros si vienen del state de navegación
+  // Volver a la carpeta (o búsqueda) de la galería de la que se vino,
+  // preservando filtros si vienen del state de navegación
   function handleBack() {
     const prevFilters = location.state?.filters;
-    navigate('/galeria', prevFilters ? { state: prevFilters } : undefined);
+    navigate(location.state?.volver ?? '/galeria', prevFilters ? { state: prevFilters } : undefined);
   }
 
   async function handleEliminar() {

@@ -1,316 +1,228 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { Upload, AlertCircle, Search, Plus, X, ChevronDown, Check } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation, useParams, useSearchParams, Link } from 'react-router-dom';
+import { Upload, AlertCircle, Search, X, ImageOff } from 'lucide-react';
 import { useMediciones } from '../hooks/useMediciones';
+import { useBloques } from '../hooks/useBloques';
 import { useEmpresas } from '../hooks/useEmpresas';
+import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
-import { NIVELES, nivelColor, nivelLabel } from '../lib/statusUtils';
+import { normalizar } from '../lib/textUtils';
 import { formatFecha } from '../utils/dateFormat';
-import { normalizar, formatoPct } from '../lib/textUtils';
+import {
+  SIN_ASIGNAR, claveEmpresa, clavePunto, carpetasDeEmpresas, carpetasDePuntos,
+} from '../lib/galeriaCarpetas';
+import GaleriaBreadcrumb from '../components/GaleriaBreadcrumb';
+import GaleriaCarpetas from '../components/GaleriaCarpetas';
+import GaleriaFotos from '../components/GaleriaFotos';
 
-// ─── Helper: tiempo relativo ─────────────────────────────────────────────────
-function tiempoRelativo(timestamp) {
-  if (!timestamp) return '—';
-  const diff = Date.now() - new Date(timestamp).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'hace un momento';
-  if (mins < 60) return `hace ${mins} min`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `hace ${hrs} h`;
-  const days = Math.floor(hrs / 24);
-  if (days < 30) return `hace ${days} días`;
-  return formatFecha(timestamp);
-}
+// El backend entrega como máximo las 100 mediciones más recientes
+// (api_mediciones: límite 100), así que pedir más no trae más.
+const LIMITE_MEDICIONES = 100;
 
-// ─── Card de galería (patrón Flashcard) ──────────────────────────────────────
-function MedicionCard({ medicion, to, state }) {
-  const nivel = medicion.nivel_corrosion ?? 0;
-  const color = nivelColor(nivel);
-  const nombrePunto = medicion.bloque_nombre ?? 'Sin punto asignado';
-  // Si la foto tiene nombre, es el título y el punto pasa al subtítulo.
-  const titulo = medicion.nombre || nombrePunto;
+const portadaDe = (m) => m?.url_thumbnail || m?.url_imagen || null;
 
+function EstadoVacio({ icono: Icono, titulo, texto, children }) {
   return (
-    <Link
-      to={to}
-      state={state}
-      className="medicion-card"
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 10,
-        padding: 14,
-        textDecoration: 'none',
-        color: 'inherit',
-        background: 'var(--bg-card)',
-        border: '1px solid var(--border)',
-        borderRadius: 14,
-        overflow: 'hidden',
-        boxShadow: 'var(--shadow-sm)',
-      }}
-    >
-      {/* 1. Cabecera: Título en negrita + subtítulo suave */}
-      <div>
-        <div style={{
-          fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 15,
-          color: 'var(--text-primary)', lineHeight: 1.2,
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        }}>
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      gap: 'var(--space-4)', padding: '60px 20px',
+      background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12,
+    }}>
+      <div style={{
+        width: 60, height: 60, borderRadius: 14,
+        background: 'var(--bg-inset)', border: '1px solid var(--border)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <Icono size={26} strokeWidth={1.5} aria-hidden="true" style={{ color: 'var(--text-faint)' }} />
+      </div>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 16, color: 'var(--text-primary)', marginBottom: 6 }}>
           {titulo}
         </div>
-        <div style={{
-          fontSize: 12, color: 'var(--text-muted)', marginTop: 2,
-          fontFamily: 'var(--font-ui)',
-        }}>
-          {medicion.nombre ? `${nombrePunto} · ` : ''}{tiempoRelativo(medicion.timestamp)}
+        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: children ? 'var(--space-4)' : 0 }}>
+          {texto}
         </div>
+        {children}
       </div>
-
-      {/* 2. Imagen encuadrada con bordes redondeados */}
-      <div style={{
-        height: 164, background: 'var(--bg-inset)',
-        borderRadius: 10, border: '1px solid var(--border)',
-        position: 'relative', overflow: 'hidden',
-      }}>
-        {medicion.url_imagen ? (
-          <img
-            src={medicion.url_thumbnail || medicion.url_imagen}
-            alt="Medición"
-            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-            loading="lazy"
-          />
-        ) : (
-          <div style={{
-            width: '100%', height: '100%',
-            display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center', gap: 'var(--space-2)',
-          }}>
-            <AlertCircle size={28} strokeWidth={1.5} style={{ color: 'var(--text-faint)' }} />
-            <span style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', fontFamily: 'var(--font-data)' }}>
-              Sin imagen
-            </span>
-          </div>
-        )}
-
-        {/* Barra de progreso al pie de la imagen */}
-        {medicion.area_corroida_pct != null && (
-          <div style={{
-            position: 'absolute', bottom: 0, left: 0, right: 0, height: 4,
-            background: 'rgba(0,0,0,0.35)',
-          }}>
-            <div style={{
-              height: '100%',
-              width: '100%',
-              transformOrigin: 'left center',
-              transform: `scaleX(${Math.min(100, medicion.area_corroida_pct) / 100})`,
-              background: color,
-              transition: 'transform 0.28s ease-out',
-            }} />
-          </div>
-        )}
-      </div>
-
-      {/* 3. Pie: métrica grande + estado a la izquierda, botón píldora CTA a la derecha */}
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        gap: 10, marginTop: 2,
-      }}>
-        <div>
-          <div style={{
-            fontFamily: 'var(--font-data)', fontWeight: 800, fontSize: 18,
-            color: 'var(--text-primary)', lineHeight: 1.05, letterSpacing: '-0.02em',
-          }}>
-            {formatoPct(medicion.area_corroida_pct)}
-            <span style={{ fontFamily: 'var(--font-ui)', fontWeight: 500, fontSize: 11, color: 'var(--text-muted)', letterSpacing: 0, marginLeft: 6 }}>
-              Área corroída
-            </span>
-          </div>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 5, marginTop: 3,
-            fontSize: 11, color: 'var(--text-muted)', fontWeight: 500,
-          }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
-            <span>{nivelLabel(nivel)}</span>
-          </div>
-        </div>
-
-        <span style={{
-          padding: '7px 14px', borderRadius: 999,
-          background: 'var(--text-primary)', color: 'var(--bg-card-solid)',
-          fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 12,
-          lineHeight: 1, flexShrink: 0,
-        }}>
-          Ver detalle
-        </span>
-      </div>
-    </Link>
+    </div>
   );
 }
 
+const botonAmbarStyle = {
+  display: 'inline-flex', alignItems: 'center', gap: 7,
+  padding: '10px 18px', background: 'var(--accent-amber)',
+  border: 'none', borderRadius: 8, cursor: 'pointer', textDecoration: 'none',
+  fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'white',
+};
+
 // ─── Página Galería ───────────────────────────────────────────────────────────
+// Tres niveles con ruta propia (el botón Atrás del navegador funciona):
+//   /galeria                              empresas (super_admin con varias) o puntos
+//   /galeria/zona/:empresaId              puntos de una empresa
+//   /galeria/zona/:empresaId/:bloqueId    fotos de un punto
+// Con una búsqueda activa (?q=) se muestran, en cualquier nivel, todas las
+// fotos que coinciden. (/galeria/:idMedicion sigue siendo la ficha de una medición.)
 export default function GaleriaPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { empresaId, bloqueId } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  // Límite de mediciones cargadas — aumenta con infinite scroll
-  const [limit, setLimit] = useState(24);
-  const { mediciones, loading } = useMediciones(limit);
-  const sentinelRef = useRef(null);
-  const isLoadingMore = useRef(false);
-
-  // Filtro de afiliación: solo tiene sentido para super_admin, que es el
-  // único que ve mediciones de más de una afiliación a la vez (el backend
-  // ya scopea a los demás roles a la suya propia).
+  const { mediciones, loading, error } = useMediciones(LIMITE_MEDICIONES);
+  const { bloques } = useBloques(true);
   const { user } = useAuth();
   const esSuperAdmin = user?.groups?.includes('super_admin');
   const { empresas } = useEmpresas(esSuperAdmin);
+  const { perfil } = useUsuarioPerfil();
 
-  // ─── Filtros ──────────────────────────────────────────────────────────────
-  // Al volver desde la ficha de una medición, los filtros llegan por el state
-  // de navegación (ver handleBack en MedicionDetailPage). Se leen una sola vez.
-  const [restored] = useState(() => location.state ?? {});
-  const [nivelFilter, setNivelFilter] = useState(restored.nivelFilter ?? 'all');
-  const [bloqueFilter, setBloqueFilter] = useState(restored.bloqueFilter ?? '');
-  const [empresaFilter, setEmpresaFilter] = useState(esSuperAdmin ? (restored.empresaFilter ?? '') : '');
-  const [fechaInicio, setFechaInicio] = useState(restored.fechaInicio ?? '');
-  const [fechaFin, setFechaFin] = useState(restored.fechaFin ?? '');
-  const [notasQuery, setNotasQuery] = useState(restored.notasQuery ?? '');
-  const [debouncedQuery, setDebouncedQuery] = useState(restored.notasQuery ?? '');
-
-  // Filtros activos visibles como pestañas dinámicas a la izquierda. Los
-  // filtros restaurados deben tener su pill para poder verlos y quitarlos.
-  const [activeFilters, setActiveFilters] = useState(() => {
-    // Por defecto no hay ningún filtro preseleccionado; solo se restaura la
-    // pill de nivel si se volvió con un nivel concreto elegido.
-    const set = new Set();
-    if (restored.nivelFilter && restored.nivelFilter !== 'all') set.add('nivel');
-    if (restored.bloqueFilter) set.add('punto');
-    if (esSuperAdmin && restored.empresaFilter) set.add('empresa');
-    if (restored.fechaInicio || restored.fechaFin) set.add('fechas');
-    return set;
-  });
-  const [showAddMenu, setShowAddMenu] = useState(false);
-  const addMenuRef = useRef(null);
-  const addMenuButtonRef = useRef(null);
-
-  // Cierra el menú con clic fuera o Esc (Esc devuelve el foco al botón).
+  // ─── Búsqueda ─────────────────────────────────────────────────────────────
+  // Vive en la URL (?q=) para que Atrás desde una ficha conserve los resultados.
+  const q = searchParams.get('q') ?? '';
+  const [texto, setTexto] = useState(q);
+  useEffect(() => { setTexto(q); }, [q]);
   useEffect(() => {
-    if (!showAddMenu) return;
-    function handleClickOutside(e) {
-      if (addMenuRef.current && !addMenuRef.current.contains(e.target)) {
-        setShowAddMenu(false);
-      }
-    }
-    function handleKeyDown(e) {
-      if (e.key === 'Escape') {
-        setShowAddMenu(false);
-        addMenuButtonRef.current?.focus();
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [showAddMenu]);
-
-  // Desde el menú solo se agregan filtros; quitarlos es con la X de su pill.
-  const addFilter = (key) => {
-    setActiveFilters(prev => (prev.has(key) ? prev : new Set(prev).add(key)));
-    setShowAddMenu(false);
-    addMenuButtonRef.current?.focus();
-  };
-
-  const removeFilter = (key) => {
-    setActiveFilters(prev => {
-      const next = new Set(prev);
-      next.delete(key);
-      return next;
-    });
-    if (key === 'nivel') setNivelFilter('all');
-    if (key === 'punto') setBloqueFilter('');
-    if (key === 'empresa') setEmpresaFilter('');
-    if (key === 'fechas') { setFechaInicio(''); setFechaFin(''); }
-  };
-
-  // Debounce de la búsqueda por notas
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(notasQuery), 400);
+    if (texto === q) return undefined;
+    const t = setTimeout(() => setSearchParams(texto ? { q: texto } : {}, { replace: true }), 350);
     return () => clearTimeout(t);
-  }, [notasQuery]);
+  }, [texto, q, setSearchParams]);
+  const consulta = normalizar(q);
 
-  // Infinite scroll con IntersectionObserver
-  useEffect(() => {
-    if (!sentinelRef.current) return;
-    const obs = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting && !loading && !isLoadingMore.current) {
-        isLoadingMore.current = true;
-        setLimit(l => l + 24);
-        // Reset flag cuando loading termina
-        setTimeout(() => { isLoadingMore.current = false; }, 1000);
-      }
-    }, { threshold: 0.1 });
-    obs.observe(sentinelRef.current);
-    return () => obs.disconnect();
-  }, [loading]);
-
-  // ─── Filtrado client-side ─────────────────────────────────────────────────
-  // Búsqueda por nombre de la foto y por notas, sin mayúsculas ni tildes.
-  const consulta = normalizar(debouncedQuery);
-  const filtered = mediciones.filter(m => {
-    if (nivelFilter !== 'all' && (m.nivel_corrosion ?? 0) !== Number(nivelFilter)) return false;
-    if (bloqueFilter && m.bloque_id !== bloqueFilter) return false;
-    if (empresaFilter && m.empresa_id !== empresaFilter) return false;
-    if (fechaInicio && new Date(m.timestamp) < new Date(fechaInicio)) return false;
-    if (fechaFin && new Date(m.timestamp) > new Date(fechaFin + 'T23:59:59')) return false;
-    if (consulta && !normalizar(`${m.nombre ?? ''} ${m.notas ?? ''}`).includes(consulta)) return false;
-    return true;
-  });
-
-  // Puntos (bloques) únicos entre las mediciones ya traídas -- no hace falta
-  // pedir /bloques, bloque_id/bloque_nombre ya vienen resueltos en cada
-  // medición (congelados al momento de subirla).
-  const bloquesEnMediciones = Array.from(
-    mediciones.reduce((map, m) => {
-      if (m.bloque_id && !map.has(m.bloque_id)) {
-        map.set(m.bloque_id, m.bloque_nombre ?? m.bloque_id);
-      }
-      return map;
-    }, new Map())
-  ).map(([id, nombre]) => ({ id, nombre }));
-
-  const inputStyle = {
-    padding: '7px 12px', background: 'var(--bg-inset)',
-    border: '1px solid var(--border)', borderRadius: 7,
-    color: 'var(--text-primary)', fontFamily: 'var(--font-ui)',
-    fontSize: 'var(--text-xs)',
+  // ─── Nombres ──────────────────────────────────────────────────────────────
+  // La medición solo trae empresa_id: super_admin resuelve contra la lista de
+  // empresas; el resto solo ve su propia empresa (la del perfil).
+  const nombreEmpresa = (id) => {
+    if (id === SIN_ASIGNAR) return 'Sin afiliación';
+    const nombre = esSuperAdmin
+      ? empresas.find(e => e.id_empresa === id)?.nombre
+      : perfil?.empresa_nombre;
+    return nombre ?? 'Afiliación';
   };
+  const ciudadDe = (id) => bloques.find(b => b.id_bloque === id)?.ciudad ?? null;
+  const nombrePunto = (m) => m.bloque_nombre ?? 'Sin punto asignado';
 
-  // Mismo aspecto que tenian los <div> que reemplazo, ahora sobre un <label>
-  // real. `display: block` conserva el salto de linea que daba el div.
-  const FILTRO_LABEL_STYLE = {
-    display: 'block', fontSize: 'var(--text-3xs)', color: 'var(--text-faint)',
-    marginBottom: 5, fontFamily: 'var(--font-data)', letterSpacing: '0.1em',
-  };
+  // ─── Carpetas ─────────────────────────────────────────────────────────────
+  const carpetasEmpresa = carpetasDeEmpresas(mediciones);
+  // Solo un super_admin con datos de varias empresas necesita ese nivel.
+  const variasEmpresas = esSuperAdmin && carpetasEmpresa.length > 1;
+  const empresaActual = empresaId ?? carpetasEmpresa[0]?.id;
+  const deEmpresa = mediciones.filter(m => claveEmpresa(m) === empresaActual);
+  const carpetasPunto = carpetasDePuntos(deEmpresa);
+  const fotosDelPunto = bloqueId ? deEmpresa.filter(m => clavePunto(m) === bloqueId) : [];
+
+  const nivelVista = consulta ? 'busqueda'
+    : bloqueId ? 'fotos'
+    : (empresaId || !variasEmpresas) ? 'puntos'
+    : 'empresas';
+
+  const volverA = `${location.pathname}${location.search}`;
+  const rutaEmpresa = `/galeria/zona/${empresaActual}`;
+  const tituloPunto = fotosDelPunto[0] ? nombrePunto(fotosDelPunto[0]) : 'Punto';
+
+  // Migas: la empresa solo aparece si existe ese nivel para este usuario.
+  const tramos = [{ label: 'Galería', to: '/galeria' }];
+  if (nivelVista === 'busqueda') {
+    tramos.push({ label: 'Resultados de la búsqueda' });
+  } else {
+    if (variasEmpresas && nivelVista !== 'empresas') tramos.push({ label: nombreEmpresa(empresaActual), to: rutaEmpresa });
+    if (nivelVista === 'fotos') tramos.push({ label: tituloPunto });
+  }
+
+  const resultados = nivelVista === 'busqueda'
+    ? mediciones.filter(m => normalizar(`${m.nombre ?? ''} ${m.notas ?? ''}`).includes(consulta))
+    : [];
+
+  let titulo = 'Galería de mediciones';
+  let subtitulo = '';
+  if (nivelVista === 'busqueda') {
+    titulo = 'Resultados de la búsqueda';
+    subtitulo = `${resultados.length} ${resultados.length === 1 ? 'foto' : 'fotos'}`;
+  } else if (nivelVista === 'empresas') {
+    subtitulo = `${carpetasEmpresa.length} afiliaciones`;
+  } else if (nivelVista === 'puntos') {
+    if (variasEmpresas) titulo = nombreEmpresa(empresaActual);
+    subtitulo = `${carpetasPunto.length} ${carpetasPunto.length === 1 ? 'punto' : 'puntos'} · ${deEmpresa.length} fotos`;
+  } else {
+    titulo = tituloPunto;
+    subtitulo = ciudadDe(bloqueId) ?? '';
+  }
+
+  // ─── Contenido ────────────────────────────────────────────────────────────
+  const itemsEmpresa = carpetasEmpresa.map(c => ({
+    key: c.id,
+    to: `/galeria/zona/${c.id}`,
+    titulo: nombreEmpresa(c.id),
+    subtitulo: `${c.puntos} ${c.puntos === 1 ? 'punto' : 'puntos'} · ${c.fotos} fotos`,
+    portada: portadaDe(c.ultima),
+    detalle: `Última medición ${formatFecha(c.ultima.timestamp)}`,
+  }));
+  const itemsPunto = carpetasPunto.map(c => ({
+    key: c.id,
+    to: `/galeria/zona/${empresaActual}/${c.id}`,
+    titulo: nombrePunto(c.ultima),
+    subtitulo: ciudadDe(c.id) ?? 'Sin ciudad',
+    portada: portadaDe(c.ultima),
+    detalle: `${c.fotos} ${c.fotos === 1 ? 'foto' : 'fotos'}`,
+    nivel: c.ultima.nivel_corrosion ?? 0,
+  }));
+
+  let contenido;
+  if (loading && mediciones.length === 0) {
+    contenido = <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>Cargando…</p>;
+  } else if (error && mediciones.length === 0) {
+    contenido = <EstadoVacio icono={AlertCircle} titulo="No se pudo cargar la galería" texto={error} />;
+  } else if (mediciones.length === 0) {
+    contenido = (
+      <EstadoVacio icono={ImageOff} titulo="Sin mediciones todavía" texto="Sube tu primera imagen para comenzar el monitoreo de corrosión.">
+        <button onClick={() => navigate('/upload')} style={botonAmbarStyle}>
+          <Upload size={15} aria-hidden="true" />
+          Subir primera medición
+        </button>
+      </EstadoVacio>
+    );
+  } else if (nivelVista === 'busqueda') {
+    contenido = resultados.length === 0 ? (
+      <EstadoVacio icono={Search} titulo="Sin resultados" texto="Ninguna foto coincide con la búsqueda por nombre o notas." />
+    ) : (
+      <GaleriaFotos
+        mediciones={resultados}
+        volverA={volverA}
+        contexto={m => (variasEmpresas ? `${nombreEmpresa(claveEmpresa(m))} · ` : '') + nombrePunto(m)}
+      />
+    );
+  } else if (nivelVista === 'empresas') {
+    contenido = <GaleriaCarpetas items={itemsEmpresa} />;
+  } else if (nivelVista === 'puntos') {
+    contenido = itemsPunto.length === 0 ? (
+      <EstadoVacio icono={ImageOff} titulo="Esta carpeta no tiene fotos" texto="No hay mediciones en esta afiliación.">
+        <Link to="/galeria" style={botonAmbarStyle}>Volver a la galería</Link>
+      </EstadoVacio>
+    ) : <GaleriaCarpetas items={itemsPunto} />;
+  } else {
+    contenido = fotosDelPunto.length === 0 ? (
+      <EstadoVacio icono={ImageOff} titulo="Este punto no tiene fotos" texto="La carpeta no existe o no tiene mediciones cargadas.">
+        <Link to={variasEmpresas ? rutaEmpresa : '/galeria'} style={botonAmbarStyle}>Volver</Link>
+      </EstadoVacio>
+    ) : <GaleriaFotos mediciones={fotosDelPunto} volverA={volverA} />;
+  }
 
   return (
     <div style={{ padding: '24px 24px 40px' }}>
+      <GaleriaBreadcrumb tramos={tramos} />
 
       {/* ── Título + CTA ── */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        marginBottom: 20, flexWrap: 'wrap', gap: 'var(--space-3)',
+        marginBottom: 16, flexWrap: 'wrap', gap: 'var(--space-3)',
       }}>
-        <div>
+        <div style={{ minWidth: 0 }}>
           <h2 style={{
             fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 'var(--text-lg)',
             color: 'var(--text-primary)', margin: 0,
           }}>
-            Galería de mediciones
+            {titulo}
           </h2>
           <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: '3px 0 0', fontFamily: 'var(--font-ui)' }}>
-            {loading ? 'Cargando…' : `${filtered.length} mediciones${filtered.length !== mediciones.length ? ` de ${mediciones.length}` : ''}`}
+            {loading && mediciones.length === 0 ? 'Cargando…' : subtitulo}
           </p>
         </div>
         <button
@@ -323,395 +235,56 @@ export default function GaleriaPage() {
             boxShadow: '0 2px 8px rgba(156,54,16,0.3)',
           }}
         >
-          <Upload size={15} />
+          <Upload size={15} aria-hidden="true" />
           Subir medición
         </button>
       </div>
 
-      {/* ── Barra de búsqueda y filtros ── */}
-      <div style={{
-        background: 'var(--bg-card)', border: '1px solid var(--border)',
-        borderRadius: 10, padding: '12px 16px', marginBottom: 20,
-        display: 'flex', flexDirection: 'column', gap: 10,
-      }}>
-        {/* Fila principal: Buscador compacto a la izquierda + Filtros dinámicos a la derecha */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'flex-start',
-          flexWrap: 'wrap', gap: 12,
-        }}>
-          {/* Lado izquierdo: Buscador compacto con icono de lupa */}
-          <div style={{ position: 'relative', minWidth: 200, maxWidth: 280, flex: '0 1 280px' }}>
-            <Search
-              size={13}
-              style={{
-                position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
-                color: 'var(--text-faint)', pointerEvents: 'none',
-              }}
-            />
-            <input
-              id="filtro-notas"
-              name="buscar-nombre-notas"
-              type="search"
-              spellCheck={false}
-              placeholder="Buscar por nombre o notas…"
-              value={notasQuery}
-              onChange={e => setNotasQuery(e.target.value)}
-              style={{
-                width: '100%', height: 32, boxSizing: 'border-box',
-                padding: '0 26px 0 28px', background: 'var(--bg-card-solid)',
-                border: '1px solid var(--border-strong)', borderRadius: 7,
-                fontSize: 'var(--text-xs)', color: 'var(--text-primary)',
-                fontFamily: 'var(--font-ui)', outline: 'none',
-              }}
-            />
-            {notasQuery && (
-              <button
-                type="button"
-                onClick={() => setNotasQuery('')}
-                style={{
-                  position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-                  background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                  display: 'flex', color: 'var(--text-faint)',
-                }}
-                title="Borrar búsqueda"
-              >
-                <X size={12} />
-              </button>
-            )}
-          </div>
-          {/* A la derecha del buscador: Botón desplegable [+ Agregar filtro] + Filtros activos */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flex: '1 1 320px' }}>
-            {/* Menú desplegable para agregar filtros */}
-            <div style={{ position: 'relative' }} ref={addMenuRef}>
-              <button
-                type="button"
-                ref={addMenuButtonRef}
-                onClick={() => setShowAddMenu(v => !v)}
-                aria-haspopup="menu"
-                aria-expanded={showAddMenu}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '7px 12px', borderRadius: 7,
-                  background: 'var(--bg-inset)', border: '1px solid var(--border-strong)',
-                  color: 'var(--text-primary)', fontFamily: 'var(--font-ui)',
-                  fontSize: 'var(--text-xs)', fontWeight: 600, cursor: 'pointer',
-                  transition: 'background-color 0.15s, border-color 0.15s',
-                }}
-              >
-                <Plus size={13} style={{ color: 'var(--accent-amber)' }} />
-                <span>Agregar filtro</span>
-                <ChevronDown size={13} style={{ color: 'var(--text-faint)', transform: showAddMenu ? 'rotate(180deg)' : 'none' }} />
-              </button>
-
-              {showAddMenu && (
-                <div role="menu" aria-label="Agregar filtro" style={{
-                  position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 60,
-                  minWidth: 190, background: 'var(--bg-card-solid)', border: '1px solid var(--border-strong)',
-                  borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.22)', padding: '4px 0',
-                }}>
-                  {[
-                    { key: 'nivel', label: 'Nivel de corrosión' },
-                    ...(bloquesEnMediciones.length > 0 ? [{ key: 'punto', label: 'Punto de medición' }] : []),
-                    ...(esSuperAdmin ? [{ key: 'empresa', label: 'Afiliación' }] : []),
-                    { key: 'fechas', label: 'Rango de fechas' },
-                  ].map(opt => {
-                    const isAdded = activeFilters.has(opt.key);
-                    return (
-                      <button
-                        key={opt.key}
-                        type="button"
-                        role="menuitem"
-                        onClick={() => addFilter(opt.key)}
-                        style={{
-                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                          width: '100%', padding: '8px 12px', background: 'transparent',
-                          border: 'none', textAlign: 'left', cursor: 'pointer',
-                          fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)',
-                          color: isAdded ? 'var(--accent-amber)' : 'var(--text-primary)',
-                          fontWeight: isAdded ? 600 : 400,
-                        }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'var(--nav-active-bg, rgba(193,70,11,0.08))'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                      >
-                        <span>{opt.label}</span>
-                        {isAdded && (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 'var(--text-3xs)', color: 'var(--accent-amber)' }}>
-                            <Check size={11} aria-hidden="true" /> Activo
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Pestaña / pill activa de punto */}
-            {activeFilters.has('punto') && (
-              <div style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '3px 8px 3px 10px', borderRadius: 20,
-                background: 'var(--bg-card-solid)', border: '1px solid var(--border-strong)',
-                fontSize: 'var(--text-2xs)', color: 'var(--text-primary)',
-              }}>
-                <span style={{ fontFamily: 'var(--font-data)', letterSpacing: '0.05em', color: 'var(--text-faint)' }}>PUNTO:</span>
-                <select
-                  value={bloqueFilter}
-                  onChange={e => setBloqueFilter(e.target.value)}
-                  style={{
-                    background: 'transparent', border: 'none', color: 'var(--text-primary)',
-                    fontFamily: 'var(--font-ui)', fontSize: 'var(--text-2xs)', cursor: 'pointer',
-                    outline: 'none', padding: '2px 4px', fontWeight: 500,
-                  }}
-                >
-                  <option value="">Todos los puntos</option>
-                  {bloqueFilter && !bloquesEnMediciones.some(b => b.id === bloqueFilter) && (
-                    <option value={bloqueFilter}>Punto seleccionado</option>
-                  )}
-                  {bloquesEnMediciones.map(b => (
-                    <option key={b.id} value={b.id}>{b.nombre}</option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => removeFilter('punto')}
-                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', color: 'var(--text-faint)' }}
-                  title="Quitar filtro de punto"
-                  aria-label="Quitar filtro de punto"
-                >
-                  <X size={12} />
-                </button>
-              </div>
-            )}
-
-            {/* Pestaña / pill activa de afiliación */}
-            {activeFilters.has('empresa') && esSuperAdmin && (
-              <div style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '3px 8px 3px 10px', borderRadius: 20,
-                background: 'var(--bg-card-solid)', border: '1px solid var(--border-strong)',
-                fontSize: 'var(--text-2xs)', color: 'var(--text-primary)',
-              }}>
-                <span style={{ fontFamily: 'var(--font-data)', letterSpacing: '0.05em', color: 'var(--text-faint)' }}>AFILIACIÓN:</span>
-                <select
-                  value={empresaFilter}
-                  onChange={e => setEmpresaFilter(e.target.value)}
-                  style={{
-                    background: 'transparent', border: 'none', color: 'var(--text-primary)',
-                    fontFamily: 'var(--font-ui)', fontSize: 'var(--text-2xs)', cursor: 'pointer',
-                    outline: 'none', padding: '2px 4px', fontWeight: 500,
-                  }}
-                >
-                  <option value="">Todas las afiliaciones</option>
-                  {empresas.map(e => (
-                    <option key={e.id_empresa} value={e.id_empresa}>{e.nombre}</option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => removeFilter('empresa')}
-                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', color: 'var(--text-faint)' }}
-                  title="Quitar filtro de afiliación"
-                  aria-label="Quitar filtro de afiliación"
-                >
-                  <X size={12} />
-                </button>
-              </div>
-            )}
-
-            {/* Pestaña / pill activa de fechas */}
-            {activeFilters.has('fechas') && (
-              <div style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '3px 8px 3px 10px', borderRadius: 20,
-                background: 'var(--bg-card-solid)', border: '1px solid var(--border-strong)',
-                fontSize: 'var(--text-2xs)', color: 'var(--text-primary)',
-              }}>
-                <span style={{ fontFamily: 'var(--font-data)', letterSpacing: '0.05em', color: 'var(--text-faint)' }}>DESDE:</span>
-                <input
-                  type="date"
-                  value={fechaInicio}
-                  onChange={e => setFechaInicio(e.target.value)}
-                  style={{
-                    background: 'transparent', border: 'none', color: 'var(--text-primary)',
-                    fontFamily: 'var(--font-ui)', fontSize: 'var(--text-2xs)', outline: 'none',
-                  }}
-                />
-                <span style={{ fontFamily: 'var(--font-data)', letterSpacing: '0.05em', color: 'var(--text-faint)' }}>HASTA:</span>
-                <input
-                  type="date"
-                  value={fechaFin}
-                  onChange={e => setFechaFin(e.target.value)}
-                  style={{
-                    background: 'transparent', border: 'none', color: 'var(--text-primary)',
-                    fontFamily: 'var(--font-ui)', fontSize: 'var(--text-2xs)', outline: 'none',
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => removeFilter('fechas')}
-                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', color: 'var(--text-faint)' }}
-                  title="Quitar filtro de fecha"
-                  aria-label="Quitar filtro de fecha"
-                >
-                  <X size={12} />
-                </button>
-              </div>
-            )}
-
-            {/* Botón limpiar filtros */}
-            {(nivelFilter !== 'all' || bloqueFilter || empresaFilter || fechaInicio || fechaFin || notasQuery) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setNivelFilter('all'); setBloqueFilter(''); setEmpresaFilter('');
-                  setFechaInicio(''); setFechaFin(''); setNotasQuery('');
-                }}
-                style={{
-                  padding: '4px 9px', background: 'transparent',
-                  border: '1px dashed var(--border-strong)', borderRadius: 6,
-                  cursor: 'pointer', color: 'var(--text-muted)',
-                  fontFamily: 'var(--font-ui)', fontSize: 'var(--text-2xs)',
-                }}
-              >
-                Limpiar filtros
-              </button>
-            )}
-          </div>
-
-        </div>
-
-        {/* Fila secundaria: Chips de Nivel (cuando está activo) */}
-        {activeFilters.has('nivel') && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-            paddingTop: 8, borderTop: '1px solid var(--border)',
-          }}>
-            <span style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', fontFamily: 'var(--font-data)', letterSpacing: '0.1em' }}>
-              NIVEL:
-            </span>
-            <div style={{ display: 'flex', gap: 'var(--space-1)', flexWrap: 'wrap', alignItems: 'center' }}>
-              {[
-                { key: 'all', label: 'Todos', color: 'var(--text-muted)' },
-                ...NIVELES.map((_, n) => ({ key: String(n), label: nivelLabel(n), color: nivelColor(n) })),
-              ].map(({ key, label, color }) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setNivelFilter(key)}
-                  style={{
-                    padding: '3px 9px', borderRadius: 20,
-                    border: `1px solid ${nivelFilter === key ? color : 'var(--border)'}`,
-                    background: nivelFilter === key ? `${color}18` : 'transparent',
-                    color: nivelFilter === key ? color : 'var(--text-muted)',
-                    fontFamily: 'var(--font-ui)', fontSize: 'var(--text-2xs)', cursor: 'pointer',
-                    fontWeight: nivelFilter === key ? 600 : 400,
-                    transition: 'color 0.12s, background-color 0.12s, border-color 0.12s',
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => removeFilter('nivel')}
-                style={{
-                  background: 'none', border: 'none', padding: '2px 4px', cursor: 'pointer',
-                  display: 'flex', color: 'var(--text-faint)', marginLeft: 4,
-                }}
-                title="Quitar filtro de nivel"
-                aria-label="Quitar filtro de nivel"
-              >
-                <X size={12} />
-              </button>
-            </div>
-          </div>
+      {/* ── Búsqueda (en todos los niveles; busca en todas las fotos visibles) ── */}
+      <div style={{ position: 'relative', maxWidth: 360, marginBottom: 20 }}>
+        <Search
+          size={13}
+          aria-hidden="true"
+          style={{
+            position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+            color: 'var(--text-faint)', pointerEvents: 'none',
+          }}
+        />
+        <input
+          id="filtro-notas"
+          name="buscar-nombre-notas"
+          type="search"
+          spellCheck={false}
+          aria-label="Buscar fotos por nombre o notas"
+          placeholder="Buscar por nombre o notas…"
+          value={texto}
+          onChange={e => setTexto(e.target.value)}
+          style={{
+            width: '100%', height: 34, boxSizing: 'border-box',
+            padding: '0 28px 0 30px', background: 'var(--bg-card-solid)',
+            border: '1px solid var(--border-strong)', borderRadius: 7,
+            fontSize: 'var(--text-xs)', color: 'var(--text-primary)',
+            fontFamily: 'var(--font-ui)', outline: 'none',
+          }}
+        />
+        {texto && (
+          <button
+            type="button"
+            onClick={() => setTexto('')}
+            title="Borrar búsqueda"
+            aria-label="Borrar búsqueda"
+            style={{
+              position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+              background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+              display: 'flex', color: 'var(--text-faint)',
+            }}
+          >
+            <X size={12} />
+          </button>
         )}
       </div>
 
-      {/* ── Grid ── */}
-      {!loading && mediciones.length === 0 ? (
-        /* Estado vacío */
-        <div style={{
-          display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center',
-          gap: 'var(--space-4)', padding: '60px 20px',
-          background: 'var(--bg-card)', border: '1px solid var(--border)',
-          borderRadius: 12,
-        }}>
-          <div style={{
-            width: 60, height: 60, borderRadius: 14,
-            background: 'var(--bg-inset)', border: '1px solid var(--border)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <AlertCircle size={26} strokeWidth={1.5} style={{ color: 'var(--text-faint)' }} />
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 16, color: 'var(--text-primary)', marginBottom: 6 }}>
-              Sin mediciones todavía
-            </div>
-            <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: 'var(--space-4)' }}>
-              Sube tu primera imagen para comenzar el monitoreo de corrosión.
-            </div>
-            <button
-              onClick={() => navigate('/upload')}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 7,
-                padding: '10px 18px', background: 'var(--accent-amber)',
-                border: 'none', borderRadius: 8, cursor: 'pointer',
-                fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'white',
-              }}
-            >
-              <Upload size={15} />
-              Subir primera medición
-            </button>
-          </div>
-        </div>
-      ) : (
-        <>
-          {/* Grid responsivo */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-            gap: 'var(--space-4)',
-          }}>
-            {filtered.map(m => (
-              <MedicionCard
-                key={m.id_medicion}
-                medicion={m}
-                to={`/galeria/${m.id_medicion}`}
-                state={{ filters: { nivelFilter, bloqueFilter, empresaFilter, fechaInicio, fechaFin, notasQuery } }}
-              />
-            ))}
-          </div>
-
-          {/* Estado vacío con filtros activos */}
-          {!loading && filtered.length === 0 && mediciones.length > 0 && (
-            <div style={{
-              textAlign: 'center', padding: '40px 20px',
-              color: 'var(--text-muted)', fontFamily: 'var(--font-ui)',
-            }}>
-              No hay mediciones que coincidan con los filtros seleccionados.
-            </div>
-          )}
-
-          {/* Sentinel para infinite scroll */}
-          <div ref={sentinelRef} style={{ height: 40, marginTop: 'var(--space-4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {loading && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)', fontSize: 'var(--text-xs)' }}>
-                <div style={{
-                  width: 14, height: 14, border: '2px solid var(--border)',
-                  borderTopColor: 'var(--accent-amber)', borderRadius: '50%',
-                  animation: 'spin 0.8s linear infinite',
-                }} />
-                Cargando más…
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      {contenido}
     </div>
   );
 }

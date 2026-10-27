@@ -16,6 +16,8 @@ const ROUTE_TITLES = {
 };
 
 function buildBreadcrumb(pathname) {
+  // Carpetas de la galería (empresa / punto): el nombre va en la propia página.
+  if (pathname.startsWith('/galeria/zona/')) return { title: 'Galería', sub: null };
   if (pathname.startsWith('/galeria/')) {
     const id = pathname.replace('/galeria/', '');
     return { title: 'Galería', sub: `Medición ${id.substring(0, 12)}…` };
