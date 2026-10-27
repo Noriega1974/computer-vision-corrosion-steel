@@ -10,7 +10,7 @@ export function normalizar(s) {
     .toLowerCase();
 }
 
-// Porcentaje con coma decimal y espacio antes del signo: 1.5 -> "1,5 %".
+// Porcentaje con coma decimal sin espacio antes del signo: 1.5 -> "1,5%".
 export function formatoPct(n) {
-  return `${Number(n ?? 0).toFixed(1).replace('.', ',')} %`;
+  return `${Number(n ?? 0).toFixed(1).replace('.', ',')}%`;
 }

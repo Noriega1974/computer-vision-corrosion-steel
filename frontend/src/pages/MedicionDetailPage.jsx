@@ -529,7 +529,7 @@ export default function MedicionDetailPage() {
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{
-                  fontFamily: 'var(--font-data)', fontWeight: 800,
+                  fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800,
                   fontSize: 30, color, letterSpacing: '-0.02em', lineHeight: 1.05,
                 }}>
                   {formatoPct(medicion.area_corroida_pct)}
@@ -584,8 +584,8 @@ export default function MedicionDetailPage() {
                     display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8,
                     marginTop: 8,
                   }}>
-                    {clima.temperatura_c != null && <ClimaItem icon={<Thermometer size={13} />} label="Temperatura" value={`${clima.temperatura_c} °C`} />}
-                    {clima.humedad_pct != null && <ClimaItem icon={<Droplets size={13} />} label="Humedad" value={`${clima.humedad_pct} %`} />}
+                    {clima.temperatura_c != null && <ClimaItem icon={<Thermometer size={13} />} label="Temperatura" value={`${clima.temperatura_c}°C`} />}
+                    {clima.humedad_pct != null && <ClimaItem icon={<Droplets size={13} />} label="Humedad" value={`${clima.humedad_pct}%`} />}
                     {vientoKmh != null && <ClimaItem icon={<Wind size={13} />} label="Viento" value={`${vientoKmh} km/h`} />}
                     {clima.precipitacion_mm != null && <ClimaItem icon={<Droplets size={13} />} label="Precipitación" value={`${clima.precipitacion_mm} mm`} />}
                   </div>
@@ -703,10 +703,10 @@ export default function MedicionDetailPage() {
               {tiempoAnalisis && (
                 <div>
                   <SectionTitle>Tiempo de análisis</SectionTitle>
-                  <div style={{ fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 'var(--text-lg)', color: 'var(--text-primary)' }}>
+                  <div style={{ fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 'var(--text-lg)', color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
                     ≈ {tiempoAnalisis.total} s
                   </div>
-                  <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', marginTop: 2 }}>
+                  <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
                     subida {tiempoAnalisis.subida} s · procesamiento {tiempoAnalisis.procesamiento} s
                   </div>
                 </div>
@@ -747,7 +747,7 @@ export default function MedicionDetailPage() {
                           {n.label}
                         </div>
                         <div style={{
-                          fontFamily: 'var(--font-data)', fontSize: 10,
+                          fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontSize: 11,
                           color: 'var(--text-muted)', lineHeight: 1.2,
                         }}>
                           {n.range}
@@ -992,7 +992,7 @@ function ClimaItem({ icon, label, value }) {
         {icon}
         {label.toUpperCase()}
       </div>
-      <div style={{ fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
+      <div style={{ fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
         {value}
       </div>
     </div>

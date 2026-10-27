@@ -109,6 +109,19 @@ const labelStyle = {
   color: 'var(--text-faint)', marginBottom: 5,
 };
 
+// Coordenadas iniciales de referencia: si la empresa ya trae coordenadas se
+// usan directo; si solo trae polígonos en `zonas`, se calcula su centroide.
+function coordenadasInicialesZona(initial) {
+  if (initial.coordenadas?.lat != null && initial.coordenadas?.lng != null) {
+    return { lat: initial.coordenadas.lat, lng: initial.coordenadas.lng };
+  }
+  const puntos = (initial.zonas ?? []).flatMap(z => z.puntos ?? []);
+  if (puntos.length === 0) return { lat: '', lng: '' };
+  const lat = Number((puntos.reduce((s, p) => s + Number(p.lat), 0) / puntos.length).toFixed(6));
+  const lng = Number((puntos.reduce((s, p) => s + Number(p.lng), 0) / puntos.length).toFixed(6));
+  return { lat, lng };
+}
+
 // ─── Formulario de zona (=empresa/afiliación) ────────────────────────────────
 // `initial`/`isEdit`: mismo patrón que el resto de la app, reusa el mismo
 // formulario en creación (POST /empresas) y edición (PUT /empresas/{id}).
@@ -127,19 +140,22 @@ function ZonaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
   const [tipoMaterial, setTipoMaterial] = useState(materialInicialEsOtro ? 'otro' : 'Galvanizado');
   const [tipoMaterialOtro, setTipoMaterialOtro] = useState(materialInicialEsOtro ? initial.tipo_material : '');
 
-  // Coordenadas del "centro" de la zona (dónde arranca a mirar el mapa al
-  // dibujarla) -- detecta la ubicación del dispositivo sola al abrir el
-  // formulario, con un toggle "Ser más específico" para tipearla a mano.
-  const [latitud, setLatitud] = useState(initial.coordenadas?.lat ?? '');
-  const [longitud, setLongitud] = useState(initial.coordenadas?.lng ?? '');
+  // Coordenadas del centro de referencia de la zona: los campos manuales se
+  // muestran desde el inicio (sin geolocalización automática al abrir) y solo
+  // se solicita permiso al navegador cuando se pulsa "Usar ubicación actual".
+  const [coordsIniciales] = useState(() => coordenadasInicialesZona(initial));
+  const [latitud, setLatitud] = useState(coordsIniciales.lat);
+  const [longitud, setLongitud] = useState(coordsIniciales.lng);
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoError, setGeoError] = useState(null);
-  const [showManual, setShowManual] = useState(false);
   const [logo, setLogo] = useState({ archivo: null, quitar: false });
 
-  useEffect(() => {
-    const yaHayCoordenadas = initial.coordenadas?.lat;
-    if (yaHayCoordenadas || !navigator.geolocation) return;
+  const usarUbicacionActual = () => {
+    if (!navigator.geolocation) {
+      setGeoError('Tu navegador no permite obtener la ubicación.');
+      return;
+    }
+    setGeoError(null);
     setGeoLoading(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -148,16 +164,15 @@ function ZonaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
         setGeoLoading(false);
       },
       () => {
-        setGeoError('No se pudo detectar la ubicación automáticamente.');
+        setGeoError('No se pudo obtener la ubicación actual.');
         setGeoLoading(false);
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  };
 
   const [zonas, setZonas] = useState(initial.zonas ?? []);
-  const hayCoordenadas = latitud !== '' && longitud !== '';
+  const hayCoordenadas = latitud !== '' && longitud !== '' && !Number.isNaN(Number(latitud)) && !Number.isNaN(Number(longitud));
   const [validationError, setValidationError] = useState(null);
 
   const handleSubmit = (e) => {
@@ -302,76 +317,69 @@ function ZonaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
         )}
       </div>
 
-      {/* Ubicación de referencia -- detección automática + toggle manual.
-          No es <label>: encabeza el bloque entero, no un solo control. */}
+      {/* Ubicación de referencia -- ingreso manual visible desde el inicio +
+          botón explícito para usar la ubicación actual. */}
       <div style={{ marginBottom: 'var(--space-3-5)' }}>
-        <span style={{ ...labelStyle, display: 'block' }}>Ubicación de referencia</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-2)', marginBottom: 6 }}>
+          <span style={{ ...labelStyle, marginBottom: 0 }}>Ubicación de referencia</span>
+          <button
+            type="button"
+            onClick={usarUbicacionActual}
+            disabled={geoLoading}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              background: 'none', border: 'none', padding: 0,
+              fontSize: 'var(--text-2xs)', color: 'var(--accent-amber)',
+              cursor: geoLoading ? 'wait' : 'pointer',
+              fontFamily: 'var(--font-data)', fontWeight: 600, letterSpacing: '0.04em',
+              textDecoration: 'underline', textUnderlineOffset: 3,
+              opacity: geoLoading ? 0.65 : 1,
+            }}
+          >
+            <MapPin size={12} aria-hidden="true" />
+            {geoLoading ? 'Detectando ubicación…' : 'Usar ubicación actual'}
+          </button>
+        </div>
 
-        {geoLoading && (
-          <div style={{ padding: '8px 12px', background: 'rgba(156,54,16,0.05)', border: '1px solid rgba(156,54,16,0.15)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>
-            Detectando ubicación…
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
+          <div>
+            <label htmlFor="zona-latitud" style={labelStyle}>Latitud</label>
+            <input
+              id="zona-latitud" name="latitud" type="number" inputMode="decimal" step="any"
+              value={latitud} onChange={e => setLatitud(e.target.value === '' ? '' : Number(e.target.value))}
+              style={inputStyle} placeholder="Ej: 4.710989"
+            />
           </div>
-        )}
-        {!geoLoading && hayCoordenadas && (
-          <div style={{ padding: '8px 12px', background: 'rgba(156,54,16,0.05)', border: '1px solid rgba(156,54,16,0.15)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <MapPin size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
-            <span>{latitud}, {longitud}</span>
+          <div>
+            <label htmlFor="zona-longitud" style={labelStyle}>Longitud</label>
+            <input
+              id="zona-longitud" name="longitud" type="number" inputMode="decimal" step="any"
+              value={longitud} onChange={e => setLongitud(e.target.value === '' ? '' : Number(e.target.value))}
+              style={inputStyle} placeholder="Ej: -74.072092"
+            />
           </div>
-        )}
+        </div>
+
         {geoError && (
-          <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.05)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: '#dc2626', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <div style={{ marginTop: 'var(--space-2)', padding: '8px 12px', background: 'rgba(220,38,38,0.05)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: '#dc2626', display: 'flex', alignItems: 'center', gap: 5 }}>
             <AlertCircle size={12} /> {geoError}
-          </div>
-        )}
-
-        <button
-          type="button" onClick={() => setShowManual(v => !v)}
-          style={{
-            marginTop: 'var(--space-2)', background: 'none', border: 'none', padding: 0,
-            fontSize: 'var(--text-2xs)', color: 'var(--accent-amber)', cursor: 'pointer',
-            fontFamily: 'var(--font-data)', fontWeight: 600, letterSpacing: '0.04em',
-            textDecoration: 'underline', textUnderlineOffset: 3,
-          }}
-        >
-          {showManual ? 'Ocultar coordenadas' : 'Ser más específico con la ubicación'}
-        </button>
-
-        {showManual && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)', marginTop: 'var(--space-2-5)' }}>
-            <div>
-              <label htmlFor="zona-latitud" style={labelStyle}>Latitud</label>
-              <input
-                id="zona-latitud" name="latitud" type="number" inputMode="decimal" step="any"
-                value={latitud} onChange={e => setLatitud(e.target.value === '' ? '' : Number(e.target.value))}
-                style={inputStyle} placeholder="Ej: 4.710989"
-              />
-            </div>
-            <div>
-              <label htmlFor="zona-longitud" style={labelStyle}>Longitud</label>
-              <input
-                id="zona-longitud" name="longitud" type="number" inputMode="decimal" step="any"
-                value={longitud} onChange={e => setLongitud(e.target.value === '' ? '' : Number(e.target.value))}
-                style={inputStyle} placeholder="Ej: -74.072092"
-              />
-            </div>
           </div>
         )}
       </div>
 
-      {/* Zona: obligatoria. El mapa arranca centrado en la ubicación de
-          referencia de arriba. */}
+      {/* Zona: obligatoria. El mapa se mantiene sincronizado con la ubicación
+          de referencia de arriba. */}
       <div style={{ marginBottom: 'var(--space-3-5)' }}>
         <span style={{ ...labelStyle, display: 'block' }}>Zona en el mapa *</span>
-        {hayCoordenadas ? (
-          <ZonaMapPicker
-            zonas={zonas} onChange={setZonas}
-            puntoReferencia={{ lat: Number(latitud), lng: Number(longitud) }}
-          />
-        ) : (
-          <div style={{ padding: '10px 12px', background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>
-            Marca una ubicación de referencia arriba para dibujar la zona.
-          </div>
-        )}
+        <ZonaMapPicker
+          zonas={zonas}
+          onChange={setZonas}
+          puntoReferencia={hayCoordenadas ? { lat: Number(latitud), lng: Number(longitud) } : null}
+          onReferenciaChange={({ lat, lng }) => {
+            setLatitud(lat);
+            setLongitud(lng);
+          }}
+        />
       </div>
 
       {(validationError || error) && (

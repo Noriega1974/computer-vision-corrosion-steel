@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import { SearchX, CheckSquare } from 'lucide-react';
 import MedicionCard from './MedicionCard';
@@ -30,15 +31,15 @@ const ROLES_GESTION = ['super_admin', 'admin', 'tecnico'];
 const idPuntoDe = (m) => m.id_punto || m.bloque_id;
 
 const controlStyle = {
-  padding: '5px 10px', background: 'var(--bg-inset)',
-  border: '1px solid var(--border)', borderRadius: 7,
+  padding: '4px 8px', background: 'var(--bg-inset)',
+  border: '1px solid var(--border)', borderRadius: 6,
   color: 'var(--text-primary)', fontFamily: 'var(--font-ui)',
-  fontSize: 'var(--text-2xs)',
+  fontSize: 'var(--text-2xs)', height: 28, boxSizing: 'border-box',
 };
 
 const etiquetaStyle = {
   fontSize: 'var(--text-3xs)', color: 'var(--text-faint)',
-  fontFamily: 'var(--font-data)', letterSpacing: '0.1em',
+  fontFamily: 'var(--font-data)', letterSpacing: '0.08em',
 };
 
 // Rejilla de fotos con filtros de nivel y fechas y orden. Se usa tanto en la
@@ -47,9 +48,12 @@ const etiquetaStyle = {
 //  - contexto: función opcional (medicion) => "Empresa · Punto" para el subtítulo.
 //  - volverA: ruta (con query) a la que regresa la ficha de una medición.
 //  - puntoActual: id del punto que se está viendo (se excluye como destino de "Mover").
-// Roles con permiso (super_admin/admin/tecnico) pueden entrar en modo selección
-// para eliminar o mover varias fotos a la vez.
-export default function GaleriaFotos({ mediciones, contexto, volverA, puntoActual }) {
+//  - toolbarTarget: nodo DOM opcional en la fila del buscador para alinear
+//    conteo, orden y botón "Seleccionar" en una sola barra.
+//  - onSeleccionChange: avisa a la página cuando entra/sale del modo selección.
+export default function GaleriaFotos({
+  mediciones, contexto, volverA, puntoActual, toolbarTarget, onSeleccionChange,
+}) {
   const location = useLocation();
   const { user } = useAuth();
   const puedeGestionar = ROLES_GESTION.some(r => user?.groups?.includes(r));
@@ -65,6 +69,11 @@ export default function GaleriaFotos({ mediciones, contexto, volverA, puntoActua
   const [fechaInicio, setFechaInicio] = useState(restored.fechaInicio ?? '');
   const [fechaFin, setFechaFin] = useState(restored.fechaFin ?? '');
   const [orden, setOrden] = useState(restored.orden ?? 'recientes');
+
+  useEffect(() => {
+    onSeleccionChange?.(seleccionando);
+    return () => onSeleccionChange?.(false);
+  }, [seleccionando, onSeleccionChange]);
 
   const hayFiltros = nivelFilter !== 'all' || fechaInicio || fechaFin;
   const visibles = mediciones
@@ -114,14 +123,50 @@ export default function GaleriaFotos({ mediciones, contexto, volverA, puntoActua
     salirDeSeleccion();
   }
 
+  const controlesBarra = (
+    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+        {visibles.length} {visibles.length === 1 ? 'foto' : 'fotos'}
+        {visibles.length !== mediciones.length ? ` de ${mediciones.length}` : ''}
+      </span>
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+        <label htmlFor="galeria-orden" style={etiquetaStyle}>ORDEN:</label>
+        <select id="galeria-orden" value={orden} onChange={e => setOrden(e.target.value)} style={{ ...controlStyle, height: 32 }}>
+          {ORDENES.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+        </select>
+      </div>
+      {puedeGestionar && !seleccionando && visibles.length > 0 && (
+        <button
+          type="button" onClick={() => { setSeleccionando(true); setResumen(null); }}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 11px', height: 32,
+            background: 'var(--bg-card-solid)', border: '1px solid var(--border-strong)', borderRadius: 7,
+            cursor: 'pointer', color: 'var(--text-primary)',
+            fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
+          }}
+        >
+          <CheckSquare size={14} aria-hidden="true" />
+          Seleccionar
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <>
+      {toolbarTarget ? createPortal(controlesBarra, toolbarTarget) : (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+          {controlesBarra}
+        </div>
+      )}
+
       <div style={{
         background: 'var(--bg-card)', border: '1px solid var(--border)',
-        borderRadius: 10, padding: '12px 16px', marginBottom: 20,
-        display: 'flex', flexDirection: 'column', gap: 10,
+        borderRadius: 9, padding: '7px 12px', marginBottom: 12,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexWrap: 'wrap', rowGap: 6, columnGap: 12,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <span style={etiquetaStyle}>NIVEL:</span>
           {[
             { key: 'all', label: 'Todos', color: 'var(--text-muted)' },
@@ -132,12 +177,12 @@ export default function GaleriaFotos({ mediciones, contexto, volverA, puntoActua
               type="button"
               onClick={() => setNivelFilter(key)}
               style={{
-                padding: '3px 9px', borderRadius: 20,
+                padding: '2px 8px', borderRadius: 20,
                 border: `1px solid ${nivelFilter === key ? color : 'var(--border)'}`,
                 background: nivelFilter === key ? `${color}18` : 'transparent',
                 color: nivelFilter === key ? color : 'var(--text-muted)',
                 fontFamily: 'var(--font-ui)', fontSize: 'var(--text-2xs)', cursor: 'pointer',
-                fontWeight: nivelFilter === key ? 600 : 400,
+                fontWeight: nivelFilter === key ? 600 : 400, lineHeight: 1.35,
                 transition: 'color 0.12s, background-color 0.12s, border-color 0.12s',
               }}
             >
@@ -147,23 +192,18 @@ export default function GaleriaFotos({ mediciones, contexto, volverA, puntoActua
         </div>
 
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-          paddingTop: 10, borderTop: '1px solid var(--border)',
+          display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginLeft: 'auto',
         }}>
           <label htmlFor="galeria-desde" style={etiquetaStyle}>DESDE:</label>
           <input id="galeria-desde" type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} style={controlStyle} />
           <label htmlFor="galeria-hasta" style={etiquetaStyle}>HASTA:</label>
           <input id="galeria-hasta" type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} style={controlStyle} />
-          <label htmlFor="galeria-orden" style={{ ...etiquetaStyle, marginLeft: 'auto' }}>ORDEN:</label>
-          <select id="galeria-orden" value={orden} onChange={e => setOrden(e.target.value)} style={controlStyle}>
-            {ORDENES.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
-          </select>
           {hayFiltros && (
             <button
               type="button"
               onClick={() => { setNivelFilter('all'); setFechaInicio(''); setFechaFin(''); }}
               style={{
-                padding: '4px 9px', background: 'transparent',
+                padding: '3px 8px', background: 'transparent',
                 border: '1px dashed var(--border-strong)', borderRadius: 6,
                 cursor: 'pointer', color: 'var(--text-muted)',
                 fontFamily: 'var(--font-ui)', fontSize: 'var(--text-2xs)',
@@ -177,8 +217,8 @@ export default function GaleriaFotos({ mediciones, contexto, volverA, puntoActua
 
       {resumen && (
         <div role="status" style={{
-          display: 'flex', alignItems: 'flex-start', gap: 'var(--space-3)', marginBottom: 12,
-          padding: '10px 14px', borderRadius: 10, background: 'var(--bg-card)',
+          display: 'flex', alignItems: 'flex-start', gap: 'var(--space-3)', marginBottom: 10,
+          padding: '9px 12px', borderRadius: 9, background: 'var(--bg-card)',
           border: `1px solid ${resumen.conError ? 'var(--accent-red)' : 'var(--border)'}`,
           fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)', color: 'var(--text-primary)',
         }}>
@@ -196,27 +236,6 @@ export default function GaleriaFotos({ mediciones, contexto, volverA, puntoActua
           </button>
         </div>
       )}
-
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-3)', margin: '0 0 12px' }}>
-        <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: 0, fontFamily: 'var(--font-ui)' }}>
-          {visibles.length} {visibles.length === 1 ? 'foto' : 'fotos'}
-          {visibles.length !== mediciones.length ? ` de ${mediciones.length}` : ''}
-        </p>
-        {puedeGestionar && !seleccionando && visibles.length > 0 && (
-          <button
-            type="button" onClick={() => { setSeleccionando(true); setResumen(null); }}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
-              background: 'transparent', border: '1px solid var(--border-strong)', borderRadius: 8,
-              cursor: 'pointer', color: 'var(--text-primary)',
-              fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
-            }}
-          >
-            <CheckSquare size={15} aria-hidden="true" />
-            Seleccionar
-          </button>
-        )}
-      </div>
 
       {visibles.length === 0 ? (
         <div style={{

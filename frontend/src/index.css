@@ -996,6 +996,55 @@ body {
   transform: translateY(0);
 }
 
+/* Botón flotante "Subir medición" en la galería */
+.galeria-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 18px;
+  background: linear-gradient(135deg, var(--accent-amber), #D64A17);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(193, 70, 11, 0.32);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+}
+
+.galeria-fab:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.06);
+  box-shadow: 0 10px 26px rgba(193, 70, 11, 0.40);
+}
+
+.galeria-fab:active {
+  transform: translateY(0);
+}
+
+@media (max-width: 640px) {
+  .galeria-fab {
+    right: 16px;
+    bottom: 16px;
+    width: 46px;
+    height: 46px;
+    padding: 0;
+    border-radius: 50%;
+  }
+
+  .galeria-fab-label {
+    display: none;
+  }
+}
+
 
 /* ================================================================
    CHARTS

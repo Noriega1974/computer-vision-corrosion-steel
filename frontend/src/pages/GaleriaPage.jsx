@@ -21,8 +21,6 @@ import GaleriaFotos from '../components/GaleriaFotos';
 // piden aparte a /mediciones/{id_punto} para no quedar truncadas.
 const LIMITE_MEDICIONES = 1000;
 
-const portadaDe = (m) => m?.url_thumbnail || m?.url_imagen || null;
-
 function EstadoVacio({ icono: Icono, titulo, texto, children }) {
   return (
     <div style={{
@@ -162,6 +160,9 @@ export default function GaleriaPage() {
     subtitulo = ciudadDe(bloqueId) ?? '';
   }
 
+  const [toolbarRight, setToolbarRight] = useState(null);
+  const [seleccionando, setSeleccionando] = useState(false);
+
   // ─── Contenido ────────────────────────────────────────────────────────────
   const itemsEmpresa = carpetasEmpresa.map(c => ({
     key: c.id,
@@ -172,15 +173,19 @@ export default function GaleriaPage() {
     iniciales: iniciales(nombreEmpresa(c.id)),
     detalle: `Última medición ${formatFecha(c.ultima.timestamp)}`,
   }));
-  const itemsPunto = carpetasPunto.map(c => ({
-    key: c.id,
-    to: `/galeria/zona/${empresaActual}/${c.id}`,
-    titulo: nombrePunto(c.ultima),
-    subtitulo: ciudadDe(c.id) ?? 'Sin ciudad',
-    portada: portadaPunto(c.id) ?? portadaDe(c.ultima),
-    detalle: `${c.fotos} ${c.fotos === 1 ? 'foto' : 'fotos'}`,
-    nivel: c.ultima.nivel_corrosion ?? 0,
-  }));
+  const itemsPunto = carpetasPunto.map(c => {
+    const tituloCarpeta = nombrePunto(c.ultima);
+    return {
+      key: c.id,
+      to: `/galeria/zona/${empresaActual}/${c.id}`,
+      titulo: tituloCarpeta,
+      subtitulo: ciudadDe(c.id) ?? 'Sin ciudad',
+      portada: portadaPunto(c.id),
+      iniciales: iniciales(tituloCarpeta),
+      detalle: `${c.fotos} ${c.fotos === 1 ? 'foto' : 'fotos'}`,
+      nivel: c.ultima.nivel_corrosion ?? 0,
+    };
+  });
 
   // En la página de un punto manda la carga de ese punto, no la del resumen.
   const enPunto = nivelVista === 'fotos' && idPuntoApi;
@@ -190,7 +195,11 @@ export default function GaleriaPage() {
 
   let contenido;
   if (cargando) {
-    contenido = <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>Cargando…</p>;
+    contenido = (
+      <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)', margin: '2px 0 0' }}>
+        Cargando…
+      </p>
+    );
   } else if (fallo && sinDatos) {
     contenido = <EstadoVacio icono={AlertCircle} titulo="No se pudo cargar la galería" texto={fallo} />;
   } else if (!enPunto && mediciones.length === 0) {
@@ -210,6 +219,8 @@ export default function GaleriaPage() {
         mediciones={resultados}
         volverA={volverA}
         contexto={m => (variasEmpresas ? `${nombreEmpresa(claveEmpresa(m))} · ` : '') + nombrePunto(m)}
+        toolbarTarget={toolbarRight}
+        onSeleccionChange={setSeleccionando}
       />
     );
   } else if (nivelVista === 'empresas') {
@@ -225,89 +236,103 @@ export default function GaleriaPage() {
       <EstadoVacio icono={ImageOff} titulo="Este punto no tiene fotos" texto="La carpeta no existe o no tiene mediciones cargadas.">
         <Link to={variasEmpresas ? rutaEmpresa : '/galeria'} style={botonAmbarStyle}>Volver</Link>
       </EstadoVacio>
-    ) : <GaleriaFotos mediciones={fotosDelPunto} volverA={volverA} puntoActual={idPuntoApi} />;
+    ) : (
+      <GaleriaFotos
+        mediciones={fotosDelPunto}
+        volverA={volverA}
+        puntoActual={idPuntoApi}
+        toolbarTarget={toolbarRight}
+        onSeleccionChange={setSeleccionando}
+      />
+    );
   }
 
   return (
-    <div style={{ padding: '24px 24px 40px' }}>
+    <div style={{ padding: '12px 20px 80px' }}>
       <GaleriaBreadcrumb tramos={tramos} />
 
-      {/* ── Título + CTA ── */}
+      {/* ── Título + subtítulo compacto en una sola línea ── */}
       <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        marginBottom: 16, flexWrap: 'wrap', gap: 'var(--space-3)',
+        display: 'flex', alignItems: 'baseline', flexWrap: 'wrap',
+        columnGap: 10, rowGap: 2, marginBottom: 8,
       }}>
-        <div style={{ minWidth: 0 }}>
-          <h2 style={{
-            fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 'var(--text-lg)',
-            color: 'var(--text-primary)', margin: 0,
-          }}>
-            {titulo}
-          </h2>
-          <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: '3px 0 0', fontFamily: 'var(--font-ui)' }}>
-            {cargando ? 'Cargando…' : subtitulo}
-          </p>
-        </div>
-        <button
-          onClick={() => navigate('/upload')}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 7,
-            padding: '9px 16px', background: 'var(--accent-amber)',
-            border: 'none', borderRadius: 8, cursor: 'pointer',
-            fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'white',
-            boxShadow: '0 2px 8px rgba(156,54,16,0.3)',
-          }}
-        >
-          <Upload size={15} aria-hidden="true" />
-          Subir medición
-        </button>
-      </div>
-
-      {/* ── Búsqueda (en todos los niveles; busca en todas las fotos visibles) ── */}
-      <div style={{ position: 'relative', maxWidth: 360, marginBottom: 20 }}>
-        <Search
-          size={13}
-          aria-hidden="true"
-          style={{
-            position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
-            color: 'var(--text-faint)', pointerEvents: 'none',
-          }}
-        />
-        <input
-          id="filtro-notas"
-          name="buscar-nombre-notas"
-          type="search"
-          spellCheck={false}
-          aria-label="Buscar fotos por nombre o notas"
-          placeholder="Buscar por nombre o notas…"
-          value={texto}
-          onChange={e => setTexto(e.target.value)}
-          style={{
-            width: '100%', height: 34, boxSizing: 'border-box',
-            padding: '0 28px 0 30px', background: 'var(--bg-card-solid)',
-            border: '1px solid var(--border-strong)', borderRadius: 7,
-            fontSize: 'var(--text-xs)', color: 'var(--text-primary)',
-            fontFamily: 'var(--font-ui)', outline: 'none',
-          }}
-        />
-        {texto && (
-          <button
-            type="button"
-            onClick={() => setTexto('')}
-            title="Borrar búsqueda"
-            aria-label="Borrar búsqueda"
-            style={{
-              position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-              background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-              display: 'flex', color: 'var(--text-faint)',
-            }}
-          >
-            <X size={12} />
-          </button>
+        <h2 style={{
+          fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 'var(--text-lg)',
+          color: 'var(--text-primary)', margin: 0, lineHeight: 1.2,
+        }}>
+          {titulo}
+        </h2>
+        {!cargando && subtitulo && (
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)', lineHeight: 1.2 }}>
+            {subtitulo}
+          </span>
         )}
       </div>
 
+      {/* ── Barra única: buscador a la izquierda + conteo/orden/seleccionar a la derecha ── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexWrap: 'wrap', gap: 8, marginBottom: 10,
+      }}>
+        <div style={{ position: 'relative', flex: '1 1 220px', maxWidth: 320 }}>
+          <Search
+            size={13}
+            aria-hidden="true"
+            style={{
+              position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+              color: 'var(--text-faint)', pointerEvents: 'none',
+            }}
+          />
+          <input
+            id="filtro-notas"
+            name="buscar-nombre-notas"
+            type="search"
+            spellCheck={false}
+            aria-label="Buscar fotos por nombre o notas"
+            placeholder="Buscar por nombre o notas…"
+            value={texto}
+            onChange={e => setTexto(e.target.value)}
+            style={{
+              width: '100%', height: 32, boxSizing: 'border-box',
+              padding: '0 28px 0 30px', background: 'var(--bg-card-solid)',
+              border: '1px solid var(--border-strong)', borderRadius: 7,
+              fontSize: 'var(--text-xs)', color: 'var(--text-primary)',
+              fontFamily: 'var(--font-ui)', outline: 'none',
+            }}
+          />
+          {texto && (
+            <button
+              type="button"
+              onClick={() => setTexto('')}
+              title="Borrar búsqueda"
+              aria-label="Borrar búsqueda"
+              style={{
+                position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                display: 'flex', color: 'var(--text-faint)',
+              }}
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <div ref={setToolbarRight} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginLeft: 'auto' }} />
+      </div>
+
       {contenido}
+
+      {!seleccionando && (
+        <button
+          type="button"
+          onClick={() => navigate('/upload')}
+          className="galeria-fab"
+          aria-label="Subir medición"
+          title="Subir medición"
+        >
+          <Upload size={16} aria-hidden="true" />
+          <span className="galeria-fab-label">Subir medición</span>
+        </button>
+      )}
     </div>
   );
 }

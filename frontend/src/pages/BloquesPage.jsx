@@ -174,20 +174,21 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, esSuperAdmi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [perfil, esSuperAdmin, isEdit]);
 
-  // Ubicación -- detección automática al abrir el formulario, con toggle
-  // "Ser más específico" para tipear lat/lng a mano. Mismo patrón para
-  // super_admin y para admin/tecnico: el nombre y la ubicación son "lo único
-  // que cambiarían con seguridad" según lo pedido.
+  // Ubicación -- campos de latitud y longitud visibles desde el inicio (sin
+  // geolocalización automática al abrir). Solo se solicita la ubicación al
+  // navegador cuando se pulsa "Usar ubicación actual".
   const [latitud, setLatitud] = useState(initial.coordenadas?.lat ?? '');
   const [longitud, setLongitud] = useState(initial.coordenadas?.lng ?? '');
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoError, setGeoError] = useState(null);
-  const [showManual, setShowManual] = useState(false);
-  const hayCoordenadas = latitud !== '' && longitud !== '';
+  const hayCoordenadas = latitud !== '' && longitud !== '' && !Number.isNaN(Number(latitud)) && !Number.isNaN(Number(longitud));
 
-  useEffect(() => {
-    const yaHayCoordenadas = initial.coordenadas?.lat;
-    if (yaHayCoordenadas || !navigator.geolocation) return;
+  const usarUbicacionActual = () => {
+    if (!navigator.geolocation) {
+      setGeoError('Tu navegador no permite obtener la ubicación.');
+      return;
+    }
+    setGeoError(null);
     setGeoLoading(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -196,13 +197,12 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, esSuperAdmi
         setGeoLoading(false);
       },
       () => {
-        setGeoError('No se pudo detectar la ubicación automáticamente.');
+        setGeoError('No se pudo obtener la ubicación actual.');
         setGeoLoading(false);
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  };
 
   const [validationError, setValidationError] = useState(null);
 
@@ -227,11 +227,11 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, esSuperAdmi
       return;
     }
     if (!esSuperAdmin && (!form.departamento || !form.ciudad)) {
-      setValidationError('Tu afiliación todavía no tiene departamento/ciudad. Pedile a un super_admin que la complete en Zonas.');
+      setValidationError('Tu afiliación todavía no tiene departamento/ciudad. Solicita a un super_admin que la complete en Zonas.');
       return;
     }
     if (!hayCoordenadas) {
-      setValidationError('Marca la ubicación (detectala o ingresá las coordenadas a mano).');
+      setValidationError('Ingresa las coordenadas o usa tu ubicación actual.');
       return;
     }
 
@@ -337,58 +337,52 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, esSuperAdmi
         </div>
       )}
 
-      {/* Ubicación -- detección automática + toggle manual, igual para
-          todos los roles. No es <label>: encabeza el bloque entero. */}
+      {/* Ubicación -- ingreso manual visible desde el inicio + botón explícito
+          para usar la ubicación actual. */}
       <div style={{ marginBottom: 'var(--space-3-5)' }}>
-        <span style={{ ...labelStyle, display: 'block' }}>Ubicación *</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-2)', marginBottom: 6 }}>
+          <span style={{ ...labelStyle, marginBottom: 0 }}>Ubicación *</span>
+          <button
+            type="button"
+            onClick={usarUbicacionActual}
+            disabled={geoLoading}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              background: 'none', border: 'none', padding: 0,
+              fontSize: 'var(--text-2xs)', color: 'var(--accent-amber)',
+              cursor: geoLoading ? 'wait' : 'pointer',
+              fontFamily: 'var(--font-data)', fontWeight: 600, letterSpacing: '0.04em',
+              textDecoration: 'underline', textUnderlineOffset: 3,
+              opacity: geoLoading ? 0.65 : 1,
+            }}
+          >
+            <MapPin size={12} aria-hidden="true" />
+            {geoLoading ? 'Detectando ubicación…' : 'Usar ubicación actual'}
+          </button>
+        </div>
 
-        {geoLoading && (
-          <div style={{ padding: '8px 12px', background: 'rgba(156,54,16,0.05)', border: '1px solid rgba(156,54,16,0.15)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>
-            Detectando ubicación…
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
+          <div>
+            <label htmlFor="punto-latitud" style={labelStyle}>Latitud</label>
+            <input
+              id="punto-latitud" name="latitud" type="number" inputMode="decimal" step="any"
+              value={latitud} onChange={e => setLatitud(e.target.value === '' ? '' : Number(e.target.value))}
+              style={inputStyle} placeholder="Ej: 4.710989"
+            />
           </div>
-        )}
-        {!geoLoading && hayCoordenadas && (
-          <div style={{ padding: '8px 12px', background: 'rgba(156,54,16,0.05)', border: '1px solid rgba(156,54,16,0.15)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <MapPin size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
-            <span>{latitud}, {longitud}</span>
+          <div>
+            <label htmlFor="punto-longitud" style={labelStyle}>Longitud</label>
+            <input
+              id="punto-longitud" name="longitud" type="number" inputMode="decimal" step="any"
+              value={longitud} onChange={e => setLongitud(e.target.value === '' ? '' : Number(e.target.value))}
+              style={inputStyle} placeholder="Ej: -74.072092"
+            />
           </div>
-        )}
+        </div>
+
         {geoError && (
-          <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.05)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: '#dc2626', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <div style={{ marginTop: 'var(--space-2)', padding: '8px 12px', background: 'rgba(220,38,38,0.05)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: '#dc2626', display: 'flex', alignItems: 'center', gap: 5 }}>
             <AlertCircle size={12} /> {geoError}
-          </div>
-        )}
-
-        <button
-          type="button" onClick={() => setShowManual(v => !v)}
-          style={{
-            marginTop: 'var(--space-2)', background: 'none', border: 'none', padding: 0,
-            fontSize: 'var(--text-2xs)', color: 'var(--accent-amber)', cursor: 'pointer',
-            fontFamily: 'var(--font-data)', fontWeight: 600, letterSpacing: '0.04em',
-            textDecoration: 'underline', textUnderlineOffset: 3,
-          }}
-        >
-          {showManual ? 'Ocultar coordenadas' : 'Ser más específico con la ubicación'}
-        </button>
-
-        {showManual && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)', marginTop: 'var(--space-2-5)' }}>
-            <div>
-              <label htmlFor="punto-latitud" style={labelStyle}>Latitud</label>
-              <input
-                id="punto-latitud" name="latitud" type="number" inputMode="decimal" step="any"
-                value={latitud} onChange={e => setLatitud(e.target.value === '' ? '' : Number(e.target.value))}
-                style={inputStyle} placeholder="Ej: 4.710989"
-              />
-            </div>
-            <div>
-              <label htmlFor="punto-longitud" style={labelStyle}>Longitud</label>
-              <input
-                id="punto-longitud" name="longitud" type="number" inputMode="decimal" step="any"
-                value={longitud} onChange={e => setLongitud(e.target.value === '' ? '' : Number(e.target.value))}
-                style={inputStyle} placeholder="Ej: -74.072092"
-              />
-            </div>
           </div>
         )}
       </div>

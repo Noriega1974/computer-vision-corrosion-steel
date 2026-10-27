@@ -137,7 +137,7 @@ export default function MedicionCard({ medicion, to, state, contexto, seleccion 
       }}>
         <div>
           <div style={{
-            fontFamily: 'var(--font-data)', fontWeight: 800, fontSize: 18,
+            fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 18,
             color: 'var(--text-primary)', lineHeight: 1.05, letterSpacing: '-0.02em',
           }}>
             {formatoPct(medicion.area_corroida_pct)}

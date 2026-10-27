@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Folder } from 'lucide-react';
 import NivelIcon from './NivelIcon';
 import { nivelColor, nivelLabel } from '../lib/statusUtils';
+import { iniciales as calcularIniciales } from '../lib/galeriaCarpetas';
 
-// Imagen de la carpeta. Punto: su foto de portada (o la última medición),
-// recortada a cubrir. Empresa: su logo completo (contain) sobre fondo neutro,
-// o un círculo con sus iniciales. Si la URL falla (p. ej. vencida) cae al respaldo.
-function CarpetaMedia({ portada, logo, iniciales }) {
+// Imagen de la carpeta. Punto: su foto de portada propia, recortada a cubrir.
+// Empresa: su logo completo (contain) sobre fondo neutro. Si no hay imagen
+// cargada o la URL falla (p. ej. vencida), se muestra un círculo neutro con
+// sus iniciales (nunca la foto de la última medición).
+function CarpetaMedia({ portada, logo, iniciales, titulo }) {
   const [fallo, setFallo] = useState(false);
   const esEmpresa = logo !== undefined;
   const src = fallo ? null : (esEmpresa ? logo : portada);
@@ -20,19 +21,16 @@ function CarpetaMedia({ portada, logo, iniciales }) {
           : { width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
     );
   }
-  if (esEmpresa) {
-    return (
-      <div aria-hidden="true" style={{
-        width: 84, height: 84, borderRadius: '50%', background: 'var(--bg-card-solid)',
-        border: '1px solid var(--border-strong)', color: 'var(--text-secondary)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 28, letterSpacing: '0.02em',
-      }}>
-        {iniciales}
-      </div>
-    );
-  }
-  return <Folder size={30} strokeWidth={1.5} aria-hidden="true" style={{ color: 'var(--text-faint)' }} />;
+  return (
+    <div aria-hidden="true" style={{
+      width: 84, height: 84, borderRadius: '50%', background: 'var(--bg-card-solid)',
+      border: '1px solid var(--border-strong)', color: 'var(--text-secondary)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 28, letterSpacing: '0.02em',
+    }}>
+      {iniciales || calcularIniciales(titulo)}
+    </div>
+  );
 }
 
 // Tarjeta de carpeta (patrón flashcard): imagen + nombre en negrita + subtítulo
@@ -72,7 +70,7 @@ function CarpetaCard({ item }) {
         border: '1px solid var(--border)', overflow: 'hidden',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <CarpetaMedia portada={portada} logo={logo} iniciales={iniciales} />
+        <CarpetaMedia portada={portada} logo={logo} iniciales={iniciales} titulo={titulo} />
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 2 }}>

@@ -8,7 +8,7 @@ export default function GaleriaBreadcrumb({ tramos }) {
   return (
     <nav aria-label="Ruta de la galería" style={{
       display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4,
-      marginBottom: 10, fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)',
+      marginBottom: 4, lineHeight: 1.2, fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)',
     }}>
       {tramos.map((t, i) => {
         const esUltimo = i === tramos.length - 1;

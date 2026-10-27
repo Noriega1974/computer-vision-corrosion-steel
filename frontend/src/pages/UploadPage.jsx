@@ -7,6 +7,7 @@ import { useUploadMedicion } from '../hooks/useUploadMedicion';
 import { nivelColor, nivelBg, nivelLabel } from '../lib/statusUtils';
 import SearchableSelect from '../components/SearchableSelect';
 import NivelIcon from '../components/NivelIcon';
+import { formatoPct } from '../lib/textUtils';
 
 // Tope de la foto: lo impone también S3 (política del POST prefirmado) y el
 // backend; este chequeo solo evita subir 50+ MB para recibir un rechazo.
@@ -14,7 +15,6 @@ const MAX_FOTO_MB = 50;
 
 // ─── Componente: resultado del análisis ─────────────────────────────────────
 const NOMBRE_MAX = 80;
-const formatoPct = n => n.toFixed(1).replace('.', ',');
 
 function ResultadoAnalisis({ result, onReset, onDashboard }) {
   const nivel = result.nivel_corrosion ?? 0;
@@ -56,7 +56,7 @@ function ResultadoAnalisis({ result, onReset, onDashboard }) {
           {/* Fuente de interfaz con cifras tabulares: la monoespaciada dejaba
               un hueco visible alrededor de la coma decimal. */}
           <div style={{ fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 52, color, letterSpacing: '-0.02em', lineHeight: 1.1, marginTop: 10 }}>
-            {formatoPct(areaPct)}%
+            {formatoPct(areaPct)}
           </div>
           <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', marginTop: 6, letterSpacing: '0.08em', fontWeight: 600 }}>
             ÁREA CORROÍDA
