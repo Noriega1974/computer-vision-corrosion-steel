@@ -165,7 +165,17 @@ export default function ZonaMapPicker({ zonas = [], onChange, puntoReferencia = 
         )}
       </div>
 
-      <div ref={mapRef} style={{ height: 340, borderRadius: 8, border: '1px solid var(--border)', overflow: 'hidden' }} />
+      <div
+        ref={mapRef}
+        style={{
+          height: 240,
+          width: '84%',
+          margin: '0 auto',
+          borderRadius: 8,
+          border: '1px solid var(--border)',
+          overflow: 'hidden',
+        }}
+      />
 
       <div style={{ marginTop: 6, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>
         {dibujando
