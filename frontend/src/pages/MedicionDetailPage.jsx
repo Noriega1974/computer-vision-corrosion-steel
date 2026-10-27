@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Download, Share2, Trash2, MapPin, AlertCircle, Thermometer, Droplets, Wind, ChevronDown, ChevronUp, Settings } from 'lucide-react';
 import { useMedicion } from '../hooks/useMedicion';
 import { useBloques } from '../hooks/useBloques';
@@ -162,7 +162,9 @@ export default function MedicionDetailPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  const { medicion, loading, error } = useMedicion(idMedicion);
+  // `?punto=` lo ponen los enlaces de la galería para hallar fotos antiguas.
+  const [searchParams] = useSearchParams();
+  const { medicion, loading, error } = useMedicion(idMedicion, searchParams.get('punto'));
   // El "Punto" viejo (GET /puntos/{id}) fue absorbido por "Bloque" -- no hay
   // endpoint por-id, así que se trae la lista completa y se filtra
   // client-side por bloque_id (mismo patrón que el filtro de bloque en

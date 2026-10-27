@@ -237,7 +237,7 @@ export default function GaleriaFotos({ mediciones, contexto, volverA, puntoActua
               key={m.id_medicion}
               medicion={m}
               contexto={contexto?.(m)}
-              to={`/galeria/${m.id_medicion}`}
+              to={m.bloque_id ? `/galeria/${m.id_medicion}?punto=${encodeURIComponent(m.bloque_id)}` : `/galeria/${m.id_medicion}`}
               state={{ filters: { nivelFilter, fechaInicio, fechaFin, orden }, volver: volverA }}
               seleccion={seleccionando && idPuntoDe(m) ? {
                 marcada: marcadas.has(m.id_medicion),
