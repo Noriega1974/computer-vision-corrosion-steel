@@ -59,7 +59,8 @@ export default function MapPicker({ lat, lng, onChange }) {
   return (
     <div>
       <div ref={mapRef} style={{
-        height: 220, borderRadius: 8, border: '1px solid var(--border)',
+        height: 220, width: '84%', margin: '0 auto',
+        borderRadius: 8, border: '1px solid var(--border)',
         overflow: 'hidden',
       }} />
       <div style={{ marginTop: 6, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)', display: 'flex', alignItems: 'center', gap: 6 }}>
