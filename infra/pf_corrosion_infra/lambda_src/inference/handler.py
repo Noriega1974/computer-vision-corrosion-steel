@@ -182,14 +182,14 @@ def _validar_bloque(bloque_id, empresa_id_creador: str | None, es_super_admin: b
     denormalizar empresa_id/bloque_nombre en la medición y resolver
     coordenadas para el clima)."""
     if not isinstance(bloque_id, str) or not bloque_id.strip():
-        raise ValueError("bloque_id debe ser un texto no vacío")
+        raise ValueError("Selecciona el punto donde se guardará la medición")
     bloque = tabla_bloques.get_item(Key={"id_bloque": bloque_id}).get("Item")
     if not bloque:
-        raise LookupError(f"Bloque {bloque_id} no encontrado")
+        raise LookupError("No se encontró el punto seleccionado. Actualiza la lista e inténtalo de nuevo")
     if not es_super_admin and bloque.get("empresa_id") != empresa_id_creador:
-        raise ValueError("El bloque pertenece a otra empresa")
+        raise ValueError("El punto pertenece a otra zona. Elige un punto de tu zona")
     if bloque.get("activo") is False:
-        raise ValueError("El bloque está inactivo. Actívalo antes de subir mediciones")
+        raise ValueError("El punto está inactivo. Actívalo antes de subir mediciones")
     return bloque
 
 
@@ -321,19 +321,19 @@ def _generar_url_subida(event: dict) -> dict:
     Mismo bloqueo de rol que POST /medicion: `cliente` no sube fotos."""
     creador = _usuario_actual(event)
     if creador and creador.get("rol") == "cliente":
-        return _respuesta(403, {"error": "Tu rol no puede subir mediciones"})
+        return _respuesta(403, {"error": "Tu rol no puede subir mediciones. Pide ayuda a un administrador"})
     sub = _claims(event).get("sub", "")
     if not sub:
-        return _respuesta(401, {"error": "No se pudo identificar al usuario"})
+        return _respuesta(401, {"error": "No se pudo identificar tu sesión. Cierra sesión y vuelve a ingresar"})
 
     try:
         body = json.loads(event.get("body") or "{}")
     except ValueError:
-        return _respuesta(400, {"error": "El cuerpo debe ser JSON"})
+        return _respuesta(400, {"error": "No se pudo leer la solicitud. Recarga la página e inténtalo de nuevo"})
     content_type = str(body.get("content_type") or "image/jpeg").strip().lower()
     extension = EXTENSIONES.get(content_type)
     if not extension:
-        return _respuesta(400, {"error": f"Tipo de imagen no soportado: {content_type}. Usa JPEG, PNG o WebP"})
+        return _respuesta(400, {"error": "Tipo de imagen no soportado. Usa una imagen JPEG, PNG o WebP"})
 
     clave = f"{_prefijo_usuario(sub)}{uuid.uuid4()}.{extension}"
     post = s3.generate_presigned_post(
@@ -361,20 +361,20 @@ def _leer_subida(imagen_key, sub: str) -> bytes:
     la foto de otro usuario ni leer otro prefijo del bucket. Lanza ValueError
     (→400) si la clave es invalida, no existe o pesa mas de MAX_BYTES_FOTO."""
     if not isinstance(imagen_key, str) or not imagen_key.strip():
-        raise ValueError("imagen_key debe ser un texto no vacío")
+        raise ValueError("Falta la imagen. Vuelve a subirla e inténtalo de nuevo")
     prefijo = _prefijo_usuario(sub) if sub else None
     resto = imagen_key[len(prefijo):] if prefijo and imagen_key.startswith(prefijo) else None
     if not resto or not _CLAVE_SUBIDA.match(resto) or resto in (".", ".."):
-        raise ValueError("imagen_key no es válida para este usuario")
+        raise ValueError("La imagen subida no es válida. Vuelve a subirla")
     try:
         meta = s3.head_object(Bucket=BUCKET_NAME, Key=imagen_key)
         if meta["ContentLength"] > MAX_BYTES_FOTO:
             _borrar_subida(imagen_key)
-            raise ValueError(f"La foto supera el máximo de {MAX_BYTES_FOTO // (1024 * 1024)} MB")
+            raise ValueError(f"La foto supera el máximo de {MAX_BYTES_FOTO // (1024 * 1024)} MB. Elige una foto más liviana")
         return s3.get_object(Bucket=BUCKET_NAME, Key=imagen_key)["Body"].read()
     except ClientError as e:
         if e.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
-            raise ValueError("La foto no existe o expiró; vuelve a subirla") from e
+            raise ValueError("La foto no existe o expiró. Vuelve a subirla") from e
         raise
 
 
@@ -402,7 +402,7 @@ def lambda_handler(event: dict, context) -> dict:
             return _generar_url_subida(event)
         except Exception as e:
             logger.exception("Error generando la URL de subida: %s", e)
-            return _respuesta(500, {"error": str(e)})
+            return _respuesta(500, {"error": "Ocurrió un error inesperado. Inténtalo de nuevo; si persiste, contacta a un administrador"})
     resp = _procesar_solicitud(event, tiempos)
     if tiempos:  # vacio si la solicitud fallo o se rechazo antes de inferir
         tiempos["total_ms"] = round((time.perf_counter() - t0) * 1000)
@@ -441,7 +441,7 @@ def _procesar_solicitud(event: dict, tiempos: dict) -> dict:
         if creador and creador.get("rol") == "cliente":
             # Subir medición: solo super_admin/admin/tecnico (ver matriz de
             # permisos) — cliente es de solo lectura.
-            return _respuesta(403, {"error": "Tu rol no puede subir mediciones"})
+            return _respuesta(403, {"error": "Tu rol no puede subir mediciones. Pide ayuda a un administrador"})
         es_super_admin = bool(creador) and creador.get("rol") == "super_admin"
         empresa_id_creador = creador.get("empresa_id") if creador else None
 
@@ -460,15 +460,15 @@ def _procesar_solicitud(event: dict, tiempos: dict) -> dict:
         tiempo_subida_s  = _tiempo_subida(body.get("tiempo_subida_s"))  # opcional
 
         if not imagen_b64 and imagen_key is None:
-            return _respuesta(400, {"error": "imagen_base64 o imagen_key es requerido"})
+            return _respuesta(400, {"error": "Falta la imagen. Selecciona una foto e inténtalo de nuevo"})
         if not bloque_id_body:
-            return _respuesta(400, {"error": "bloque_id es requerido"})
+            return _respuesta(400, {"error": "Selecciona el punto donde se guardará la medición"})
 
         if timestamp_custom:
             try:
                 ts = datetime.fromisoformat(timestamp_custom + "T12:00:00").replace(tzinfo=timezone.utc).isoformat()
             except ValueError:
-                return _respuesta(400, {"error": "timestamp_medicion debe tener formato YYYY-MM-DD"})
+                return _respuesta(400, {"error": "La fecha de la medición no es válida. Elige una fecha del calendario"})
         else:
             ts = datetime.now(timezone.utc).isoformat()
 
@@ -503,7 +503,7 @@ def _procesar_solicitud(event: dict, tiempos: dict) -> dict:
         try:
             imagen = _abrir_imagen(datos_imagen)
         except Image.DecompressionBombError:
-            return _respuesta(400, {"error": "La foto tiene demasiados píxeles para analizarla"})
+            return _respuesta(400, {"error": "La foto es demasiado grande para analizarla. Usa una imagen de menor resolución"})
         del datos_imagen
 
         resultado_ml = _inferir(imagen, tiempos)
@@ -692,4 +692,4 @@ def _procesar_solicitud(event: dict, tiempos: dict) -> dict:
 
     except Exception as e:
         logger.exception("Error en inferencia: %s", e)
-        return _respuesta(500, {"error": str(e)})
+        return _respuesta(500, {"error": "Ocurrió un error inesperado. Inténtalo de nuevo; si persiste, contacta a un administrador"})

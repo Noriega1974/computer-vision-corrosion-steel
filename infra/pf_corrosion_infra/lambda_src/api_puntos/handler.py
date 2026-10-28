@@ -217,10 +217,10 @@ def _validar_coordenadas(coordenadas) -> tuple[int, str] | None:
     """Valida `coordenadas` como `{lat, lng}` con ambos numéricos. Devuelve
     (codigo_http, mensaje) si NO es válido, o None si está todo bien."""
     if not isinstance(coordenadas, dict):
-        return 400, "coordenadas debe ser un objeto {lat, lng}"
+        return 400, "Marca la ubicación del punto en el mapa"
     lat, lng = coordenadas.get("lat"), coordenadas.get("lng")
     if not isinstance(lat, (int, float)) or isinstance(lat, bool) or not isinstance(lng, (int, float)) or isinstance(lng, bool):
-        return 400, "coordenadas.lat y coordenadas.lng deben ser numéricos"
+        return 400, "La ubicación del punto no es válida. Márcala de nuevo en el mapa"
     return None
 
 
@@ -269,13 +269,18 @@ def _con_portada_url(bloque: dict) -> dict:
 
 
 def _borrar_objeto(clave: str | None) -> None:
-    """Borrado best-effort de la portada anterior: el ítem en DynamoDB manda."""
+    """Borrado best-effort de la portada anterior: el ítem en DynamoDB manda. Un
+    reintento; si sigue fallando deja una línea ERROR greppable (ORPHAN_S3)."""
     if not clave:
         return
-    try:
-        s3.delete_object(Bucket=BUCKET_NAME, Key=clave)
-    except Exception as e:
-        logger.warning("No se pudo borrar el objeto %s: %s", clave, e)
+    error = None
+    for _ in range(2):
+        try:
+            s3.delete_object(Bucket=BUCKET_NAME, Key=clave)
+            return
+        except Exception as e:
+            error = e
+    logger.error("ORPHAN_S3 key=%s error=%s", clave, error)
 
 
 def _portada_upload_url(event: dict, bloque: dict) -> dict:
@@ -284,11 +289,11 @@ def _portada_upload_url(event: dict, bloque: dict) -> dict:
     try:
         body = json.loads(event.get("body") or "{}")
     except ValueError:
-        return _respuesta(400, {"error": "El cuerpo debe ser JSON"})
+        return _respuesta(400, {"error": "No se pudo leer la solicitud. Recarga la página e inténtalo de nuevo"})
     content_type = str(body.get("content_type") or "").strip().lower()
     extension = EXTENSIONES_IMAGEN.get(content_type)
     if not extension:
-        return _respuesta(400, {"error": f"Tipo de imagen no soportado: {content_type or 'vacío'}. Usa JPEG, PNG o WebP"})
+        return _respuesta(400, {"error": "Tipo de imagen no soportado. Usa una imagen JPEG, PNG o WebP"})
     clave = f"empresas/{bloque['empresa_id']}/{bloque['id_bloque']}/portada/{uuid.uuid4()}.{extension}"
     post = s3.generate_presigned_post(
         Bucket=BUCKET_NAME,
@@ -312,18 +317,18 @@ def _portada_fijar(event: dict, bloque: dict) -> dict:
     try:
         body = json.loads(event.get("body") or "{}")
     except ValueError:
-        return _respuesta(400, {"error": "El cuerpo debe ser JSON"})
+        return _respuesta(400, {"error": "No se pudo leer la solicitud. Recarga la página e inténtalo de nuevo"})
     clave = body.get("portada_key")
     prefijo = f"empresas/{bloque['empresa_id']}/{bloque['id_bloque']}/portada/"
     if not isinstance(clave, str) or not _CLAVE_PORTADA.match(clave) or not clave.startswith(prefijo):
-        return _respuesta(400, {"error": "portada_key inválida"})
+        return _respuesta(400, {"error": "La foto de portada no es válida. Vuelve a subirla"})
     try:
         peso = s3.head_object(Bucket=BUCKET_NAME, Key=clave)["ContentLength"]
     except ClientError:
-        return _respuesta(400, {"error": "La imagen no se encontró: vuelve a subirla"})
+        return _respuesta(400, {"error": "No se encontró la imagen subida. Vuelve a subirla"})
     if peso > PORTADA_MAX_BYTES:
         _borrar_objeto(clave)
-        return _respuesta(400, {"error": "La imagen supera los 5 MB"})
+        return _respuesta(400, {"error": "La imagen supera los 5 MB. Elige una más liviana"})
     anterior = bloque.get("portada_key")
     tabla_bloques.update_item(
         Key={"id_bloque": bloque["id_bloque"]},
@@ -375,7 +380,7 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
     if id_bloque and event.get("resource", "").startswith("/bloques/{id_bloque}/portada"):
         bloque = tabla_bloques.get_item(Key={"id_bloque": id_bloque}).get("Item")
         if not bloque:
-            return _respuesta(404, {"error": f"Bloque {id_bloque} no encontrado"})
+            return _respuesta(404, {"error": "No se encontró el punto. Actualiza la lista e inténtalo de nuevo"})
         if not _puede_gestionar_portada(creador, bloque):
             return _respuesta(403, {"error": "No tienes permiso para cambiar la foto de este punto"})
         recurso = event["resource"]
@@ -385,7 +390,7 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
             return _portada_fijar(event, bloque)
         if metodo == "DELETE" and recurso.endswith("/portada"):
             return _portada_quitar(bloque)
-        return _respuesta(405, {"error": f"Método {metodo} no permitido"})
+        return _respuesta(405, {"error": "Esta acción no está disponible. Recarga la página e inténtalo de nuevo"})
 
     # POST (crear un punto): también tecnico, además de admin/super_admin --
     # pedido explícito del usuario ("en Puntos... esta sección sí le saldrá
@@ -393,22 +398,22 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
     # empresa igual que admin (ver más abajo, rama `else` de empresa_id) --
     # nunca puede elegir otra.
     if metodo == "POST" and not id_bloque and rol not in ("tecnico", "admin", "super_admin"):
-        return _respuesta(403, {"error": "No tienes permiso para crear puntos"})
+        return _respuesta(403, {"error": "No tienes permiso para crear puntos. Pide ayuda a un administrador"})
     # PUT/DELETE (editar/eliminar un punto ya existente): solo admin/
     # super_admin -- tecnico puede crear pero no modificar ni borrar.
     if metodo in ("PUT", "DELETE") and rol not in ("admin", "super_admin"):
-        return _respuesta(403, {"error": "Solo administradores pueden gestionar bloques"})
+        return _respuesta(403, {"error": "Solo los administradores pueden editar o eliminar puntos. Pide ayuda a un administrador"})
 
     # ── POST /bloques ────────────────────────────────────────────────────
     if metodo == "POST" and not id_bloque:
         body = json.loads(event.get("body") or "{}")
         nombre = body.get("nombre")
         if not isinstance(nombre, str) or not nombre.strip():
-            return _respuesta(400, {"error": "nombre es requerido"})
+            return _respuesta(400, {"error": "Escribe el nombre del punto"})
         nombre = nombre.strip()
         descripcion = body.get("descripcion")
         if descripcion is not None and not isinstance(descripcion, str):
-            return _respuesta(400, {"error": "descripcion debe ser un texto"})
+            return _respuesta(400, {"error": "La descripción debe ser un texto. Corrígela e inténtalo de nuevo"})
 
         # coordenadas/ciudad/departamento: requeridos -- el bloque absorbió
         # el rol del punto viejo como entidad que lleva mediciones, y sin
@@ -420,12 +425,12 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
 
         ciudad = body.get("ciudad")
         if not isinstance(ciudad, str) or not ciudad.strip():
-            return _respuesta(400, {"error": "ciudad es requerida"})
+            return _respuesta(400, {"error": "Indica la ciudad del punto"})
         ciudad = ciudad.strip()
 
         departamento = body.get("departamento")
         if not isinstance(departamento, str) or not departamento.strip():
-            return _respuesta(400, {"error": "departamento es requerido"})
+            return _respuesta(400, {"error": "Indica el departamento del punto"})
         departamento = departamento.strip()
 
         # tipo_estructura: opcional, texto libre -- mismo criterio que tenía
@@ -434,13 +439,13 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
         # no de cada punto individual.
         tipo_estructura = body.get("tipo_estructura")
         if tipo_estructura is not None and not isinstance(tipo_estructura, str):
-            return _respuesta(400, {"error": "tipo_estructura debe ser un texto"})
+            return _respuesta(400, {"error": "El tipo de estructura debe ser un texto. Corrígelo e inténtalo de nuevo"})
 
         # grosor_mm: opcional, numérico -- mismo campo que tenía el punto
         # original (sistema fuente), recuperado a pedido del usuario.
         grosor_mm = body.get("grosor_mm")
         if grosor_mm is not None and (not isinstance(grosor_mm, (int, float)) or isinstance(grosor_mm, bool)):
-            return _respuesta(400, {"error": "grosor_mm debe ser numérico"})
+            return _respuesta(400, {"error": "El grosor debe ser un número en milímetros. Corrígelo e inténtalo de nuevo"})
 
         # empresa_id: SOLO super_admin lo manda (y es obligatorio para él),
         # validado contra la tabla empresas — mismo patrón que POST /usuarios
@@ -448,16 +453,16 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
         if rol == "super_admin":
             empresa_id = body.get("empresa_id")
             if not empresa_id:
-                return _respuesta(400, {"error": "super_admin debe indicar empresa_id al crear un bloque"})
+                return _respuesta(400, {"error": "Selecciona la zona donde quedará el punto"})
             if not tabla_empresas.get_item(Key={"id_empresa": empresa_id}).get("Item"):
-                return _respuesta(404, {"error": f"Empresa {empresa_id} no encontrada"})
+                return _respuesta(404, {"error": "No se encontró la zona seleccionada. Actualiza la lista e inténtalo de nuevo"})
         else:
             empresa_id = creador.get("empresa_id")
             if not empresa_id:
-                return _respuesta(400, {"error": "Tu usuario no tiene empresa asignada. Contacta a un super_admin"})
+                return _respuesta(400, {"error": "Tu usuario no tiene una zona asignada. Contacta a un superadministrador para que te la asigne"})
 
         if _nombre_bloque_repetido(empresa_id, nombre):
-            return _respuesta(409, {"error": f"Ya existe un bloque llamado '{nombre}' en esta empresa"})
+            return _respuesta(409, {"error": f"Ya existe un punto llamado '{nombre}' en esta zona. Elige otro nombre"})
 
         id_bloque_nuevo = f"BLQ-{uuid.uuid4()}"
         item = {
@@ -489,12 +494,12 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
 
     # PUT/DELETE necesitan el bloque y el chequeo de alcance por empresa.
     if not id_bloque:
-        return _respuesta(405, {"error": f"Método {metodo} no permitido"})
+        return _respuesta(405, {"error": "Esta acción no está disponible. Recarga la página e inténtalo de nuevo"})
     bloque = tabla_bloques.get_item(Key={"id_bloque": id_bloque}).get("Item")
     if not bloque:
-        return _respuesta(404, {"error": f"Bloque {id_bloque} no encontrado"})
+        return _respuesta(404, {"error": "No se encontró el punto. Actualiza la lista e inténtalo de nuevo"})
     if rol != "super_admin" and bloque.get("empresa_id") != creador.get("empresa_id"):
-        return _respuesta(403, {"error": "No puedes modificar bloques de otra empresa"})
+        return _respuesta(403, {"error": "No puedes modificar puntos de otra zona"})
 
     # ── PUT /bloques/{id_bloque} ─────────────────────────────────────────
     if metodo == "PUT":
@@ -511,25 +516,25 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
             v is None
             for v in (nombre, descripcion, activo, coordenadas, ciudad, departamento, tipo_estructura, grosor_mm)
         ):
-            return _respuesta(400, {"error": "Debes indicar al menos un campo para actualizar"})
+            return _respuesta(400, {"error": "No hay cambios para guardar. Modifica al menos un dato"})
 
         campos = {}
         if nombre is not None:
             if not isinstance(nombre, str):
-                return _respuesta(400, {"error": "nombre debe ser un texto"})
+                return _respuesta(400, {"error": "El nombre del punto debe ser un texto. Corrígelo e inténtalo de nuevo"})
             nombre = nombre.strip()
             if not nombre:
-                return _respuesta(400, {"error": "nombre no puede estar vacío"})
+                return _respuesta(400, {"error": "El nombre del punto no puede estar vacío. Escribe un nombre"})
             if _nombre_bloque_repetido(bloque.get("empresa_id"), nombre, excluir_id=id_bloque):
-                return _respuesta(409, {"error": f"Ya existe un bloque llamado '{nombre}' en esta empresa"})
+                return _respuesta(409, {"error": f"Ya existe un punto llamado '{nombre}' en esta zona. Elige otro nombre"})
             campos["nombre"] = nombre
         if descripcion is not None:
             if not isinstance(descripcion, str):
-                return _respuesta(400, {"error": "descripcion debe ser un texto"})
+                return _respuesta(400, {"error": "La descripción debe ser un texto. Corrígela e inténtalo de nuevo"})
             campos["descripcion"] = descripcion
         if activo is not None:
             if not isinstance(activo, bool):
-                return _respuesta(400, {"error": "activo debe ser un booleano"})
+                return _respuesta(400, {"error": "No se pudo cambiar el estado del punto. Recarga la página e inténtalo de nuevo"})
             campos["activo"] = activo
         # coordenadas/ciudad/departamento/tipo_estructura: opcionales en PUT
         # (a diferencia de POST, donde son requeridos) -- un bloque ya
@@ -542,19 +547,19 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
             campos["coordenadas"] = coordenadas
         if ciudad is not None:
             if not isinstance(ciudad, str) or not ciudad.strip():
-                return _respuesta(400, {"error": "ciudad debe ser un texto no vacío"})
+                return _respuesta(400, {"error": "Indica la ciudad del punto"})
             campos["ciudad"] = ciudad.strip()
         if departamento is not None:
             if not isinstance(departamento, str) or not departamento.strip():
-                return _respuesta(400, {"error": "departamento debe ser un texto no vacío"})
+                return _respuesta(400, {"error": "Indica el departamento del punto"})
             campos["departamento"] = departamento.strip()
         if tipo_estructura is not None:
             if not isinstance(tipo_estructura, str):
-                return _respuesta(400, {"error": "tipo_estructura debe ser un texto"})
+                return _respuesta(400, {"error": "El tipo de estructura debe ser un texto. Corrígelo e inténtalo de nuevo"})
             campos["tipo_estructura"] = tipo_estructura
         if grosor_mm is not None:
             if not isinstance(grosor_mm, (int, float)) or isinstance(grosor_mm, bool):
-                return _respuesta(400, {"error": "grosor_mm debe ser numérico"})
+                return _respuesta(400, {"error": "El grosor debe ser un número en milímetros. Corrígelo e inténtalo de nuevo"})
             campos["grosor_mm"] = grosor_mm
 
         expr = "SET " + ", ".join(f"#{k} = :{k}" for k in campos)
@@ -575,12 +580,22 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
         # bloque_id inexistente (huérfanas). Bloqueamos en vez de borrar en
         # cascada. El marcador S3 no se toca: puede quedar, es inocuo.
         if _contar_mediciones_de_bloque(id_bloque) > 0:
-            return _respuesta(409, {"error": "No se puede eliminar: el bloque tiene mediciones asociadas"})
+            return _respuesta(409, {"error": "No se puede eliminar el punto porque tiene mediciones. Elimina o mueve primero sus mediciones"})
         tabla_bloques.delete_item(Key={"id_bloque": id_bloque})
+        # Carrera: el conteo de arriba y las altas de mediciones (otra Lambda,
+        # otra tabla) no son atómicos. Se vuelve a contar YA borrado el punto:
+        # si entró una medición en el medio, se restaura el punto (solo si
+        # sigue sin existir) y se responde el mismo 409.
+        if _contar_mediciones_de_bloque(id_bloque) > 0:
+            try:
+                tabla_bloques.put_item(Item=bloque, ConditionExpression="attribute_not_exists(id_bloque)")
+            except Exception as e:
+                logger.error("RESTAURAR_PUNTO_FALLO id_bloque=%s error=%s", id_bloque, e)
+            return _respuesta(409, {"error": "No se puede eliminar el punto porque tiene mediciones. Elimina o mueve primero sus mediciones"})
         _borrar_objeto(bloque.get("portada_key"))
         return _respuesta(204, None)
 
-    return _respuesta(405, {"error": f"Método {metodo} no permitido"})
+    return _respuesta(405, {"error": "Esta acción no está disponible. Recarga la página e inténtalo de nuevo"})
 
 
 # ── Handler principal ────────────────────────────────────────────────────────
@@ -595,8 +610,8 @@ def lambda_handler(event: dict, context) -> dict:
         if resource.startswith("/bloques"):
             return _handle_bloques(event, metodo, path_params.get("id_bloque"))
 
-        return _respuesta(405, {"error": f"Método {metodo} no permitido"})
+        return _respuesta(405, {"error": "Esta acción no está disponible. Recarga la página e inténtalo de nuevo"})
 
     except Exception as e:
         logger.exception("Error en api_puntos (bloques): %s", e)
-        return _respuesta(500, {"error": str(e)})
+        return _respuesta(500, {"error": "Ocurrió un error inesperado. Inténtalo de nuevo; si persiste, contacta a un administrador"})

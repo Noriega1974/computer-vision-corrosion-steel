@@ -127,6 +127,19 @@ def _json_default(obj):
     return str(obj)
 
 
+_NOMBRES_ROL = {
+    "super_admin": "superadministrador",
+    "admin": "administrador",
+    "tecnico": "técnico",
+    "cliente": "cliente",
+}
+
+
+def _rol_legible(rol) -> str:
+    """Nombre del rol para mostrar al usuario (nunca el código interno)."""
+    return _NOMBRES_ROL.get(rol, "desconocido")
+
+
 def _respuesta(codigo: int, cuerpo) -> dict:
     return {
         "statusCode": codigo,
@@ -154,20 +167,20 @@ def _validar_zonas(zonas) -> tuple[int, str] | None:
     3+ puntos cada uno (mínimo para cerrar un área), 1+ polígonos (varias
     "manchas" separadas si el campus está partido). Requerido, no opcional."""
     if not isinstance(zonas, list) or not zonas:
-        return 400, "zonas debe tener al menos un polígono dibujado"
+        return 400, "Dibuja al menos una zona en el mapa para continuar"
     for zona in zonas:
         if not isinstance(zona, dict) or not isinstance(zona.get("puntos"), list):
-            return 400, "cada zona debe ser un objeto {puntos: [{lat,lng}, ...]}"
+            return 400, "Una de las zonas dibujadas no es válida. Vuelve a dibujarla en el mapa"
         puntos = zona["puntos"]
         if len(puntos) < 3:
-            return 400, "cada zona necesita al menos 3 puntos"
+            return 400, "Cada zona necesita al menos 3 vértices para cerrar el área. Agrega más vértices en el mapa"
         for p in puntos:
             if not isinstance(p, dict):
-                return 400, "cada punto debe ser un objeto {lat, lng}"
+                return 400, "Una de las zonas dibujadas tiene un vértice inválido. Vuelve a dibujarla en el mapa"
             for campo in ("lat", "lng"):
                 valor = p.get(campo)
                 if not isinstance(valor, (int, float)) or isinstance(valor, bool):
-                    return 400, f"puntos[].{campo} debe ser numérico"
+                    return 400, "Una de las zonas dibujadas tiene coordenadas inválidas. Vuelve a dibujarla en el mapa"
     return None
 
 def _claims(event: dict) -> dict:
@@ -243,13 +256,18 @@ def _con_logo_url(empresa: dict) -> dict:
     return out
 
 def _borrar_objeto(clave: str | None) -> None:
-    """Borrado best-effort del logo anterior: el ítem en DynamoDB manda."""
+    """Borrado best-effort del logo anterior: el ítem en DynamoDB manda. Un
+    reintento; si sigue fallando deja una línea ERROR greppable (ORPHAN_S3)."""
     if not clave:
         return
-    try:
-        s3.delete_object(Bucket=BUCKET_NAME, Key=clave)
-    except Exception as e:
-        logger.warning("No se pudo borrar el objeto %s: %s", clave, e)
+    error = None
+    for _ in range(2):
+        try:
+            s3.delete_object(Bucket=BUCKET_NAME, Key=clave)
+            return
+        except Exception as e:
+            error = e
+    logger.error("ORPHAN_S3 key=%s error=%s", clave, error)
 
 def _logo_upload_url(event: dict, id_empresa: str) -> dict:
     """POST /empresas/{id}/logo/upload-url -> POST prefirmado (clave, tipo y
@@ -257,11 +275,11 @@ def _logo_upload_url(event: dict, id_empresa: str) -> dict:
     try:
         body = json.loads(event.get("body") or "{}")
     except ValueError:
-        return _respuesta(400, {"error": "El cuerpo debe ser JSON"})
+        return _respuesta(400, {"error": "No se pudo leer la solicitud. Recarga la página e inténtalo de nuevo"})
     content_type = str(body.get("content_type") or "").strip().lower()
     extension = EXTENSIONES_IMAGEN.get(content_type)
     if not extension:
-        return _respuesta(400, {"error": f"Tipo de imagen no soportado: {content_type or 'vacío'}. Usa JPEG, PNG o WebP"})
+        return _respuesta(400, {"error": "Tipo de imagen no soportado. Usa una imagen JPEG, PNG o WebP"})
     clave = f"empresas/{id_empresa}/logo/{uuid.uuid4()}.{extension}"
     post = s3.generate_presigned_post(
         Bucket=BUCKET_NAME,
@@ -284,18 +302,18 @@ def _logo_fijar(event: dict, empresa: dict) -> dict:
     try:
         body = json.loads(event.get("body") or "{}")
     except ValueError:
-        return _respuesta(400, {"error": "El cuerpo debe ser JSON"})
+        return _respuesta(400, {"error": "No se pudo leer la solicitud. Recarga la página e inténtalo de nuevo"})
     clave = body.get("logo_key")
     id_empresa = empresa["id_empresa"]
     if not isinstance(clave, str) or not _CLAVE_LOGO.match(clave) or not clave.startswith(f"empresas/{id_empresa}/logo/"):
-        return _respuesta(400, {"error": "logo_key inválida"})
+        return _respuesta(400, {"error": "El logo no es válido. Vuelve a subirlo"})
     try:
         peso = s3.head_object(Bucket=BUCKET_NAME, Key=clave)["ContentLength"]
     except ClientError:
-        return _respuesta(400, {"error": "La imagen no se encontró: vuelve a subirla"})
+        return _respuesta(400, {"error": "No se encontró la imagen subida. Vuelve a subirla"})
     if peso > LOGO_MAX_BYTES:
         _borrar_objeto(clave)
-        return _respuesta(400, {"error": "La imagen supera los 5 MB"})
+        return _respuesta(400, {"error": "La imagen supera los 5 MB. Elige una más liviana"})
     anterior = empresa.get("logo_key")
     tabla_empresas.update_item(
         Key={"id_empresa": id_empresa},
@@ -421,17 +439,33 @@ def _rollback_usuario_cognito(username: str, motivo: Exception) -> None:
 
 def _handle_cleanup() -> dict:
     ahora = datetime.now(timezone.utc).isoformat()
-    resp = tabla.scan(
-        FilterExpression=Attr("es_colaborador").eq(True)
+    kwargs = {
+        "FilterExpression": Attr("es_colaborador").eq(True)
             & Attr("activo").eq(True)
             & Attr("vence_en").lte(ahora)
-    )
+    }
+    vencidos = []
+    while True:
+        resp = tabla.scan(**kwargs)
+        vencidos.extend(resp.get("Items", []))
+        ultima = resp.get("LastEvaluatedKey")
+        if not ultima:
+            break
+        kwargs = {**kwargs, "ExclusiveStartKey": ultima}
+
     deshabilitados = []
-    for item in resp.get("Items", []):
+    for item in vencidos:
         cognito_id = item.get("cognito_username") or item.get("email")
         id_usuario = item.get("id_usuario")
         try:
             cognito.admin_disable_user(UserPoolId=USER_POOL_ID, Username=cognito_id)
+            # Revoca los refresh tokens ya emitidos: deshabilitar solo bloquea
+            # logins nuevos. Si el usuario ya no existe en Cognito no hay nada
+            # que cerrar.
+            try:
+                cognito.admin_user_global_sign_out(UserPoolId=USER_POOL_ID, Username=cognito_id)
+            except cognito.exceptions.UserNotFoundException:
+                logger.warning("Colaborador %s no existe en Cognito al cerrar sesiones", id_usuario)
             tabla.update_item(
                 Key={"id_usuario": id_usuario},
                 UpdateExpression="SET #activo = :f, #fecha_des = :ahora",
@@ -465,7 +499,7 @@ def lambda_handler(event: dict, context) -> dict:
         if metodo == "GET" and resource == "/usuarios/me":
             email = _email_usuario(event)
             if not email:
-                return _respuesta(401, {"error": "No se pudo determinar el usuario"})
+                return _respuesta(401, {"error": "No se pudo identificar tu sesión. Cierra sesión y vuelve a ingresar"})
             usuario = _buscar_por_email(email)
             if not usuario:
                 return _respuesta_sin_registro()
@@ -501,16 +535,16 @@ def lambda_handler(event: dict, context) -> dict:
         elif metodo == "PUT" and resource == "/usuarios/me":
             email = _email_usuario(event)
             if not email:
-                return _respuesta(401, {"error": "No se pudo determinar el usuario"})
+                return _respuesta(401, {"error": "No se pudo identificar tu sesión. Cierra sesión y vuelve a ingresar"})
             usuario = _buscar_por_email(email)
             if not usuario:
                 return _respuesta_sin_registro()
             body = json.loads(event.get("body") or "{}")
             campos = {k: v for k, v in body.items() if k in CAMPOS_PERMITIDOS_ME}
             if not campos:
-                return _respuesta(400, {"error": "No hay campos válidos para actualizar"})
+                return _respuesta(400, {"error": "No hay cambios válidos para guardar. Revisa los datos e inténtalo de nuevo"})
             if "foto_perfil" in campos and len(campos["foto_perfil"] or "") > FOTO_PERFIL_MAX_CHARS:
-                return _respuesta(400, {"error": "La foto de perfil es demasiado grande"})
+                return _respuesta(400, {"error": "La foto de perfil es demasiado grande. Elige una imagen más liviana"})
             expr    = "SET " + ", ".join(f"#{k} = :{k}" for k in campos)
             nombres = {f"#{k}": k for k in campos}
             valores = {f":{k}": v for k, v in campos.items()}
@@ -542,7 +576,7 @@ def lambda_handler(event: dict, context) -> dict:
             if not creador or creador.get("rol") not in ("admin", "super_admin"):
                 # tecnico solo puede dar de alta cliente (no lista, no
                 # edita); cliente no tiene gestión de usuarios.
-                return _respuesta(403, {"error": "No tenés permiso para listar usuarios"})
+                return _respuesta(403, {"error": "No tienes permiso para ver la lista de usuarios. Pide acceso a un administrador"})
 
             if creador.get("rol") == "super_admin":
                 resp = tabla.scan()
@@ -557,7 +591,7 @@ def lambda_handler(event: dict, context) -> dict:
         # ── POST /colaborador — crear colaborador temporal ────────────────────
         elif metodo == "POST" and resource == "/colaborador":
             if not _es_admin(event):
-                return _respuesta(403, {"error": "Solo administradores pueden crear colaboradores"})
+                return _respuesta(403, {"error": "Solo los administradores pueden crear colaboradores. Pide ayuda a un administrador"})
 
             body     = json.loads(event.get("body") or "{}")
             nickname = (body.get("nickname") or "").strip()
@@ -566,18 +600,26 @@ def lambda_handler(event: dict, context) -> dict:
             rol      = body.get("rol", "tecnico")
 
             if not nickname:
-                return _respuesta(400, {"error": "nickname es requerido"})
+                return _respuesta(400, {"error": "Escribe un nombre de usuario para el colaborador"})
             error_password = _validar_password(password)
             if error_password:
                 return _respuesta(400, {"error": error_password})
             if not 1 <= dias <= 30:
-                return _respuesta(400, {"error": "dias debe estar entre 1 y 30"})
+                return _respuesta(400, {"error": "La vigencia debe ser de entre 1 y 30 días. Ajusta el valor e inténtalo de nuevo"})
             if rol not in ROLES_VALIDOS:
-                return _respuesta(400, {"error": f"rol debe ser uno de: {ROLES_VALIDOS}"})
+                return _respuesta(400, {"error": "Rol no válido. Elige superadministrador, administrador, técnico o cliente"})
+            # Same creation hierarchy as POST /usuarios: an admin must not be
+            # able to mint an admin/super_admin collaborator with a crafted body.
+            creador = _usuario_actual(event)
+            if not creador:
+                return _respuesta(403, {"error": "No se pudo verificar tu cuenta. Cierra sesión y vuelve a ingresar"})
+            rol_creador = creador.get("rol")
+            if rol not in CREATABLE_ROLES.get(rol_creador, set()):
+                return _respuesta(403, {"error": f"Tu rol ({_rol_legible(rol_creador)}) no puede crear colaboradores con rol {_rol_legible(rol)}. Elige un rol menor o pide ayuda a un administrador"})
 
             sanitizado = _sanitizar_nickname(nickname)
             if not sanitizado:
-                return _respuesta(400, {"error": "El nickname no genera un identificador válido"})
+                return _respuesta(400, {"error": "El nombre de usuario no es válido. Usa al menos una letra o un número"})
 
             email_interno      = f"{sanitizado}@corria.app"
             cognito_username   = email_interno   # login identifier for the collaborator
@@ -649,7 +691,7 @@ def lambda_handler(event: dict, context) -> dict:
         elif metodo == "POST" and resource == "/usuarios":
             creador = _usuario_actual(event)
             if not creador:
-                return _respuesta(403, {"error": "No se pudo verificar el usuario solicitante"})
+                return _respuesta(403, {"error": "No se pudo verificar tu cuenta. Cierra sesión y vuelve a ingresar"})
             rol_creador = creador.get("rol")
 
             body    = json.loads(event.get("body") or "{}")
@@ -658,11 +700,11 @@ def lambda_handler(event: dict, context) -> dict:
             cargo   = body.get("cargo", "")
             rol     = body.get("rol", "cliente")
             if not email:
-                return _respuesta(400, {"error": "email es requerido"})
+                return _respuesta(400, {"error": "Escribe el correo electrónico del usuario"})
             if rol not in ROLES_VALIDOS:
-                return _respuesta(400, {"error": f"rol debe ser uno de: {ROLES_VALIDOS}"})
+                return _respuesta(400, {"error": "Rol no válido. Elige superadministrador, administrador, técnico o cliente"})
             if rol not in CREATABLE_ROLES.get(rol_creador, set()):
-                return _respuesta(403, {"error": f"Tu rol ({rol_creador}) no puede crear usuarios con rol '{rol}'"})
+                return _respuesta(403, {"error": f"Tu rol ({_rol_legible(rol_creador)}) no puede crear usuarios con rol {_rol_legible(rol)}. Elige un rol menor o pide ayuda a un administrador"})
 
             # El empresa_id de un usuario nuevo SIEMPRE se fuerza al del
             # creador — nunca se toma del body — salvo que el creador sea
@@ -677,9 +719,9 @@ def lambda_handler(event: dict, context) -> dict:
             elif rol_creador == "super_admin":
                 empresa_id = body.get("empresa_id")
                 if not empresa_id:
-                    return _respuesta(400, {"error": "empresa_id es requerido"})
+                    return _respuesta(400, {"error": "Selecciona la afiliación del usuario"})
                 if not tabla_empresas.get_item(Key={"id_empresa": empresa_id}).get("Item"):
-                    return _respuesta(404, {"error": f"Empresa {empresa_id} no encontrada"})
+                    return _respuesta(404, {"error": "No se encontró la afiliación seleccionada. Actualiza la lista e inténtalo de nuevo"})
             else:
                 empresa_id = creador.get("empresa_id")
 
@@ -726,14 +768,14 @@ def lambda_handler(event: dict, context) -> dict:
         elif metodo == "PUT" and resource == "/usuarios/{id_usuario}" and id_usuario:
             creador = _usuario_actual(event)
             if not creador or creador.get("rol") not in ("admin", "super_admin"):
-                return _respuesta(403, {"error": "Solo administradores pueden modificar usuarios"})
+                return _respuesta(403, {"error": "Solo los administradores pueden modificar usuarios. Pide ayuda a un administrador"})
             body = json.loads(event.get("body") or "{}")
             resp = tabla.get_item(Key={"id_usuario": id_usuario})
             usuario = resp.get("Item")
             if not usuario:
-                return _respuesta(404, {"error": f"Usuario {id_usuario} no encontrado"})
+                return _respuesta(404, {"error": "No se encontró el usuario. Actualiza la lista e inténtalo de nuevo"})
             if _fuera_de_alcance(creador, usuario):
-                return _respuesta(403, {"error": "No tenés permiso para modificar usuarios de otra empresa"})
+                return _respuesta(403, {"error": "No tienes permiso para modificar usuarios de otra afiliación"})
 
             if body.get("reactivar") is True:
                 email_objetivo = usuario.get("email")
@@ -763,20 +805,20 @@ def lambda_handler(event: dict, context) -> dict:
 
             campos = {k: v for k, v in body.items() if k in CAMPOS_PERMITIDOS_ADMIN}
             if not campos:
-                return _respuesta(400, {"error": "No hay campos válidos para actualizar"})
+                return _respuesta(400, {"error": "No hay cambios válidos para guardar. Revisa los datos e inténtalo de nuevo"})
             rol_nuevo  = campos.get("rol")
             rol_actual = usuario.get("rol")
             email_usr  = usuario.get("email")
             cambio_rol_aplicado = False
             if rol_nuevo and rol_nuevo != rol_actual:
                 if rol_nuevo not in ROLES_VALIDOS:
-                    return _respuesta(400, {"error": f"rol debe ser uno de: {ROLES_VALIDOS}"})
+                    return _respuesta(400, {"error": "Rol no válido. Elige superadministrador, administrador, técnico o cliente"})
                 # Mismo límite que en la creación: si tu rol no puede CREAR ese
                 # rol, tampoco podés otorgarlo editando a alguien ya existente
                 # (si no, un admin podría auto-promoverse o promover a otro
                 # usuario de su empresa a super_admin editando en vez de crear).
                 if rol_nuevo not in CREATABLE_ROLES.get(creador.get("rol"), set()):
-                    return _respuesta(403, {"error": f"Tu rol ({creador.get('rol')}) no puede asignar el rol '{rol_nuevo}'"})
+                    return _respuesta(403, {"error": f"Tu rol ({_rol_legible(creador.get('rol'))}) no puede asignar el rol {_rol_legible(rol_nuevo)}. Elige un rol menor o pide ayuda a un administrador"})
                 try:
                     if rol_actual in ROLES_VALIDOS:
                         cognito.admin_remove_user_from_group(
@@ -831,30 +873,34 @@ def lambda_handler(event: dict, context) -> dict:
         elif metodo == "DELETE" and resource == "/usuarios/{id_usuario}/eliminar" and id_usuario:
             creador = _usuario_actual(event)
             if not creador or creador.get("rol") not in ("admin", "super_admin"):
-                return _respuesta(403, {"error": "Solo administradores pueden eliminar usuarios"})
+                return _respuesta(403, {"error": "Solo los administradores pueden eliminar usuarios. Pide ayuda a un administrador"})
             email_propio = _email_usuario(event)
             resp    = tabla.get_item(Key={"id_usuario": id_usuario})
             usuario = resp.get("Item")
             if not usuario:
-                return _respuesta(404, {"error": f"Usuario {id_usuario} no encontrado"})
+                return _respuesta(404, {"error": "No se encontró el usuario. Actualiza la lista e inténtalo de nuevo"})
             if _fuera_de_alcance(creador, usuario):
-                return _respuesta(403, {"error": "No tenés permiso para eliminar usuarios de otra empresa"})
+                return _respuesta(403, {"error": "No tienes permiso para eliminar usuarios de otra afiliación"})
             if usuario.get("email") == email_propio:
-                return _respuesta(400, {"error": "No puedes eliminar tu propia cuenta"})
+                return _respuesta(400, {"error": "No puedes eliminar tu propia cuenta. Pide a otro administrador que lo haga"})
             query_params = event.get("queryStringParameters") or {}
             forzar = query_params.get("forzar") == "true" and creador.get("rol") == "super_admin"
             if _tiene_historial(usuario.get("cognito_sub", "")) and not forzar:
                 return _respuesta(
                     409,
-                    {"error": "Este usuario tiene puntos o mediciones asociados — "
-                              "eliminarlo dejaría ese historial huérfano. "
-                              "Usá deshabilitar (DELETE /usuarios/{id_usuario}) en su lugar, "
-                              "o pedile a un super_admin que fuerce el borrado con ?forzar=true "
-                              "(el nombre queda guardado en cada punto/medición, así que el "
-                              "historial sigue siendo legible aunque la cuenta desaparezca)."},
+                    {"error": "Este usuario tiene puntos o mediciones asociados, y eliminarlo dejaría ese "
+                              "historial sin responsable. Deshabilítalo en su lugar, "
+                              "o pide a un superadministrador que fuerce la eliminación "
+                              "(el nombre queda guardado en cada punto y medición, así que el "
+                              "historial se sigue viendo aunque la cuenta desaparezca)."},
                 )
             email_objetivo = usuario.get("email")
-            cognito.admin_delete_user(UserPoolId=USER_POOL_ID, Username=email_objetivo)
+            try:
+                cognito.admin_delete_user(UserPoolId=USER_POOL_ID, Username=email_objetivo)
+            except cognito.exceptions.UserNotFoundException:
+                # Ya no existe en Cognito (p. ej. un intento anterior borró
+                # Cognito y falló el delete en DynamoDB): seguir y borrar la fila.
+                logger.warning("Usuario '%s' ya no existe en Cognito; se borra solo la fila %s", email_objetivo, id_usuario)
             try:
                 tabla.delete_item(Key={"id_usuario": id_usuario})
             except Exception as e:
@@ -875,13 +921,13 @@ def lambda_handler(event: dict, context) -> dict:
         elif metodo == "DELETE" and resource == "/usuarios/{id_usuario}" and id_usuario:
             creador = _usuario_actual(event)
             if not creador or creador.get("rol") not in ("admin", "super_admin"):
-                return _respuesta(403, {"error": "Solo administradores pueden deshabilitar usuarios"})
+                return _respuesta(403, {"error": "Solo los administradores pueden deshabilitar usuarios. Pide ayuda a un administrador"})
             resp    = tabla.get_item(Key={"id_usuario": id_usuario})
             usuario = resp.get("Item")
             if not usuario:
-                return _respuesta(404, {"error": f"Usuario {id_usuario} no encontrado"})
+                return _respuesta(404, {"error": "No se encontró el usuario. Actualiza la lista e inténtalo de nuevo"})
             if _fuera_de_alcance(creador, usuario):
-                return _respuesta(403, {"error": "No tenés permiso para deshabilitar usuarios de otra empresa"})
+                return _respuesta(403, {"error": "No tienes permiso para deshabilitar usuarios de otra afiliación"})
             email_objetivo = usuario.get("email")
             cognito.admin_disable_user(UserPoolId=USER_POOL_ID, Username=email_objetivo)
             ahora = datetime.now(timezone.utc).isoformat()
@@ -906,7 +952,7 @@ def lambda_handler(event: dict, context) -> dict:
         elif metodo == "GET" and resource == "/empresas":
             creador = _usuario_actual(event)
             if not creador or creador.get("rol") != "super_admin":
-                return _respuesta(403, {"error": "Solo super_admin puede ver la lista de empresas"})
+                return _respuesta(403, {"error": "Solo un superadministrador puede ver la lista de afiliaciones"})
             resp = tabla_empresas.scan()
             return _respuesta(200, {"empresas": [_con_logo_url(e) for e in resp.get("Items", [])]})
 
@@ -914,27 +960,27 @@ def lambda_handler(event: dict, context) -> dict:
         elif metodo == "POST" and resource == "/empresas":
             creador = _usuario_actual(event)
             if not creador or creador.get("rol") != "super_admin":
-                return _respuesta(403, {"error": "Solo super_admin puede crear empresas"})
+                return _respuesta(403, {"error": "Solo un superadministrador puede crear afiliaciones"})
             body = json.loads(event.get("body") or "{}")
             nombre = (body.get("nombre") or "").strip()
             if not nombre:
-                return _respuesta(400, {"error": "nombre es requerido"})
+                return _respuesta(400, {"error": "Escribe el nombre de la afiliación"})
             # departamento/ciudad: requeridos al crear -- ubican la empresa
             # de forma legible antes de que exista una zona dibujada.
             departamento = body.get("departamento")
             if not isinstance(departamento, str) or not departamento.strip():
-                return _respuesta(400, {"error": "departamento es requerido"})
+                return _respuesta(400, {"error": "Indica el departamento de la afiliación"})
             departamento = departamento.strip()
             ciudad = body.get("ciudad")
             if not isinstance(ciudad, str) or not ciudad.strip():
-                return _respuesta(400, {"error": "ciudad es requerida"})
+                return _respuesta(400, {"error": "Indica la ciudad de la afiliación"})
             ciudad = ciudad.strip()
             # tipo_material: opcional, texto libre -- propiedad del SITIO
             # completo (los puntos de una zona suelen compartir material),
             # por eso se pregunta acá y no en cada punto.
             tipo_material = body.get("tipo_material")
             if tipo_material is not None and not isinstance(tipo_material, str):
-                return _respuesta(400, {"error": "tipo_material debe ser un texto"})
+                return _respuesta(400, {"error": "El tipo de material debe ser un texto. Corrígelo e inténtalo de nuevo"})
             # zonas: requerido -- toda empresa necesita su área dibujada.
             zonas = body.get("zonas")
             error_zonas = _validar_zonas(zonas)
@@ -944,7 +990,7 @@ def lambda_handler(event: dict, context) -> dict:
             # scan es aceptable acá: se espera un puñado de empresas, no miles.
             existentes = tabla_empresas.scan().get("Items", [])
             if any(e.get("nombre", "").strip().lower() == nombre.lower() for e in existentes):
-                return _respuesta(409, {"error": f"Ya existe una empresa llamada '{nombre}'"})
+                return _respuesta(409, {"error": f"Ya existe una afiliación llamada '{nombre}'. Elige otro nombre"})
             id_empresa = f"EMP-{uuid.uuid4()}"
             item = {
                 "id_empresa": id_empresa,
@@ -978,11 +1024,11 @@ def lambda_handler(event: dict, context) -> dict:
         elif metodo == "PUT" and resource == "/empresas/{id_empresa}" and id_empresa:
             creador = _usuario_actual(event)
             if not creador or creador.get("rol") != "super_admin":
-                return _respuesta(403, {"error": "Solo super_admin puede editar empresas"})
+                return _respuesta(403, {"error": "Solo un superadministrador puede editar afiliaciones"})
             resp = tabla_empresas.get_item(Key={"id_empresa": id_empresa})
             empresa = resp.get("Item")
             if not empresa:
-                return _respuesta(404, {"error": f"Empresa {id_empresa} no encontrada"})
+                return _respuesta(404, {"error": "No se encontró la afiliación. Actualiza la lista e inténtalo de nuevo"})
 
             body          = json.loads(event.get("body") or "{}")
             nombre        = body.get("nombre")
@@ -992,15 +1038,15 @@ def lambda_handler(event: dict, context) -> dict:
             tipo_material = body.get("tipo_material")
             zonas         = body.get("zonas")
             if all(v is None for v in (nombre, activa, departamento, ciudad, tipo_material, zonas)):
-                return _respuesta(400, {"error": "Debes indicar al menos un campo para actualizar"})
+                return _respuesta(400, {"error": "No hay cambios para guardar. Modifica al menos un dato"})
 
             campos = {}
             if nombre is not None:
                 if not isinstance(nombre, str):
-                    return _respuesta(400, {"error": "nombre debe ser un texto"})
+                    return _respuesta(400, {"error": "El nombre de la afiliación debe ser un texto. Corrígelo e inténtalo de nuevo"})
                 nombre = nombre.strip()
                 if not nombre:
-                    return _respuesta(400, {"error": "nombre no puede estar vacío"})
+                    return _respuesta(400, {"error": "El nombre de la afiliación no puede estar vacío. Escribe un nombre"})
                 # Mismo chequeo de duplicado case-insensitive que POST
                 # /empresas, excluyendo la propia empresa que se edita.
                 existentes = tabla_empresas.scan().get("Items", [])
@@ -1008,23 +1054,23 @@ def lambda_handler(event: dict, context) -> dict:
                     e.get("nombre", "").strip().lower() == nombre.lower() and e.get("id_empresa") != id_empresa
                     for e in existentes
                 ):
-                    return _respuesta(409, {"error": f"Ya existe una empresa llamada '{nombre}'"})
+                    return _respuesta(409, {"error": f"Ya existe una afiliación llamada '{nombre}'. Elige otro nombre"})
                 campos["nombre"] = nombre
             if activa is not None:
                 if not isinstance(activa, bool):
-                    return _respuesta(400, {"error": "activa debe ser un booleano"})
+                    return _respuesta(400, {"error": "No se pudo cambiar el estado de la afiliación. Recarga la página e inténtalo de nuevo"})
                 campos["activa"] = activa
             if departamento is not None:
                 if not isinstance(departamento, str) or not departamento.strip():
-                    return _respuesta(400, {"error": "departamento debe ser un texto no vacío"})
+                    return _respuesta(400, {"error": "Indica el departamento de la afiliación"})
                 campos["departamento"] = departamento.strip()
             if ciudad is not None:
                 if not isinstance(ciudad, str) or not ciudad.strip():
-                    return _respuesta(400, {"error": "ciudad debe ser un texto no vacío"})
+                    return _respuesta(400, {"error": "Indica la ciudad de la afiliación"})
                 campos["ciudad"] = ciudad.strip()
             if tipo_material is not None:
                 if not isinstance(tipo_material, str):
-                    return _respuesta(400, {"error": "tipo_material debe ser un texto"})
+                    return _respuesta(400, {"error": "El tipo de material debe ser un texto. Corrígelo e inténtalo de nuevo"})
                 campos["tipo_material"] = tipo_material
             if zonas is not None:
                 error_zonas = _validar_zonas(zonas)
@@ -1050,10 +1096,10 @@ def lambda_handler(event: dict, context) -> dict:
         elif resource in ("/empresas/{id_empresa}/logo/upload-url", "/empresas/{id_empresa}/logo") and id_empresa:
             creador = _usuario_actual(event)
             if not _puede_gestionar_logo(creador, id_empresa):
-                return _respuesta(403, {"error": "No tienes permiso para cambiar el logo de esta empresa"})
+                return _respuesta(403, {"error": "No tienes permiso para cambiar el logo de esta afiliación"})
             empresa = tabla_empresas.get_item(Key={"id_empresa": id_empresa}).get("Item")
             if not empresa:
-                return _respuesta(404, {"error": f"Empresa {id_empresa} no encontrada"})
+                return _respuesta(404, {"error": "No se encontró la afiliación. Actualiza la lista e inténtalo de nuevo"})
             if metodo == "POST" and resource.endswith("/upload-url"):
                 return _logo_upload_url(event, id_empresa)
             if metodo == "PUT" and resource.endswith("/logo"):
@@ -1061,12 +1107,12 @@ def lambda_handler(event: dict, context) -> dict:
             if metodo == "DELETE" and resource.endswith("/logo"):
                 return _logo_quitar(empresa)
 
-        return _respuesta(405, {"error": f"Método {metodo} no permitido"})
+        return _respuesta(405, {"error": "Esta acción no está disponible. Recarga la página e inténtalo de nuevo"})
 
     except cognito.exceptions.UsernameExistsException:
-        return _respuesta(409, {"error": "Ya existe un usuario con ese email"})
+        return _respuesta(409, {"error": "Ya existe un usuario con ese correo electrónico. Usa otro correo"})
     except cognito.exceptions.UserNotFoundException:
-        return _respuesta(404, {"error": "Usuario no encontrado en Cognito"})
+        return _respuesta(404, {"error": "No se encontró la cuenta del usuario. Actualiza la lista e inténtalo de nuevo"})
     except Exception as e:
         logger.exception("Error en api_usuarios: %s", e)
-        return _respuesta(500, {"error": str(e)})
+        return _respuesta(500, {"error": "Ocurrió un error inesperado. Inténtalo de nuevo; si persiste, contacta a un administrador"})

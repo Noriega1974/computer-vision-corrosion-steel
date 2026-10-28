@@ -139,7 +139,7 @@ def test_imagen_key_sobre_el_maximo_es_400_y_se_borra(h, monkeypatch, tmp_path):
 
 def test_sin_imagen_ni_clave_es_400(h):
     resp = h.lambda_handler({"requestContext": {"authorizer": {"claims": {"sub": SUB}}}, "body": json.dumps({"bloque_id": "BLQ-1"})}, None)
-    assert resp["statusCode"] == 400 and "imagen_key" in json.loads(resp["body"])["error"]
+    assert resp["statusCode"] == 400 and "Falta la imagen" in json.loads(resp["body"])["error"]
 
 
 def test_base64_sigue_igual_y_no_toca_uploads(h, monkeypatch, tmp_path):
@@ -170,7 +170,7 @@ def test_bomba_de_descompresion_es_400(h, monkeypatch, tmp_path):
     _poner_unet(h, monkeypatch, tmp_path)
     monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 1000)
     resp = h.lambda_handler(_evento(_foto()), None)
-    assert resp["statusCode"] == 400 and "píxeles" in json.loads(resp["body"])["error"]
+    assert resp["statusCode"] == 400 and "demasiado grande" in json.loads(resp["body"])["error"]
 
 
 # ── Tiempos por medicion (tiempo_subida_s / tiempo_procesamiento_ms) ─────────

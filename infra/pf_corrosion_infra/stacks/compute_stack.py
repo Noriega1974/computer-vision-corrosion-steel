@@ -174,6 +174,7 @@ class CorriaComputeStack(Stack):
                     "cognito-idp:AdminSetUserPassword",
                     "cognito-idp:AdminAddUserToGroup",
                     "cognito-idp:AdminRemoveUserFromGroup",
+                    "cognito-idp:AdminUserGlobalSignOut",
                 ],
                 resources=[user_pool.user_pool_arn],
             )
