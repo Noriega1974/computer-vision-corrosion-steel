@@ -172,7 +172,9 @@ function ZonaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
   };
 
   const [zonas, setZonas] = useState(initial.zonas ?? []);
-  const hayCoordenadas = latitud !== '' && longitud !== '' && !Number.isNaN(Number(latitud)) && !Number.isNaN(Number(longitud));
+  // Coordenadas válidas: numéricas y dentro de rango (lat ±90, lng ±180).
+  const hayCoordenadas = latitud !== '' && longitud !== ''
+    && Math.abs(Number(latitud)) <= 90 && Math.abs(Number(longitud)) <= 180;
   const [validationError, setValidationError] = useState(null);
 
   const handleSubmit = (e) => {

@@ -181,7 +181,9 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, esSuperAdmi
   const [longitud, setLongitud] = useState(initial.coordenadas?.lng ?? '');
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoError, setGeoError] = useState(null);
-  const hayCoordenadas = latitud !== '' && longitud !== '' && !Number.isNaN(Number(latitud)) && !Number.isNaN(Number(longitud));
+  // Coordenadas válidas: numéricas y dentro de rango (lat ±90, lng ±180).
+  const hayCoordenadas = latitud !== '' && longitud !== ''
+    && Math.abs(Number(latitud)) <= 90 && Math.abs(Number(longitud)) <= 180;
 
   const usarUbicacionActual = () => {
     if (!navigator.geolocation) {
@@ -231,7 +233,7 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, esSuperAdmi
       return;
     }
     if (!hayCoordenadas) {
-      setValidationError('Ingresa las coordenadas o usa tu ubicación actual.');
+      setValidationError('Ingresa coordenadas válidas (latitud entre -90 y 90, longitud entre -180 y 180) o usa tu ubicación actual.');
       return;
     }
 
