@@ -254,7 +254,7 @@ class CorriaComputeStack(Stack):
             runtime=_lambda.Runtime.PYTHON_3_11,
             handler="handler.lambda_handler",
             code=_lambda.Code.from_asset(os.path.join(LAMBDA_SRC, "api_mediciones")),
-            memory_size=128,
+            memory_size=512,
             timeout=Duration.seconds(30),
             environment={
                 **common_env,
