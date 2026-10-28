@@ -1,3 +1,4 @@
+import { CARD_TITULO_STYLE, CARD_SUBTITULO_STYLE, CARD_PILDORA_STYLE } from './cardTextStyles';
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import NivelIcon from './NivelIcon';
@@ -5,7 +6,7 @@ import { nivelColor, nivelLabel } from '../lib/statusUtils';
 import { iniciales as calcularIniciales } from '../lib/galeriaCarpetas';
 
 // Imagen de la carpeta. Punto: su foto de portada propia, recortada a cubrir.
-// Empresa: su logo completo (contain) sobre fondo neutro. Si no hay imagen
+// Empresa: su logo completo (contain) sobre placa blanca. Si no hay imagen
 // cargada o la URL falla (p. ej. vencida), se muestra un círculo neutro con
 // sus iniciales (nunca la foto de la última medición).
 function CarpetaMedia({ portada, logo, iniciales, titulo }) {
@@ -17,7 +18,9 @@ function CarpetaMedia({ portada, logo, iniciales, titulo }) {
     return (
       <img src={src} alt="" loading="lazy" onError={() => setFallo(true)}
         style={esEmpresa
-          ? { width: '100%', height: '100%', objectFit: 'contain', display: 'block', padding: 14, boxSizing: 'border-box' }
+          // Placa blanca en ambos temas: los logos suelen venir con fondo blanco
+          // propio y así se funden con ella en vez de verse como un recuadro.
+          ? { width: '100%', height: '100%', objectFit: 'contain', display: 'block', padding: 14, boxSizing: 'border-box', background: '#fff' }
           : { width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
     );
   }
@@ -50,15 +53,11 @@ function CarpetaCard({ item }) {
       }}
     >
       <div>
-        <div style={{
-          fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 15,
-          color: 'var(--text-primary)', lineHeight: 1.2,
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        }}>
+        <div style={{ ...CARD_TITULO_STYLE, color: 'var(--text-primary)' }}>
           {titulo}
         </div>
         <div style={{
-          fontSize: 12, color: 'var(--text-muted)', marginTop: 2, fontFamily: 'var(--font-ui)',
+          ...CARD_SUBTITULO_STYLE, color: 'var(--text-muted)',
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
           {subtitulo}
@@ -93,9 +92,8 @@ function CarpetaCard({ item }) {
           )}
         </div>
         <span style={{
-          padding: '7px 14px', borderRadius: 999,
+          ...CARD_PILDORA_STYLE,
           background: 'var(--text-primary)', color: 'var(--bg-card-solid)',
-          fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 12, lineHeight: 1, flexShrink: 0,
         }}>
           Abrir
         </span>

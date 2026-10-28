@@ -1,9 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useBloques } from '../hooks/useBloques';
-import { useMediciones } from '../hooks/useMediciones';
+import { useMediciones, LIMITE_DASHBOARD } from '../hooks/useMediciones';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
+import Skeleton from './Skeleton';
+import { ultimaMedicionPorPunto } from '../lib/mediciones';
+import NivelInfo from './NivelInfo';
 import {
   NIVELES,
   nivelColor,
@@ -15,10 +18,10 @@ import {
 function buildNivelMap(mediciones) {
   const map = {};
 
-  mediciones.forEach(m => {
-    if (!(m.bloque_id in map)) {
-      map[m.bloque_id] = m.nivel_corrosion ?? 0;
-    }
+  // Latest medicion per punto by timestamp; a null level is left out so the
+  // marker falls back to the neutral color instead of reading as "no corrosion".
+  ultimaMedicionPorPunto(mediciones).forEach((m, bloqueId) => {
+    if (m.nivel_corrosion != null) map[bloqueId] = m.nivel_corrosion;
   });
 
   return map;
@@ -63,7 +66,7 @@ export default function ColombiaMap({
     loading: loadingPuntos
   } = useBloques();
 
-  const { mediciones } = useMediciones(100);
+  const { mediciones } = useMediciones(LIMITE_DASHBOARD, { resumen: true });
 
   // Zonas de empresa (polígonos que delimitan su área en el mapa). Para
   // super_admin vienen de GET /empresas (todas). Para admin/tecnico/cliente
@@ -175,6 +178,10 @@ export default function ColombiaMap({
         selectedPunto?.id_bloque === punto.id_bloque;
 
       const isCritical = nivel === 3;
+      // Critical rings pulse 3 times then rest as a static ring; no pulse if reduced motion.
+      const reducedMotion =
+        typeof window !== 'undefined' &&
+        window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
       // Marcador tipo "punto" geoespacial limpio. El tamaño escala con el
       // zoom (ver escalaParaZoom), acotado por MIN/MAX_ESCALA para que el
@@ -201,7 +208,7 @@ export default function ColombiaMap({
                   inset:2px;
                   border-radius:50%;
                   border:2px solid ${color};
-                  animation:ping-ring 1.4s ease-out infinite;
+                  ${reducedMotion ? '' : 'animation:ping-ring 1.4s ease-out 3;'}
                 "></div>
               `
               : ''
@@ -213,7 +220,7 @@ export default function ColombiaMap({
             background:${color};
             border:${isSelected ? 3 : 2}px solid #ffffff;
             box-shadow:0 1px 4px rgba(0,0,0,0.4), 0 0 ${isSelected ? 10 : 4}px ${color}80;
-            transition:transform 0.15s ease;
+            transition:transform var(--dur-fast) var(--ease-out);
           "></div>
         </div>
       `;
@@ -254,7 +261,7 @@ export default function ColombiaMap({
 
           <div style="
             color:#7a9ab5;
-            font-size:9px;
+            font-size:11px;
             letter-spacing:0.1em;
             margin-bottom:8px;
           ">
@@ -428,8 +435,8 @@ export default function ColombiaMap({
             }}
           >
             {loadingPuntos
-              ? 'Cargando…'
-              : `${puntosCount} UBICACIONES REGISTRADAS`
+              ? <Skeleton width={110} height="1em" radius={3} />
+              : `${puntosCount} ${puntosCount === 1 ? 'PUNTO REGISTRADO' : 'PUNTOS REGISTRADOS'}`
             }
           </div>
 
@@ -451,7 +458,7 @@ export default function ColombiaMap({
                 display: 'flex',
                 alignItems: 'center',
                 gap: 'var(--space-1)',
-                fontSize: 9,
+                fontSize: 11,
                 color,
                 letterSpacing: '0.1em'
               }}
@@ -472,6 +479,8 @@ export default function ColombiaMap({
             </div>
 
           ))}
+
+          <NivelInfo />
 
         </div>
 

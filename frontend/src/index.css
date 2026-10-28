@@ -5,7 +5,7 @@
 
 /* ── FONTS ─────────────────────────────────────────────────────── */
 
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Bitter:wght@700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Bitter:wght@700;800;900&display=swap');
 
 
 /* ================================================================
@@ -13,6 +13,11 @@
    ================================================================ */
 
 :root {
+
+  /* Motion tokens (theme-independent). */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --dur-fast: 150ms;
+  --dur-base: 200ms;
 
   /* ─────────────────────────────────────────────────────────────
      BACKGROUNDS
@@ -137,7 +142,10 @@
      TYPOGRAPHY
      ───────────────────────────────────────────────────────────── */
 
-  --font-ui: 'IBM Plex Sans', system-ui, sans-serif;
+  /* Outfit for UI text (owner's choice, 2026-10-27). Its digits are
+     proportional by default: numbers in --font-ui need tabular-nums (Outfit
+     ships tnum) to line up. */
+  --font-ui: 'Outfit', system-ui, sans-serif;
   --font-data: 'IBM Plex Mono', 'Courier New', monospace;
 
   /* Wordmark "PIXELRUST" -- del logo de marca (2026-08-17). Slab serif con
@@ -166,7 +174,7 @@
      quedaba por debajo del piso de la escala (no habia token menor a 11px).
      No es lo mismo que el problema original -- ese era demasiados pasos
      amontonados sin separacion; este es un escalon real que faltaba abajo. */
-  --text-3xs: 10px;   /* la mas chica: contadores, badges diminutos */
+  --text-3xs: 11px;   /* la mas chica (piso legible): contadores, badges diminutos */
   --text-2xs: 11px;   /* etiquetas en mayusculas, texto mono chico */
   --text-xs:  12px;   /* secundario, pies de dato */
   --text-sm:  13px;   /* cuerpo por defecto */
@@ -480,8 +488,8 @@ table {
    el desplazamiento, que ya comunica que el elemento responde. */
 .medicion-card {
   transition:
-    transform 0.15s ease-out,
-    box-shadow 0.15s ease-out;
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -493,7 +501,7 @@ table {
 
 @media (prefers-reduced-motion: reduce) {
   .medicion-card {
-    transition: box-shadow 0.15s ease-out;
+    transition: box-shadow var(--dur-fast) var(--ease-out);
   }
 
   .medicion-card:hover {
@@ -702,10 +710,10 @@ body {
   -webkit-backdrop-filter: blur(14px);
 
   transition:
-    box-shadow 0.22s ease,
-    border-color 0.22s ease,
-    background 0.22s ease,
-    transform 0.22s ease;
+    box-shadow var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out),
+    background var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
 }
 
 .card:hover {
@@ -806,22 +814,6 @@ body {
 }
 
 
-/* ================================================================
-   SECTION LABEL
-   ================================================================ */
-
-.section-label {
-  font-family: var(--font-data);
-
-  font-size: 10px;
-  font-weight: 600;
-
-  letter-spacing: 0.14em;
-
-  text-transform: uppercase;
-
-  color: var(--text-faint);
-}
 
 
 /* ================================================================
@@ -866,14 +858,6 @@ body {
 }
 
 
-/* ================================================================
-   DATA TEXT
-   ================================================================ */
-
-.data-value {
-  font-family: var(--font-data);
-  font-weight: 600;
-}
 
 
 /* ================================================================
@@ -978,9 +962,9 @@ body {
     0 6px 18px rgba(156,54,16,0.22);
 
   transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease,
-    filter 0.2s ease;
+    transform var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    filter var(--dur-base) var(--ease-out);
 }
 
 .dashboard-action:hover {
@@ -1017,7 +1001,10 @@ body {
   line-height: 1;
   cursor: pointer;
   box-shadow: 0 6px 20px rgba(193, 70, 11, 0.32);
-  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    filter var(--dur-base) var(--ease-out);
 }
 
 .galeria-fab:hover {
@@ -1054,10 +1041,6 @@ body {
   position: relative;
 }
 
-.chart-card {
-  min-height: 235px;
-}
-
 
 /* ================================================================
    SCROLLBAR
@@ -1087,43 +1070,17 @@ body {
    ================================================================ */
 
 
-@keyframes blink {
-
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.25;
-  }
-}
 
 
-@keyframes slide-in-left {
-
-  from {
-    transform: translateX(-110%);
-    opacity: 0;
-  }
-
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-
+/* Opacity-only entrance (no rise). */
 @keyframes fade-in-up {
 
   from {
     opacity: 0;
-    transform: translateY(12px);
   }
 
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -1136,6 +1093,31 @@ body {
 
   100% {
     background-position: 200% 0;
+  }
+}
+
+
+/* Skeletons: bloques con la forma del contenido mientras carga. Usan tokens
+   de borde, que ya cambian entre tema claro y oscuro. */
+.skeleton {
+  /* Plano y palido, claramente mas claro que el texto: --text-faint mezclado
+     con transparencia da gris azulado muy suave en claro y un tono apenas mas
+     claro que la tarjeta en oscuro (el token cambia solo con el tema). */
+  background-color: color-mix(in srgb, var(--text-faint) 16%, transparent);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--text-faint) 14%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: shimmer 1.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
   }
 }
 
@@ -1155,7 +1137,37 @@ body {
 
 
 .fade-in-up {
-  animation: fade-in-up 0.4s ease forwards;
+  animation: fade-in-up 180ms var(--ease-out) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-in-up {
+    animation: none;
+  }
+}
+
+
+/* Single soft pulse on mount for the "Severa" label; then it stays still. */
+@keyframes severa-pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.severa-pulse {
+  animation: severa-pulse 600ms var(--ease-out) 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .severa-pulse {
+    animation: none;
+  }
 }
 
 
@@ -1177,10 +1189,10 @@ body {
   color: var(--text-muted);
 
   transition:
-    background 0.18s ease,
-    border-color 0.18s ease,
-    box-shadow 0.18s ease,
-    transform 0.18s ease;
+    background var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
 }
 
 .sidebar-nav-item:hover:not(.is-active) {
@@ -1245,7 +1257,7 @@ body {
 
   font-family: var(--font-ui) !important;
 
-  font-size: 10px !important;
+  font-size: 11px !important;
 
   border-radius: 6px !important;
 
@@ -1376,9 +1388,6 @@ body {
       1fr !important;
   }
 
-  .header-center {
-    display: none !important;
-  }
 }
 
 
@@ -1406,4 +1415,250 @@ select {
 select option {
   background-color: var(--bg-card-solid);
   color: var(--text-primary);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   LOTE DIALOG (native <dialog>, enter-only animation)
+   The dialog fills the viewport so a click on it outside the
+   panel is a backdrop click.
+   ───────────────────────────────────────────────────────────── */
+.lote-dialog {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: var(--space-4);
+  border: none;
+  background: transparent;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+}
+
+.lote-dialog[open] {
+  display: flex;
+}
+
+.lote-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+  animation: lote-dialog-backdrop-in 150ms ease-out;
+}
+
+.lote-dialog-panel {
+  transform-origin: center;
+  animation: lote-dialog-panel-in 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@keyframes lote-dialog-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes lote-dialog-panel-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lote-dialog-panel {
+    animation-name: lote-dialog-backdrop-in;
+  }
+}
+
+/* NivelInfo popover: short entry, opacity only under reduced motion. */
+@keyframes nivel-info-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes nivel-info-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.nivel-info-popover {
+  animation: nivel-info-in 150ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .nivel-info-popover {
+    animation-name: nivel-info-fade;
+  }
+}
+
+
+/* ================================================================
+   ACTION BUTTONS (red is reserved for destructive actions)
+   Neutral by default: glyph in --text-secondary and a border in
+   --text-muted, both >= 3:1 against card surfaces in both themes
+   (the default --border is ~1.2:1 and is not enough for a control).
+   Hover and focus-visible only change the tone; no layout shift.
+   ================================================================ */
+
+.btn-accion {
+  padding: 5px 8px;
+  background: transparent;
+  border: 1px solid var(--text-muted);
+  border-radius: 7px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: flex;
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+
+.btn-accion--ok {
+  color: var(--accent-green);
+}
+
+.btn-accion--danger {
+  color: var(--accent-red);
+}
+
+.btn-accion--ok:focus-visible,
+.btn-accion--danger:focus-visible,
+.btn-accion--plain:focus-visible {
+  border-color: currentColor;
+}
+
+.btn-accion:not(.btn-accion--ok):not(.btn-accion--danger):not(.btn-accion--plain):focus-visible {
+  color: var(--accent-amber);
+  border-color: var(--accent-amber);
+}
+
+@media (hover: hover) {
+  .btn-accion--ok:hover,
+  .btn-accion--danger:hover,
+  .btn-accion--plain:hover {
+    border-color: currentColor;
+  }
+
+  .btn-accion:not(.btn-accion--ok):not(.btn-accion--danger):not(.btn-accion--plain):hover {
+    color: var(--accent-amber);
+    border-color: var(--accent-amber);
+  }
+}
+
+/* Confirm dialog tones (ConfirmDialog.jsx). Text contrast >= 4.5:1 in both themes.
+   danger:  #DC2626 + white = 4.83:1 (same fill in both themes).
+   warning: white on the dark-theme amber is only 3.46:1, so dark uses the
+            page color (4.64:1); light is white on amber (5.06:1).
+   default: green fill; light white on #117C38 (5.30:1), dark page color on
+            #22C55E (7.04:1). */
+.confirm-btn--danger {
+  background: #DC2626;
+  color: #fff;
+}
+
+.confirm-btn--warning {
+  background: var(--accent-amber);
+  color: #fff;
+}
+
+.confirm-btn--default {
+  background: var(--accent-green);
+  color: #fff;
+}
+
+[data-theme="dark"] .confirm-btn--warning,
+[data-theme="dark"] .confirm-btn--default {
+  color: var(--bg-page);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-accion {
+    transition: none;
+  }
+}
+
+/* Dashboard point rows (PlantsTable). Hover only on real pointers, so a tap on
+   touch screens does not leave the row stuck highlighted; selected rows keep
+   their own tint. */
+.planta-row {
+  background: var(--fila-fondo, var(--bg-page));
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .planta-row:not(.is-selected):hover {
+    background: var(--bg-card-hover);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .planta-row { transition: none; }
+}
+
+/* ================================================================
+   Round 2 forms
+   Password checklist (PasswordChecklist.jsx). Contrast, computed from the
+   tokens above (WCAG, on #fff / #edf4fa / #e9f1f7 light and
+   #243244 / #18222F / #1D2939 dark):
+   - item text --text-secondary: >= 9.07:1 light, >= 8.76:1 dark (need 4.5)
+   - pending ring --text-muted:  >= 4.61:1 light, >= 5.07:1 dark (need 3)
+   - met fill --accent-green:    >= 4.64:1 light, >= 5.71:1 dark (need 3)
+   - check on the fill: #fff on #117C38 = 5.30:1 light; page color on
+     #22C55E = 7.04:1 dark (same pairing as .confirm-btn--default)
+   ================================================================ */
+.pw-check {
+  margin-top: var(--space-2);
+}
+
+.pw-check__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.pw-check__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.pw-check__mark {
+  box-sizing: border-box;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--text-muted);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+.pw-check__item.is-met .pw-check__mark {
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+}
+
+[data-theme="dark"] .pw-check__mark {
+  color: var(--bg-page);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pw-check__mark { transition: none; }
+}
+
+/* Visually hidden, still read by screen readers. */
+.sr-only-pw {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }

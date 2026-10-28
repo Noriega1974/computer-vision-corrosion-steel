@@ -1,12 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Factory, Globe, MapPin, ChevronDown, ChevronUp, Crosshair } from 'lucide-react';
+import ErrorEstado from './ErrorEstado';
+import React, { useState } from 'react';
+import { IconoFlechaAbajo, IconoFlechaArriba, IconoMundo, IconoPlanta, IconoUbicacion } from './Iconos';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
+import Skeleton, { SkeletonLinea } from './Skeleton';
+import { useConteoRecordado } from '../hooks/useConteoRecordado';
 
 // ─── Lista jerárquica de Zonas y Puntos en el Dashboard ───────────────────────
 export default function PlantsTable({
   puntos = [],
   loading = false,
   error = null,
+  onRetry,
   selectedPunto,
   onSelectPunto,
   empresas = [],
@@ -16,21 +20,12 @@ export default function PlantsTable({
   // Manejo de zonas desplegadas
   const [openZonas, setOpenZonas] = useState({});
 
-  // Las empresas llegan de forma asíncrona: al cargar por primera vez se abre
-  // la primera zona. Solo ocurre una vez, para no reabrirla si el usuario la
-  // cierra después.
-  const abrioPrimeraZona = useRef(false);
-  useEffect(() => {
-    if (abrioPrimeraZona.current || !empresas || empresas.length === 0) return;
-    abrioPrimeraZona.current = true;
-    setOpenZonas(prev => ({ ...prev, [empresas[0].id_empresa]: true }));
-  }, [empresas]);
-
   const toggleZona = (id) => {
     setOpenZonas(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
   const tieneEmpresas = empresas && empresas.length > 0;
+  const filasSkeleton = useConteoRecordado('dashboard:zonas', tieneEmpresas ? empresas : puntos, loading);
 
   // admin/tecnico/cliente no reciben `empresas` (GET /empresas es exclusivo de
   // super_admin). Su zona propia llega por GET /usuarios/me (`empresa_zonas`)
@@ -76,26 +71,47 @@ export default function PlantsTable({
           ZONAS Y PUNTOS
         </div>
         <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)', marginTop: 2 }}>
-          {loading ? 'Cargando…' : `${tieneEmpresas ? `${empresas.length} ZONAS · ` : ''}${puntos.length} PUNTOS`}
+          {loading ? <SkeletonLinea width={90} /> : `${tieneEmpresas ? `${empresas.length} ZONAS · ` : ''}${puntos.length} PUNTOS`}
         </div>
       </div>
 
       {/* Lista con scroll interno */}
       <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-2)' }}>
         {loading && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 80 }}>
-            <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>Cargando…</span>
+          <div aria-busy="true" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {Array.from({ length: filasSkeleton }, (_, i) => (
+              <div
+                key={i}
+                style={{ border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}
+              >
+                {/* Misma cabecera que el boton de zona: padding, icono 13, texto xs y pildora */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '8px 10px', background: 'var(--bg-inset)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
+                    <Skeleton width={13} height={13} radius="50%" />
+                    <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, flex: 1 }}>
+                      <SkeletonLinea width={`${50 + (i % 3) * 12}%`} />
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '11px', padding: '2px 6px', border: '1px solid transparent', fontWeight: 600 }}>
+                    <SkeletonLinea width={12} />
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         )}
         {!loading && error && (
-          <div style={{ padding: 'var(--space-3)', fontSize: 'var(--text-2xs)', color: 'var(--accent-red)' }}>Error: {error}</div>
+          <ErrorEstado compacto titulo="No se pudieron cargar los puntos." detalle={error} onRetry={onRetry} />
         )}
         {!loading && !error && puntos.length === 0 && (
           <div style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center',
             justifyContent: 'center', height: '100%', color: 'var(--text-muted)', gap: 'var(--space-2)', padding: 20,
           }}>
-            <Factory size={22} opacity={0.4} />
+            <IconoPlanta size={22} opacity={0.4} />
             <div style={{ fontSize: 'var(--text-2xs)', textAlign: 'center' }}>
               Sin puntos registrados.
             </div>
@@ -143,14 +159,14 @@ export default function PlantsTable({
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                      <Globe size={13} color={isZonaSelected ? 'var(--accent-blue)' : 'var(--text-muted)'} />
+                      <IconoMundo size={13} color={isZonaSelected ? 'var(--accent-blue)' : 'var(--text-muted)'} />
                       <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {empresa.nombre}
                       </span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{
-                        fontSize: '9px',
+                        fontSize: '12px',
                         padding: '2px 6px',
                         background: 'var(--bg-card)',
                         borderRadius: 10,
@@ -160,7 +176,7 @@ export default function PlantsTable({
                       }}>
                         {pts.length}
                       </span>
-                      {isOpen ? <ChevronUp size={14} color="var(--text-muted)" /> : <ChevronDown size={14} color="var(--text-muted)" />}
+                      {isOpen ? <IconoFlechaArriba size={14} color="var(--text-muted)" /> : <IconoFlechaAbajo size={14} color="var(--text-muted)" />}
                     </div>
                   </button>
 
@@ -216,16 +232,16 @@ export default function PlantsTable({
                   onClick={() => toggleZona('sin_zona')}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <MapPin size={13} color="var(--text-muted)" />
+                    <IconoUbicacion size={13} color="var(--text-muted)" />
                     <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-secondary)' }}>
                       Puntos generales
                     </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: '9px', padding: '2px 6px', background: 'var(--bg-card)', borderRadius: 10, border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                    <span style={{ fontSize: '12px', padding: '2px 6px', background: 'var(--bg-card)', borderRadius: 10, border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
                       {puntosSinZona.length}
                     </span>
-                    {openZonas['sin_zona'] ? <ChevronUp size={14} color="var(--text-muted)" /> : <ChevronDown size={14} color="var(--text-muted)" />}
+                    {openZonas['sin_zona'] ? <IconoFlechaArriba size={14} color="var(--text-muted)" /> : <IconoFlechaAbajo size={14} color="var(--text-muted)" />}
                   </div>
                 </button>
 
@@ -258,13 +274,12 @@ export default function PlantsTable({
                   display: 'flex', alignItems: 'center', gap: 'var(--space-2)', width: '100%',
                   padding: '8px 10px', font: 'inherit', textAlign: 'left',
                   cursor: loadingPerfil ? 'not-allowed' : 'pointer',
-                  background: miZonaSeleccionada ? 'rgba(0,185,255,0.1)' : 'var(--bg-page)',
-                  border: `1px solid ${miZonaSeleccionada ? 'var(--accent-blue)' : 'var(--border)'}`,
-                  borderLeft: `3px solid ${miZonaSeleccionada ? 'var(--accent-blue)' : 'var(--border-bright)'}`,
+                  background: miZonaSeleccionada ? SELECCION_FONDO : 'var(--bg-page)',
+                  border: `1px solid ${miZonaSeleccionada ? SELECCION_BORDE : 'var(--border)'}`,
                   borderRadius: 4, opacity: loadingPerfil ? 0.6 : 1,
                 }}
               >
-                <Crosshair size={13} color="var(--text-muted)" />
+                <IconoUbicacion size={13} color="var(--text-muted)" />
                 <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-primary)' }}>
                   {loadingPerfil ? 'Cargando…' : 'Centrar en mi zona'}
                 </span>
@@ -286,6 +301,10 @@ export default function PlantsTable({
   );
 }
 
+// Selected state without a side-tab: soft tint plus a full 1px border.
+const SELECCION_FONDO = 'color-mix(in srgb, var(--accent-blue) 10%, var(--bg-page))';
+const SELECCION_BORDE = 'color-mix(in srgb, var(--accent-blue) 85%, transparent)';
+
 function PlantRow({ punto, index, selected, onClick }) {
   const nombre = punto.nombre ?? 'Punto sin nombre';
   return (
@@ -293,21 +312,20 @@ function PlantRow({ punto, index, selected, onClick }) {
       type="button"
       onClick={onClick}
       aria-pressed={selected}
+      // Background goes through a CSS variable so the hover rule in index.css
+      // (.planta-row) can override it; inline `background` would always win.
+      className={selected ? 'planta-row is-selected' : 'planta-row'}
       style={{
+        '--fila-fondo': selected ? SELECCION_FONDO : 'var(--bg-page)',
         display: 'block',
         width: '100%',
         textAlign: 'left',
         padding: '8px 10px',
-        background: selected ? 'rgba(156,54,16,0.12)' : 'var(--bg-page)',
-        border: `1px solid ${selected ? 'var(--accent-blue)' : 'var(--border)'}`,
-        borderLeft: `3px solid ${selected ? 'var(--accent-blue)' : 'var(--border-bright)'}`,
+        border: `1px solid ${selected ? SELECCION_BORDE : 'var(--border)'}`,
         borderRadius: 4,
         cursor: 'pointer',
         font: 'inherit',
-        transition: 'background 0.12s',
       }}
-      onMouseEnter={e => { if (!selected) e.currentTarget.style.background = 'var(--bg-card-hover)'; }}
-      onMouseLeave={e => { if (!selected) e.currentTarget.style.background = 'var(--bg-page)'; }}
     >
       <div
         title={nombre}

@@ -3,10 +3,12 @@ import { useMedicionesPunto } from '../hooks/useMedicionesPunto';
 import {
   nivelColor, nivelBg, nivelLabel,
 } from '../lib/statusUtils';
+import Skeleton, { SkeletonLinea } from './Skeleton';
+import { useConteoRecordado } from '../hooks/useConteoRecordado';
 import { formatFecha } from '../utils/dateFormat';
 import { formatoPct } from '../lib/textUtils';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Thermometer, Droplets, CloudRain, Wind, Camera } from 'lucide-react';
+import { IconoCamara, IconoHumedad, IconoLluvia, IconoTemperatura, IconoViento } from './Iconos';
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
@@ -23,9 +25,19 @@ const CustomTooltip = ({ active, payload, label }) => {
   );
 };
 
+// Estilos de texto compartidos con el esqueleto: mismo line-height cargado o no.
+const FOOTER_TITULO_STYLE = {
+  fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 16,
+  color: 'var(--text-primary)', lineHeight: 1.1, letterSpacing: '-0.02em',
+};
+const FOOTER_SUB_STYLE = { fontSize: 11, color: 'var(--text-muted)', marginTop: 1, fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums' };
+const TENDENCIA_TITULO_STYLE = { fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', letterSpacing: '0.04em', marginBottom: 'var(--space-2)', fontWeight: 600 };
+const HISTORIAL_LINEA_STYLE = { fontSize: 'var(--text-3xs)', fontWeight: 600, fontFamily: 'var(--font-data)' };
+
 // ─── Tarjeta Flashcard de Ubicación (Dashboard) ─────────────────────────────
 export default function PlantDetail({ punto }) {
   const { mediciones, loading, error } = useMedicionesPunto(punto?.id_bloque);
+  const filasSkeleton = useConteoRecordado(`dashboard:historial:${punto?.id_bloque}`, mediciones, loading, 4);
 
   if (!punto) {
     return (
@@ -64,10 +76,10 @@ export default function PlantDetail({ punto }) {
   const clima = ultimaMedicion?.clima;
   const stats = [
     ...(clima ? [
-      { Icon: Thermometer, label: 'Temp.', v: clima.temperatura_c != null ? `${clima.temperatura_c}°C` : null },
-      { Icon: Droplets, label: 'Humedad', v: clima.humedad_pct != null ? `${clima.humedad_pct}%` : null },
-      { Icon: CloudRain, label: 'Precip.', v: clima.precipitacion_mm != null ? `${clima.precipitacion_mm} mm` : null },
-      { Icon: Wind, label: 'Viento', v: (clima.viento_kmh ?? clima.velocidad_viento_kmh) != null ? `${clima.viento_kmh ?? clima.velocidad_viento_kmh} km/h` : null },
+      { Icon: IconoTemperatura, label: 'Temp.', v: clima.temperatura_c != null ? `${clima.temperatura_c}°C` : null },
+      { Icon: IconoHumedad, label: 'Humedad', v: clima.humedad_pct != null ? `${clima.humedad_pct}%` : null },
+      { Icon: IconoLluvia, label: 'Precip.', v: clima.precipitacion_mm != null ? `${clima.precipitacion_mm} mm` : null },
+      { Icon: IconoViento, label: 'Viento', v: (clima.viento_kmh ?? clima.velocidad_viento_kmh) != null ? `${clima.viento_kmh ?? clima.velocidad_viento_kmh} km/h` : null },
     ] : []),
   ].filter(x => x.v);
 
@@ -117,7 +129,7 @@ export default function PlantDetail({ punto }) {
                     {v}
                   </span>
                 </div>
-                <div style={{ fontSize: 10, fontWeight: 500, color: 'var(--text-muted)', marginTop: 2, whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginTop: 2, whiteSpace: 'nowrap' }}>
                   {label}
                 </div>
               </div>
@@ -128,26 +140,31 @@ export default function PlantDetail({ punto }) {
         {/* 3. Pie de la flashcard: métrica clave a la izquierda + píldora a la derecha */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <div>
-            <div style={{
-              fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 16,
-              color: 'var(--text-primary)', lineHeight: 1.1, letterSpacing: '-0.02em',
-            }}>
-              {mediciones.length} {mediciones.length === 1 ? 'medición' : 'mediciones'}
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1, fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums' }}>
-              {ultimaMedicion?.area_corroida_pct != null
-                ? `Última área corroída: ${formatoPct(ultimaMedicion.area_corroida_pct)}`
-                : 'Sin lecturas registradas'}
-            </div>
+            {loading ? (
+              <div aria-busy="true">
+                <div style={FOOTER_TITULO_STYLE}><SkeletonLinea width={110} /></div>
+                <div style={FOOTER_SUB_STYLE}><SkeletonLinea width={160} /></div>
+              </div>
+            ) : (
+              <>
+                <div style={FOOTER_TITULO_STYLE}>
+                  {mediciones.length} {mediciones.length === 1 ? 'medición' : 'mediciones'}
+                </div>
+                <div style={FOOTER_SUB_STYLE}>
+                  {ultimaMedicion?.area_corroida_pct != null
+                    ? `Última área corroída: ${formatoPct(ultimaMedicion.area_corroida_pct)}`
+                    : 'Sin lecturas registradas'}
+                </div>
+              </>
+            )}
           </div>
 
           {nivel >= 0 && (
-            <div style={{
+            <div className={nivel === 3 ? 'severa-pulse' : undefined} style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
               padding: '5px 12px', borderRadius: 999,
               background: 'var(--bg-card)', border: `1px solid ${color}60`,
               fontSize: 12, fontWeight: 700, color,
-              animation: nivel === 3 ? 'blink 1.2s ease-in-out infinite' : 'none',
               flexShrink: 0,
             }}>
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: color }} />
@@ -158,9 +175,15 @@ export default function PlantDetail({ punto }) {
       </div>
 
       {/* Gráfica de tendencia */}
+      {loading && (
+        <div aria-busy="true" style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+          <div style={TENDENCIA_TITULO_STYLE}><SkeletonLinea width={190} /></div>
+          <Skeleton height={70} radius={8} />
+        </div>
+      )}
       {trendData.length > 1 && (
         <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-          <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', letterSpacing: '0.04em', marginBottom: 'var(--space-2)', fontWeight: 600 }}>
+          <div style={TENDENCIA_TITULO_STYLE}>
             TENDENCIA — ÁREA CORROÍDA (%)
           </div>
           <ResponsiveContainer width="100%" height={70}>
@@ -171,8 +194,8 @@ export default function PlantDetail({ punto }) {
                   <stop offset="100%" stopColor="#C1460B" stopOpacity={0}/>
                 </linearGradient>
               </defs>
-              <XAxis dataKey="fecha" tick={{ fill: '#3d5a72', fontSize: 8 }} tickLine={false} axisLine={false} interval={4} />
-              <YAxis tick={{ fill: '#3d5a72', fontSize: 8 }} tickLine={false} axisLine={false} />
+              <XAxis dataKey="fecha" tick={{ fill: '#3d5a72', fontSize: 11 }} tickLine={false} axisLine={false} interval={4} />
+              <YAxis tick={{ fill: '#3d5a72', fontSize: 11 }} tickLine={false} axisLine={false} />
               <Tooltip content={<CustomTooltip />} />
               <Area type="monotone" dataKey="corrosion" stroke="#C1460B" strokeWidth={1.5} fill={`url(#grad-${punto.id_bloque})`} dot={false} />
             </AreaChart>
@@ -187,12 +210,28 @@ export default function PlantDetail({ punto }) {
         </div>
 
         {loading && (
-          <div style={{ textAlign: 'center', padding: 20, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>
-            Cargando…
+          <div aria-busy="true" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+            {Array.from({ length: filasSkeleton }, (_, i) => (
+              <div
+                key={i}
+                style={{
+                  padding: '8px 10px',
+                  border: '1px solid var(--border)',
+                  display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
+                }}
+              >
+                <Skeleton width={36} height={36} radius={4} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ ...HISTORIAL_LINEA_STYLE, marginBottom: 2 }}><SkeletonLinea width="45%" /></div>
+                  <Skeleton height={3} radius={2} />
+                  <div style={{ fontSize: 12, marginTop: 2 }}><SkeletonLinea width="70%" /></div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
         {!loading && error && (
-          <div style={{ padding: 'var(--space-3)', fontSize: 'var(--text-2xs)', color: 'var(--accent-red)' }}>Error: {error}</div>
+          <div style={{ padding: 'var(--space-3)', fontSize: 'var(--text-2xs)', color: 'var(--accent-red)' }}>{error}</div>
         )}
         {!loading && !error && mediciones.length === 0 && (
           <div style={{ textAlign: 'center', padding: 20, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
@@ -236,7 +275,6 @@ function MedicionRow({ medicion }) {
       background: 'var(--bg-section)',
       border: '1px solid var(--border)',
       display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
-      borderLeft: `3px solid ${color}`,
     }}>
       {/* Miniatura -- 36px, así que usa url_thumbnail (~400px) en vez de
           bajar la foto original completa para mostrar un cuadrito */}
@@ -254,7 +292,7 @@ function MedicionRow({ medicion }) {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           color,
         }}>
-          <Camera size={16} aria-hidden="true" />
+          <IconoCamara size={16} aria-hidden="true" />
         </div>
       )}
 
@@ -268,10 +306,12 @@ function MedicionRow({ medicion }) {
           </div>
         )}
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-          <span style={{ fontSize: 'var(--text-3xs)', fontWeight: 600, color, fontFamily: 'var(--font-data)' }}>
+          <span style={{ ...HISTORIAL_LINEA_STYLE, color, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            {/* Decorative: the label carries the meaning */}
+            <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
             {nivelLabel(nivel)}
           </span>
-          <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>{fecha}</span>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{fecha}</span>
         </div>
         <div style={{ height: 3, background: 'var(--border)', borderRadius: 2 }}>
           <div style={{
@@ -280,7 +320,7 @@ function MedicionRow({ medicion }) {
             background: color, borderRadius: 2,
           }} />
         </div>
-        <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 2, display: 'flex', justifyContent: 'space-between' }}>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, display: 'flex', justifyContent: 'space-between' }}>
           <span>Área corroída: {formatoPct(medicion.area_corroida_pct)}</span>
           {medicion.notas && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 100 }}>{medicion.notas}</span>}
         </div>

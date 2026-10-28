@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { apiGet } from '../lib/apiClient';
 import { useRefreshKey } from './RefreshKeyContext';
 
-const SIN_ENCONTRAR_RECIENTES = 'Medición no encontrada. Es posible que no esté entre las 100 más recientes.';
+const SIN_ENCONTRAR = 'No encontramos esta medición. Puede que se haya eliminado.';
 
 /**
  * Devuelve una medición individual con todos sus campos (máscaras incluidas).
@@ -14,16 +14,18 @@ const SIN_ENCONTRAR_RECIENTES = 'Medición no encontrada. Es posible que no est�
  */
 export function useMedicion(idMedicion, idPunto) {
   const { key: globalKey } = useRefreshKey();
-  const [estado, setEstado] = useState({ medicion: null, loading: true, error: null });
+  const [localKey, setLocalKey] = useState(0);
+  const [estado, setEstado] = useState({ medicion: null, loading: true, error: null, noEncontrada: false });
 
   useEffect(() => {
     let cancelled = false;
     // Stale-while-revalidate solo para la misma medición.
-    setEstado(e => (e.medicion?.id_medicion === idMedicion ? e : { medicion: null, loading: true, error: null }));
+    setEstado(e => (e.medicion?.id_medicion === idMedicion ? e : { medicion: null, loading: true, error: null, noEncontrada: false }));
 
     async function cargar() {
       let medicion = null;
       let error = null;
+      let noEncontrada = false;
       if (idPunto) {
         try {
           const data = await apiGet(
@@ -36,16 +38,17 @@ export function useMedicion(idMedicion, idPunto) {
         try {
           const data = await apiGet('/mediciones/recientes?limit=100');
           medicion = data?.mediciones?.find(m => m.id_medicion === idMedicion) ?? null;
-          if (!medicion) error = SIN_ENCONTRAR_RECIENTES;
+          if (!medicion) { error = SIN_ENCONTRAR; noEncontrada = true; }
         } catch (err) {
           error = err.message;
         }
       }
-      if (!cancelled) setEstado({ medicion, loading: false, error: medicion ? null : error });
+      if (!cancelled) setEstado({ medicion, loading: false, error: medicion ? null : error, noEncontrada: medicion ? false : noEncontrada });
     }
     cargar();
     return () => { cancelled = true; };
-  }, [idMedicion, idPunto, globalKey]);
+  }, [idMedicion, idPunto, globalKey, localKey]);
 
-  return estado;
+  const refetch = useCallback(() => setLocalKey(k => k + 1), []);
+  return { ...estado, refetch };
 }

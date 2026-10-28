@@ -1,5 +1,7 @@
 import React from 'react';
-import { useMediciones } from '../hooks/useMediciones';
+import { useMediciones, LIMITE_DASHBOARD } from '../hooks/useMediciones';
+import { SkeletonLinea } from './Skeleton';
+import { ultimaMedicionPorPunto } from '../lib/mediciones';
 
 
 // ================================================================
@@ -22,6 +24,7 @@ function KPICard({
 
     <div
       className="card kpi-card"
+      aria-busy={loading || undefined}
       style={{
         '--kpi-color': color,
 
@@ -104,14 +107,7 @@ function KPICard({
 
         {loading ? (
 
-          <span
-            style={{
-              fontSize: 14,
-              opacity: 0.4,
-            }}
-          >
-            —
-          </span>
+          <SkeletonLinea width="3ch" />
 
         ) : (
 
@@ -192,37 +188,40 @@ export default function KPIBar() {
   const {
     mediciones,
     loading,
-  } = useMediciones(100);
+    error,
+    refetch,
+  } = useMediciones(LIMITE_DASHBOARD, { resumen: true });
+
+  // With cached data a failed refresh keeps showing it; only an empty failure
+  // is an error state (never show 0 as if it were real data).
+  const sinDatos = Boolean(error) && mediciones.length === 0;
 
 
   // ==============================================================
   // DATA
   // ==============================================================
 
-  const ubicacionesUnicas =
+  // Measurements without an assigned point are not a monitored point.
+  const puntosMedidos =
     new Set(
-      mediciones.map(
-        m => m.bloque_id
-      )
+      mediciones
+        .map(m => m.bloque_id)
+        .filter(Boolean)
     ).size;
-
 
   const totalMediciones =
     mediciones.length;
 
+  const alcanzoLimite =
+    totalMediciones >= LIMITE_DASHBOARD;
 
-  const criticas =
-    mediciones.filter(
-      m =>
-        (m.nivel_corrosion ?? 0) === 3
-    ).length;
-
-
-  const sinCorrosion =
-    mediciones.filter(
-      m =>
-        (m.nivel_corrosion ?? 0) === 0
-    ).length;
+  // Latest measurement per point (shared helper); a null level counts in neither card.
+  let puntosSeveros = 0;
+  let puntosSinCorrosion = 0;
+  for (const { nivel_corrosion: nivel } of ultimaMedicionPorPunto(mediciones).values()) {
+    if (nivel === 3) puntosSeveros++;
+    else if (nivel === 0) puntosSinCorrosion++;
+  }
 
 
   // ==============================================================
@@ -230,69 +229,35 @@ export default function KPIBar() {
   // ==============================================================
 
   const kpis = [
-
     {
-      label:
-        'Ubicaciones Monitoreadas',
-
-      value:
-        ubicacionesUnicas,
-
-      sub:
-        'ubicaciones activas',
-
-      color:
-        'var(--accent-blue)',
+      label: 'Puntos medidos',
+      value: puntosMedidos,
+      sub: 'con al menos una medición',
+      color: 'var(--accent-blue)',
     },
-
-
     {
-      label:
-        'Total Mediciones',
-
-      value:
-        totalMediciones,
-
-      sub:
-        'últimas 100',
-
-      color:
-        'var(--accent-green)',
+      label: 'Mediciones',
+      value: alcanzoLimite ? `${totalMediciones}+` : totalMediciones,
+      sub: alcanzoLimite ? `se cuentan las ${LIMITE_DASHBOARD} más recientes` : 'en total',
+      color: 'var(--accent-green)',
     },
-
-
     {
-      label:
-        'Estado Crítico',
-
-      value:
-        criticas,
-
-      sub:
-        'severa',
-
-      color:
-        criticas > 0
-          ? 'var(--accent-red)'
-          : 'var(--accent-green)',
+      label: 'En estado severo',
+      value: puntosSeveros,
+      sub: 'puntos, según su última medición',
+      color: puntosSeveros > 0 ? 'var(--accent-red)' : 'var(--accent-green)',
     },
-
-
     {
-      label:
-        'Sin Corrosión',
-
-      value:
-        sinCorrosion,
-
-      sub:
-        'sin corrosión',
-
-      color:
-        'var(--accent-green)',
+      label: 'Sin corrosión',
+      value: puntosSinCorrosion,
+      sub: 'puntos, según su última medición',
+      color: 'var(--accent-green)',
     },
-
   ];
+
+  const kpisMostrados = sinDatos
+    ? kpis.map(k => ({ ...k, value: '—', sub: 'No se pudo cargar', color: 'var(--text-faint)' }))
+    : kpis;
 
 
   // ==============================================================
@@ -300,33 +265,43 @@ export default function KPIBar() {
   // ==============================================================
 
   return (
+    <div>
+      <div
+        className="kpi-grid"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+          gap: 'var(--space-3)',
+        }}
+      >
+        {kpisMostrados.map((kpi, i) => (
+          <KPICard key={i} {...kpi} loading={loading} />
+        ))}
+      </div>
 
-    <div
-      className="kpi-grid"
-      style={{
-        display: 'grid',
-
-        gridTemplateColumns:
-          'repeat(4, minmax(0, 1fr))',
-
-        gap: 'var(--space-3)',
-      }}
-    >
-
-      {kpis.map(
-        (kpi, i) => (
-
-          <KPICard
-            key={i}
-
-            {...kpi}
-
-            loading={loading}
-          />
-
-        )
+      {sinDatos && (
+        <div
+          role="alert"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
+            marginTop: 'var(--space-2)',
+            fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)', color: 'var(--text-muted)',
+          }}
+        >
+          <span>No se pudieron cargar las mediciones. Revisa tu conexión.</span>
+          <button
+            type="button" onClick={refetch}
+            style={{
+              padding: '6px 12px', minHeight: 32, borderRadius: 6,
+              border: '1px solid var(--border-strong)', background: 'transparent',
+              color: 'var(--text-primary)', fontFamily: 'var(--font-ui)',
+              fontSize: 'var(--text-sm)', fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            Reintentar
+          </button>
+        </div>
       )}
-
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight } from 'lucide-react';
+import { IconoFlechaAdelante } from './Iconos';
 
 // Migas de la galería: "Galería › Empresa › Punto". Cada tramo con `to` es un
 // enlace; el último (página actual) es solo texto.
@@ -14,7 +14,7 @@ export default function GaleriaBreadcrumb({ tramos }) {
         const esUltimo = i === tramos.length - 1;
         return (
           <React.Fragment key={`${i}-${t.label}`}>
-            {i > 0 && <ChevronRight size={13} aria-hidden="true" style={{ color: 'var(--text-faint)', flexShrink: 0 }} />}
+            {i > 0 && <IconoFlechaAdelante size={13} aria-hidden="true" style={{ color: 'var(--text-faint)', flexShrink: 0 }} />}
             {t.to && !esUltimo ? (
               <Link to={t.to} style={{ color: 'var(--text-muted)', textDecoration: 'none', fontWeight: 500 }}>
                 {t.label}

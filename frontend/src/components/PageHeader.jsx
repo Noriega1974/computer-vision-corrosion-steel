@@ -1,12 +1,12 @@
 import React, { useEffect } from 'react';
-import { useLocation, useParams } from 'react-router-dom';
-import { Menu, Sun, Moon } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
+import { IconoLuna, IconoMenu, IconoSol } from './Iconos';
 
 // Mapa de rutas a títulos de página para el breadcrumb
 const ROUTE_TITLES = {
   '/que-es-pixelrust': '¿Qué es PixelRust?',
   '/dashboard':    'Dashboard',
-  '/upload':       'Nueva Medición',
+  '/upload':       'Nueva medición',
   '/galeria':      'Galería',
   '/puntos':       'Puntos',
   '/usuarios':     'Usuarios',
@@ -65,7 +65,7 @@ export default function PageHeader({ onMenuToggle, isMobile, darkMode, onToggleD
               padding: 'var(--space-1)',
             }}
           >
-            <Menu size={20} aria-hidden="true" />
+            <IconoMenu size={20} aria-hidden="true" />
           </button>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
@@ -103,12 +103,12 @@ export default function PageHeader({ onMenuToggle, isMobile, darkMode, onToggleD
           style={{
             background: 'transparent', border: 'none', cursor: 'pointer',
             color: 'var(--text-muted)', display: 'flex', alignItems: 'center',
-            padding: 6, borderRadius: 7, transition: 'background 0.12s',
+            padding: 6, borderRadius: 7, transition: 'background var(--dur-fast) var(--ease-out)',
           }}
           onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-inset)'}
           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
         >
-          {darkMode ? <Sun size={18} strokeWidth={1.8} /> : <Moon size={18} strokeWidth={1.8} />}
+          {darkMode ? <IconoSol size={18} /> : <IconoLuna size={18} />}
         </button>
       </div>
     </header>

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { Image as ImageIcon, RotateCcw } from 'lucide-react';
+import { IconoDeshacer, IconoImagen } from './Iconos';
 
 const CONTENEDOR = 240; // px, tamaño del visor cuadrado
 const SALIDA = 320;     // px, tamaño de la imagen final guardada
@@ -100,7 +100,7 @@ export default function AvatarCropper({ onConfirm, onCancel }) {
             borderRadius: 10, cursor: 'pointer', color: 'var(--text-muted)', width: '100%',
           }}
         >
-          <ImageIcon size={28} strokeWidth={1.5} />
+          <IconoImagen size={28} />
           <span style={{ fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)' }}>Elegir foto de la galería</span>
         </button>
       </div>
@@ -160,7 +160,7 @@ export default function AvatarCropper({ onConfirm, onCancel }) {
           title="Elegir otra foto"
           style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}
         >
-          <RotateCcw size={15} />
+          <IconoDeshacer size={15} />
         </button>
         <input ref={inputRef} type="file" accept="image/*" onChange={handleFile} style={{ display: 'none' }} />
       </div>

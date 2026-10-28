@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ImagePlus, Trash2, RefreshCw, AlertCircle } from 'lucide-react';
+import { IconoActualizar, IconoAgregarImagen, IconoEliminar, IconoError } from './Iconos';
 import { IMAGEN_TIPOS, validarImagen } from '../lib/imagenesApi';
 
 // Selector de imagen con vista previa, reemplazo y quitar (logo de empresa o
@@ -41,7 +41,7 @@ export default function ImagenUploader({ id, etiqueta, ayuda, url, valor, onChan
   const esLogo = forma === 'logo';
   const boton = {
     display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8,
-    background: 'var(--bg-inset)', border: '1px solid var(--border-strong)', cursor: disabled ? 'not-allowed' : 'pointer',
+    background: 'var(--bg-inset)', border: '1px solid var(--text-muted)', cursor: disabled ? 'not-allowed' : 'pointer',
     fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)', color: 'var(--text-secondary)',
     opacity: disabled ? 0.6 : 1,
   };
@@ -67,7 +67,7 @@ export default function ImagenUploader({ id, etiqueta, ayuda, url, valor, onChan
               objectFit: esLogo ? 'contain' : 'cover', padding: esLogo ? 6 : 0, boxSizing: 'border-box',
             }} />
           ) : (
-            <ImagePlus size={26} strokeWidth={1.5} aria-hidden="true" style={{ color: 'var(--text-faint)' }} />
+            <IconoAgregarImagen size={26} aria-hidden="true" style={{ color: 'var(--text-faint)' }} />
           )}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
@@ -77,12 +77,12 @@ export default function ImagenUploader({ id, etiqueta, ayuda, url, valor, onChan
           />
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button type="button" disabled={disabled} onClick={() => inputRef.current?.click()} style={boton}>
-              {mostrada ? <RefreshCw size={13} aria-hidden="true" /> : <ImagePlus size={13} aria-hidden="true" />}
+              {mostrada ? <IconoActualizar size={13} aria-hidden="true" /> : <IconoAgregarImagen size={13} aria-hidden="true" />}
               {mostrada ? 'Reemplazar' : 'Subir imagen'}
             </button>
             {mostrada && (
-              <button type="button" disabled={disabled} onClick={quitar} style={{ ...boton, color: '#dc2626' }}>
-                <Trash2 size={13} aria-hidden="true" />
+              <button type="button" disabled={disabled} onClick={quitar} style={boton}>
+                <IconoEliminar size={13} aria-hidden="true" />
                 Quitar
               </button>
             )}
@@ -98,7 +98,7 @@ export default function ImagenUploader({ id, etiqueta, ayuda, url, valor, onChan
           border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, color: '#dc2626',
           fontSize: 'var(--text-xs)', display: 'flex', alignItems: 'center', gap: 6,
         }}>
-          <AlertCircle size={13} aria-hidden="true" /> {error}
+          <IconoError size={13} aria-hidden="true" /> {error}
         </div>
       )}
     </div>

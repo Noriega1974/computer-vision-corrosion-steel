@@ -1,5 +1,5 @@
 import React from 'react';
-import { FolderInput, Trash2 } from 'lucide-react';
+import { IconoEliminar, IconoMoverACarpeta } from './Iconos';
 
 const botonBase = {
   display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -35,7 +35,9 @@ export default function BarraSeleccion({
         type="button" onClick={onSeleccionarTodo} disabled={deshabilitado}
         style={{ ...botonBase, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', fontWeight: 500 }}
       >
-        {todas ? 'Quitar selección' : 'Seleccionar todo'}
+        {todas
+          ? 'Quitar selección'
+          : total === 1 ? 'Seleccionar la foto visible' : `Seleccionar las ${total} visibles`}
       </button>
       <button
         type="button" onClick={onMover} disabled={deshabilitado || cantidad === 0}
@@ -44,7 +46,7 @@ export default function BarraSeleccion({
           opacity: cantidad === 0 ? 0.5 : 1, cursor: cantidad === 0 ? 'not-allowed' : 'pointer',
         }}
       >
-        <FolderInput size={15} aria-hidden="true" />
+        <IconoMoverACarpeta size={15} aria-hidden="true" />
         Mover a…
       </button>
       <button
@@ -54,7 +56,7 @@ export default function BarraSeleccion({
           opacity: cantidad === 0 ? 0.5 : 1, cursor: cantidad === 0 ? 'not-allowed' : 'pointer',
         }}
       >
-        <Trash2 size={15} aria-hidden="true" />
+        <IconoEliminar size={15} aria-hidden="true" />
         Eliminar
       </button>
       <button

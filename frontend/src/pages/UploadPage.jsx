@@ -1,17 +1,17 @@
-import React, { useState, useCallback } from 'react';
+import { AvisoEnLinea } from '../components/Aviso';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, Check, ImagePlus, Microscope } from 'lucide-react';
+import { IconoAgregarImagen, IconoCamara, IconoCheck, IconoUbicacion, IconoVolver } from '../components/Iconos';
 import exifr from 'exifr';
 import { useBloques } from '../hooks/useBloques';
-import { useUploadMedicion } from '../hooks/useUploadMedicion';
+import { useUploadMedicion, MAX_FOTO_MB } from '../hooks/useUploadMedicion';
+import { useUploadLote, clasificarArchivos, LOTE_MAX } from '../hooks/useUploadLote';
+import UploadCola from '../components/UploadCola';
 import { nivelColor, nivelBg, nivelLabel } from '../lib/statusUtils';
 import SearchableSelect from '../components/SearchableSelect';
 import NivelIcon from '../components/NivelIcon';
+import NivelInfo from '../components/NivelInfo';
 import { formatoPct } from '../lib/textUtils';
-
-// Tope de la foto: lo impone también S3 (política del POST prefirmado) y el
-// backend; este chequeo solo evita subir 50+ MB para recibir un rechazo.
-const MAX_FOTO_MB = 50;
 
 // ─── Componente: resultado del análisis ─────────────────────────────────────
 const NOMBRE_MAX = 80;
@@ -23,7 +23,7 @@ function ResultadoAnalisis({ result, onReset, onDashboard }) {
   const areaPct = result.area_corroida_pct ?? 0;
 
   return (
-    <div style={{ maxWidth: 560, margin: '0 auto', animation: 'fade-in-up 0.4s ease' }}>
+    <div className="fade-in-up" style={{ maxWidth: 560, margin: '0 auto' }}>
       {/* Tarjeta única de resultado */}
       <div style={{
         background: 'var(--bg-card)', border: '1px solid var(--border)',
@@ -39,7 +39,7 @@ function ResultadoAnalisis({ result, onReset, onDashboard }) {
           </div>
         )}
         <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--text-muted)', marginTop: result.nombre ? -10 : 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <MapPin size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
+          <IconoUbicacion size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
           <span>{bloque.nombre ?? '—'}{bloque.ciudad ? ` · ${bloque.ciudad}` : ''}</span>
         </div>
 
@@ -51,7 +51,8 @@ function ResultadoAnalisis({ result, onReset, onDashboard }) {
             <NivelIcon nivel={nivel} size={44} color={color} />
           </div>
           <div style={{ fontFamily: 'var(--font-ui)', fontSize: 20, color, letterSpacing: '-0.01em' }}>
-            Tipo de corrosión: <span style={{ fontWeight: 800, fontSize: 28 }}>{nivelLabel(nivel)}</span>
+            Tipo de corrosión: <span style={{ fontWeight: 800, fontSize: 28 }}>{nivelLabel(nivel)}</span>{' '}
+            <NivelInfo nivel={nivel} color={color} />
           </div>
           {/* Fuente de interfaz con cifras tabulares: la monoespaciada dejaba
               un hueco visible alrededor de la coma decimal. */}
@@ -78,7 +79,7 @@ function ResultadoAnalisis({ result, onReset, onDashboard }) {
           Subir otra imagen
         </button>
         <button onClick={onDashboard} style={btnPrimaryStyle}>
-          Ver en galería →
+          Ver en galería
         </button>
       </div>
     </div>
@@ -112,7 +113,7 @@ const inputStyle = {
 // ─── Página principal ─────────────────────────────────────────────────────────
 export default function UploadPage() {
   const navigate = useNavigate();
-  const { upload, loading: uploading, fase, error: uploadError, result, reset } = useUploadMedicion();
+  const { upload, loading: uploading, fase, progreso, error: uploadError, result, reset } = useUploadMedicion();
   const [errorLocal, setErrorLocal] = useState(null);  // validación previa a la subida
 
   // Lista de puntos (bloques) para elegir dónde se tomó la medición -- ya
@@ -126,6 +127,11 @@ export default function UploadPage() {
   const [preview, setPreview] = useState(null);       // data URL
   const [exifGps, setExifGps] = useState(null);       // {latitude, longitude}
   const [dragOver, setDragOver] = useState(false);
+
+  // Multi-photo mode (2+ files): sequential queue handled by useUploadLote.
+  const lote = useUploadLote();
+  const modoLote = lote.items.length > 0;
+  const [avisoArchivos, setAvisoArchivos] = useState(null);  // {rechazados: string[], excedidos: number}
 
   // Detalles opcionales
   const [nombre, setNombre] = useState('');           // nombre de la foto (para buscarla luego)
@@ -145,7 +151,7 @@ export default function UploadPage() {
   const procesarImagen = useCallback(async (file) => {
     if (!file) return;
     if (!['image/jpeg', 'image/png', 'image/jpg'].includes(file.type)) {
-      alert('Solo se aceptan imágenes JPG o PNG.');
+      setErrorLocal('Solo se aceptan imágenes JPG o PNG.');
       return;
     }
     setErrorLocal(null);
@@ -158,24 +164,77 @@ export default function UploadPage() {
     reader.readAsDataURL(file);
     // EXIF GPS -- metadata informativa de la foto (dónde se tomó exactamente),
     // independiente de la ubicación fija del punto elegido abajo.
+    // Clear any GPS from a previous photo first so a new photo without GPS
+    // never inherits stale coordinates.
+    setExifGps(null);
     try {
       const gps = await exifr.gps(file);
       if (gps?.latitude && gps?.longitude) setExifGps(gps);
     } catch { /* sin EXIF */ }
   }, []);
 
+  // Entry point for the file input and the drop zone. Each file is validated
+  // individually; exactly one valid file keeps the single-photo flow, 2+ go to
+  // the batch queue (capped at LOTE_MAX).
+  const procesarArchivos = useCallback((files) => {
+    const lista = Array.from(files ?? []);
+    if (lista.length === 0) return;
+    const { validos, rechazados } = clasificarArchivos(lista);
+    setErrorLocal(null);
+    let excedidos = 0;
+    if (modoLote) {
+      excedidos = lote.agregar(validos);
+    } else if (validos.length === 1) {
+      procesarImagen(validos[0]);
+    } else if (validos.length >= 2) {
+      excedidos = lote.agregar(validos);
+    }
+    setAvisoArchivos(rechazados.length || excedidos ? { rechazados, excedidos } : null);
+  }, [modoLote, lote, procesarImagen]);
+
   // Drag & drop
   const handleDrop = useCallback(e => {
     e.preventDefault();
     setDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (file) procesarImagen(file);
-  }, [procesarImagen]);
+    procesarArchivos(e.dataTransfer.files);
+  }, [procesarArchivos]);
 
   const handleFileInput = useCallback(e => {
-    const file = e.target.files[0];
-    if (file) procesarImagen(file);
-  }, [procesarImagen]);
+    procesarArchivos(e.target.files);
+    e.target.value = '';
+  }, [procesarArchivos]);
+
+  // Removing a row until a single photo remains hands it back to the single flow.
+  const quitarDeLote = useCallback((id) => {
+    const resto = lote.items.filter(x => x.id !== id);
+    if (resto.length === 1) {
+      const unica = resto[0];
+      lote.limpiar();
+      procesarImagen(unica.file);
+      setNombre(unica.nombre);
+    } else {
+      lote.quitar(id);
+    }
+  }, [lote, procesarImagen]);
+
+  const faltaAlgo = modoLote ? !bloqueSeleccionado : (!imagen || !bloqueSeleccionado);
+
+  // Body of one /medicion request in batch mode: shared fields plus the row's
+  // own name and EXIF GPS.
+  const construirBodyLote = (it) => ({
+    fuente: 'movil',
+    bloque_id: bloqueSeleccionado.id_bloque,
+    ...(it.nombre.trim() && { nombre: it.nombre.trim() }),
+    ...(notas && { notas }),
+    ...(it.gps && { latitud_real: it.gps.latitude, longitud_real: it.gps.longitude }),
+    ...(esMedicionPasada && { timestamp_medicion: fechaMedicion }),
+  });
+
+  const irAGaleria = () => navigate(
+    bloqueSeleccionado?.empresa_id && bloqueSeleccionado?.id_bloque
+      ? `/galeria/zona/${bloqueSeleccionado.empresa_id}/${bloqueSeleccionado.id_bloque}`
+      : '/galeria'
+  );
 
   // Enviar formulario
   //
@@ -185,8 +244,14 @@ export default function UploadPage() {
   // `ubicacion` ni pide lat/lng.
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!imagen) { alert('Selecciona una imagen primero.'); return; }
-    if (!bloqueSeleccionado) { alert('Selecciona el punto donde se tomó la medición.'); return; }
+    if (modoLote) {
+      if (!bloqueSeleccionado || lote.running) return;
+      setErrorLocal(null);
+      lote.iniciar(construirBodyLote);
+      return;
+    }
+    // Defensive guard: the submit button is disabled until both exist.
+    if (!imagen || !bloqueSeleccionado) return;
 
     // El tiempo de análisis cuenta desde este clic, antes de subir la foto.
     const inicio = performance.now();
@@ -221,12 +286,8 @@ export default function UploadPage() {
       <div style={{ minHeight: '100vh', background: 'var(--bg-page)', padding: '32px 20px' }}>
         <ResultadoAnalisis
           result={result}
-          onReset={() => { reset(); setImagen(null); setNombre(''); setPreview(null); setExifGps(null); setBloqueSeleccionado(null); }}
-          onDashboard={() => navigate(
-            bloqueSeleccionado?.empresa_id && bloqueSeleccionado?.id_bloque
-              ? `/galeria/zona/${bloqueSeleccionado.empresa_id}/${bloqueSeleccionado.id_bloque}`
-              : '/galeria'
-          )}
+          onReset={() => { reset(); setImagen(null); setNombre(''); setPreview(null); setExifGps(null); }}
+          onDashboard={irAGaleria}
         />
       </div>
     );
@@ -239,12 +300,14 @@ export default function UploadPage() {
         {/* Header de página */}
         <div style={{ marginBottom: 'var(--space-5)', display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
           <button
+            type="button"
             onClick={() => navigate('/dashboard')}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 20, padding: 0 }}
-          >←</button>
+            aria-label="Volver al panel"
+            style={{ display: 'flex', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}
+          ><IconoVolver size={20} /></button>
           <div>
             <h2 style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 20, color: 'var(--text-primary)', margin: 0 }}>
-              Nueva Medición
+              Nueva medición
             </h2>
             <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: '2px 0 0', fontFamily: 'var(--font-ui)' }}>
               Sube una foto y el modelo de IA detectará el nivel de corrosión
@@ -255,8 +318,17 @@ export default function UploadPage() {
         <form onSubmit={handleSubmit}>
 
           {/* ─── SECCIÓN 1: Imagen ─── */}
-          <Section title="1. Imagen" accent="var(--accent-amber)">
-            {!preview ? (
+          <Section title={modoLote ? '1. Imágenes' : '1. Imagen'} accent="var(--accent-amber)">
+            {modoLote ? (
+              <UploadCola
+                lote={lote}
+                onQuitar={quitarDeLote}
+                onReintentar={(id) => lote.reintentar(id, construirBodyLote)}
+                onAgregar={procesarArchivos}
+                onVerGaleria={irAGaleria}
+                onSubirMas={() => { lote.limpiar(); setAvisoArchivos(null); setErrorLocal(null); }}
+              />
+            ) : !preview ? (
               // Era un <div onClick>: se podia usar con el mouse pero no con el
               // teclado, asi que subir una foto era imposible navegando con Tab.
               // role + tabIndex + onKeyDown lo devuelven al orden de foco sin
@@ -264,7 +336,7 @@ export default function UploadPage() {
               <div
                 role="button"
                 tabIndex={0}
-                aria-label="Seleccionar imagen: JPG o PNG, máximo 50 MB"
+                aria-label={`Seleccionar imágenes: JPG o PNG, máximo ${MAX_FOTO_MB} MB cada una, hasta ${LOTE_MAX} por tanda`}
                 onDrop={handleDrop}
                 onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
@@ -272,7 +344,7 @@ export default function UploadPage() {
                   border: `2px dashed ${dragOver ? 'var(--accent-amber)' : 'var(--border)'}`,
                   borderRadius: 10, padding: '36px 20px', textAlign: 'center',
                   background: dragOver ? 'var(--bg-card-hover)' : 'var(--bg-inset)',
-                  cursor: 'pointer', transition: 'border-color 0.15s, background 0.15s',
+                  cursor: 'pointer', transition: 'border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out)',
                 }}
                 onClick={() => document.getElementById('file-input').click()}
                 onKeyDown={e => {
@@ -283,14 +355,14 @@ export default function UploadPage() {
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'center', color: 'var(--text-muted)', marginBottom: 'var(--space-2-5)' }}>
-                  <ImagePlus size={36} aria-hidden="true" />
+                  <IconoAgregarImagen size={36} aria-hidden="true" />
                 </div>
                 <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 'var(--space-1)' }}>
-                  Arrastra una imagen aquí o haz clic para seleccionar
+                  Arrastra una o varias imágenes aquí o haz clic para seleccionar
                 </div>
-                <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>JPG o PNG · Máximo 50 MB</div>
+                <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>JPG o PNG · Máximo 50 MB cada una · Hasta {LOTE_MAX} por tanda</div>
                 <input
-                  id="file-input" name="imagen" type="file"
+                  id="file-input" name="imagen" type="file" multiple
                   accept="image/jpeg,image/png" tabIndex={-1}
                   onChange={handleFileInput} style={{ display: 'none' }}
                 />
@@ -323,19 +395,38 @@ export default function UploadPage() {
                     Cambiar imagen
                   </button>
                   {exifGps && (
-                    <div style={{
+                    <div role="status" style={{
                       flex: 1, padding: '8px 12px', background: 'rgba(22,163,74,0.08)',
                       border: '1px solid rgba(22,163,74,0.3)', borderRadius: 7,
                       fontSize: 'var(--text-2xs)', color: 'var(--accent-green)', display: 'flex', alignItems: 'center', gap: 6,
                     }}>
-                      <MapPin size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
+                      <IconoUbicacion size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
                       <span>GPS detectado en la foto: {exifGps.latitude.toFixed(5)}, {exifGps.longitude.toFixed(5)}</span>
                     </div>
                   )}
                 </div>
               </div>
             )}
+            {avisoArchivos && (
+              <AvisoEnLinea tone="error" style={{ padding: '10px 14px', marginTop: 'var(--space-3)' }}>
+                <div>
+                  {avisoArchivos.rechazados.length > 0 && (
+                    <div>
+                      No se subirán estos archivos porque no son JPG ni PNG: {avisoArchivos.rechazados.join(', ')}.
+                    </div>
+                  )}
+                  {avisoArchivos.excedidos > 0 && (
+                    <div>
+                      El máximo es {LOTE_MAX} imágenes por tanda; se omitieron {avisoArchivos.excedidos}.
+                    </div>
+                  )}
+                </div>
+              </AvisoEnLinea>
+            )}
           </Section>
+
+          {/* Shared fields: locked once the batch starts so retries use the same values. */}
+          <fieldset disabled={lote.iniciado} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
 
           {/* ─── SECCIÓN 2: Punto de medición ─── */}
           <Section title="2. Punto de medición" accent="var(--accent-blue)">
@@ -347,16 +438,16 @@ export default function UploadPage() {
               onChange={label => setBloqueSeleccionado(bloquePorLabel[label] ?? null)}
               placeholder="Nombre del punto"
               emptyMessage="Sin puntos que coincidan"
-              disabled={bloques.length === 0}
+              disabled={bloques.length === 0 || lote.iniciado}
             />
             {bloqueSeleccionado && (
-              <div style={{
+              <div role="status" style={{
                 marginTop: 'var(--space-2-5)', padding: '10px 14px',
                 background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.3)',
                 borderRadius: 7, fontSize: 'var(--text-xs)', color: 'var(--accent-green)',
                 display: 'flex', alignItems: 'center', gap: 6,
               }}>
-                <Check size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
+                <IconoCheck size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
                 <span>Punto seleccionado: <strong>{bloqueSeleccionado.nombre}</strong>{bloqueSeleccionado.ciudad ? ` — ${bloqueSeleccionado.ciudad}` : ''}</span>
               </div>
             )}
@@ -387,7 +478,7 @@ export default function UploadPage() {
                     background: esMedicionPasada === val ? 'rgba(156,54,16,0.1)' : 'var(--bg-inset)',
                     color: esMedicionPasada === val ? 'var(--accent-amber)' : 'var(--text-muted)',
                     fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)', cursor: 'pointer',
-                    transition: 'color 0.13s, background-color 0.13s, border-color 0.13s',
+                    transition: 'color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out)',
                   }}
                 >
                   {label}
@@ -422,7 +513,7 @@ export default function UploadPage() {
                 style={{ ...inputStyle, resize: 'vertical' }}
               />
             </div>
-            {exifGps && (
+            {!modoLote && exifGps && (
               <div style={{
                 marginTop: 'var(--space-2-5)', padding: '10px 12px', fontSize: 'var(--text-2xs)',
                 background: 'var(--bg-inset)', borderRadius: 7, border: '1px solid var(--border)',
@@ -433,48 +524,122 @@ export default function UploadPage() {
               </div>
             )}
           </Section>
+          </fieldset>
 
           {/* Error de upload */}
           {(errorLocal || uploadError) && (
-            <div style={{
-              padding: '12px 16px', marginBottom: 'var(--space-4)',
-              background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.3)',
-              borderLeft: '3px solid var(--accent-red)', borderRadius: '0 8px 8px 0',
-              fontSize: 'var(--text-sm)', color: 'var(--accent-red)',
-            }}>
+            <AvisoEnLinea tone="error" style={{ padding: '12px 16px', marginBottom: 'var(--space-4)' }}>
               {errorLocal || uploadError}
-            </div>
+            </AvisoEnLinea>
           )}
 
-          {/* Botón submit */}
+          {/* Botón submit (in batch mode it disappears once the batch starts) */}
+          {!(modoLote && lote.iniciado) && (<>
           <button
             type="submit"
-            disabled={uploading || !imagen}
+            disabled={faltaAlgo || uploading}
+            aria-describedby={faltaAlgo && !uploading ? 'upload-falta' : undefined}
             style={{
               ...btnPrimaryStyle,
-              width: '100%', opacity: uploading || !imagen ? 0.7 : 1,
-              cursor: uploading || !imagen ? 'not-allowed' : 'pointer',
+              width: '100%', opacity: faltaAlgo || uploading ? 0.7 : 1,
+              cursor: faltaAlgo || uploading ? 'not-allowed' : 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-2-5)',
             }}
           >
             {uploading ? (
               <>
-                <div style={{
+                <div className="upload-spinner" aria-hidden="true" style={{
                   width: 18, height: 18, border: '2px solid rgba(255,255,255,0.3)',
                   borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.8s linear infinite',
                 }} />
-                {fase === 'subiendo' ? 'Subiendo foto…' : 'Analizando con IA… (puede tomar 15-30s)'}
+                Procesando…
               </>
             ) : (
               <>
-                <Microscope size={18} aria-hidden="true" />
-                Analizar imagen
+                <IconoCamara size={18} aria-hidden="true" />
+                {modoLote ? `Analizar ${lote.items.length} imágenes` : 'Analizar imagen'}
               </>
             )}
           </button>
+
+          {faltaAlgo && !uploading && (
+            <p id="upload-falta" style={{ margin: 'var(--space-2) 0 0', fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
+              Falta: elegir {modoLote ? 'el punto' : !imagen && !bloqueSeleccionado ? 'la foto y el punto' : !imagen ? 'la foto' : 'el punto'}
+            </p>
+          )}
+          </>)}
+
+          {uploading && <PasosEspera fase={fase} progreso={progreso} />}
         </form>
       </div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @media (prefers-reduced-motion: reduce) { .upload-spinner { animation: none !important; } }
+      `}</style>
+    </div>
+  );
+}
+
+// ─── Indicador de dos pasos mientras se sube y analiza ───────────────────────
+const SEGUNDOS_LENTO = 45;
+
+function PasosEspera({ fase, progreso }) {
+  const analizando = fase === 'analizando';
+  const [segundos, setSegundos] = useState(0);
+
+  // Elapsed seconds are measured from the start of the analysis phase and
+  // tick once per second; the interval only exists while analyzing.
+  useEffect(() => {
+    if (!analizando) return undefined;
+    const t0 = Date.now();
+    setSegundos(0);
+    const id = setInterval(() => setSegundos(Math.floor((Date.now() - t0) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [analizando]);
+
+  const lineaStyle = (activo) => ({
+    display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
+    color: activo ? 'var(--text-muted)' : 'var(--text-faint)',
+  });
+  const numStyle = { fontFamily: 'var(--font-data)', fontVariantNumeric: 'tabular-nums' };
+
+  return (
+    <div style={{
+      marginTop: 'var(--space-3)', fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)',
+      display: 'flex', flexDirection: 'column', gap: 'var(--space-1)',
+    }}>
+      {/* Visual indicator: hidden from assistive tech because it changes every second. */}
+      <div aria-hidden="true" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+        <div style={lineaStyle(!analizando)}>
+          {analizando
+            ? <IconoCheck size={14} color="var(--accent-green)" />
+            : <span style={numStyle}>1.</span>}
+          <span>
+            Subiendo foto
+            {!analizando && <> · <span style={numStyle}>{progreso} %</span></>}
+          </span>
+        </div>
+        <div style={lineaStyle(analizando)}>
+          <span style={numStyle}>2.</span>
+          <span>
+            Analizando con IA
+            {analizando && <> · <span style={numStyle}>{segundos} s</span></>}
+          </span>
+        </div>
+        {analizando && segundos > SEGUNDOS_LENTO && (
+          <div style={{ color: 'var(--text-faint)', fontSize: 'var(--text-xs)', marginTop: 'var(--space-1)' }}>
+            Está tardando más de lo normal. Puedes seguir esperando.
+          </div>
+        )}
+      </div>
+
+      {/* Screen readers: announce phase changes only, never the ticking numbers. */}
+      <span aria-live="polite" role="status" style={{
+        position: 'absolute', width: 1, height: 1, overflow: 'hidden',
+        clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap',
+      }}>
+        {analizando ? 'Foto subida. Analizando con IA.' : 'Subiendo foto.'}
+      </span>
     </div>
   );
 }

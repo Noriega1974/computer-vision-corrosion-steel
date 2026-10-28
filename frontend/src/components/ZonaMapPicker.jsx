@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Check } from 'lucide-react';
+import { IconoCheck } from './Iconos';
 
 // Carga Leaflet vía CDN (mismo patrón que MapPicker/ColombiaMap).
 function useLeaflet() {
@@ -158,7 +158,7 @@ export default function ZonaMapPicker({ zonas = [], onChange, puntoReferencia = 
             >
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 Confirmar zona
-                <Check size={14} aria-hidden="true" />
+                <IconoCheck size={14} aria-hidden="true" />
               </span>
             </button>
           </>

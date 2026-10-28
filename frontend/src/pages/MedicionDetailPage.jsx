@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import ErrorEstado from '../components/ErrorEstado';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Download, Share2, Trash2, MapPin, AlertCircle, Thermometer, Droplets, Wind, ChevronDown, ChevronUp, Settings } from 'lucide-react';
+import { IconoAjustes, IconoCompartir, IconoDescargar, IconoEliminar, IconoError, IconoFlechaAbajo, IconoFlechaArriba, IconoHumedad, IconoTemperatura, IconoUbicacion, IconoViento, IconoVolver } from '../components/Iconos';
 import { useMedicion } from '../hooks/useMedicion';
 import { useBloques } from '../hooks/useBloques';
 import { useEmpresas } from '../hooks/useEmpresas';
@@ -12,7 +13,11 @@ import { apiDelete, apiPatch } from '../lib/apiClient';
 import { useRefreshKey } from '../hooks/RefreshKeyContext';
 import SegmentationOverlay from '../components/SegmentationOverlay';
 import NivelIcon from '../components/NivelIcon';
+import NivelInfo from '../components/NivelInfo';
+import Skeleton, { SkeletonLinea } from '../components/Skeleton';
 import { formatoPct } from '../lib/textUtils';
+import ConfirmDialog from '../components/ConfirmDialog';
+import { AvisoEnLinea } from '../components/Aviso';
 
 // ─── Helper tiempo relativo ───────────────────────────────────────────────────
 function tiempoRelativo(timestamp) {
@@ -120,6 +125,114 @@ function coordenadaValida(v) {
 // Ambas pestañas comparten la misma caja (mismo ancho y relación de aspecto) y
 // la imagen se ajusta adentro con object-fit: contain, así cambiar de pestaña
 // no cambia el tamaño de la imagen ni mueve el layout.
+// Tipografia de la ficha, compartida entre la ficha real y su esqueleto.
+const FICHA_TITULO_STYLE = {
+  fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 20,
+  color: 'var(--text-primary)', letterSpacing: '-0.01em', lineHeight: 1.15,
+};
+const FICHA_SUBTITULO_STYLE = {
+  fontSize: 13, color: 'var(--text-muted)', fontWeight: 400, marginTop: 4, fontFamily: 'var(--font-ui)',
+};
+const FICHA_VEREDICTO_STYLE = {
+  fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 26, letterSpacing: '-0.01em', lineHeight: 1.1,
+};
+const FICHA_PCT_STYLE = {
+  fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800,
+  fontSize: 30, letterSpacing: '-0.02em', lineHeight: 1.05,
+};
+const FICHA_PCT_LABEL_STYLE = {
+  fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 12, color: 'var(--text-muted)', marginTop: 2,
+};
+const META_LABEL_STYLE = { fontSize: 12, color: 'var(--text-muted)', marginBottom: 3, fontFamily: 'var(--font-ui)', fontWeight: 500 };
+const META_VALOR_STYLE = {
+  fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 16, lineHeight: 1.25,
+  color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+};
+
+// Esqueleto de la pagina completa: misma rejilla 1.4fr / 1fr, imagen 4:3 y
+// flashcard derecha. Cada texto va dentro de un elemento con la tipografia del
+// real (mismo font-size / line-height / margenes), asi el alto es identico.
+function MedicionDetailSkeleton() {
+  const caja = { background: 'var(--bg-card)', border: '1px solid var(--border)' };
+  return (
+    <div
+      aria-busy="true"
+      style={{ padding: 'var(--space-5)', maxWidth: 1600, width: '100%', margin: '0 auto' }}
+    >
+      {/* Boton volver: icono 16 + texto sm, padding 6px 0, margen 20 */}
+      <div style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        fontSize: 'var(--text-sm)', fontFamily: 'var(--font-ui)', marginBottom: 20, padding: '6px 0',
+      }}>
+        <Skeleton width={16} height={16} radius="50%" />
+        <span><SkeletonLinea width={110} /></span>
+      </div>
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)',
+        gap: 20, alignItems: 'start',
+      }}>
+        <div style={{ ...caja, borderRadius: 12, overflow: 'hidden' }}>
+          <div style={{
+            display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg-inset)',
+          }}>
+            {[0, 1].map(i => (
+              <div key={i} style={{
+                flex: 1, padding: '12px 8px', textAlign: 'center',
+                fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)',
+                borderBottom: '2px solid transparent',
+              }}>
+                <SkeletonLinea width={i === 0 ? 60 : 90} />
+              </div>
+            ))}
+          </div>
+          <div style={{ padding: 20 }}>
+            <Skeleton
+              height="auto" radius={8}
+              style={{ aspectRatio: IMAGEN_BOX_STYLE.aspectRatio, border: IMAGEN_BOX_STYLE.border }}
+            />
+          </div>
+        </div>
+        <div style={{
+          ...caja, borderRadius: 14, padding: '18px 20px',
+          display: 'flex', flexDirection: 'column', gap: 16, boxShadow: 'var(--shadow-sm)',
+        }}>
+          <div>
+            <div style={FICHA_TITULO_STYLE}><SkeletonLinea width="60%" /></div>
+            <div style={FICHA_SUBTITULO_STYLE}><SkeletonLinea width="80%" /></div>
+          </div>
+          <div style={{
+            border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px',
+            display: 'flex', flexDirection: 'column', gap: 10,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Skeleton width={30} height={30} radius="50%" />
+                <span style={FICHA_VEREDICTO_STYLE}><SkeletonLinea width={110} /></span>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={FICHA_PCT_STYLE}><SkeletonLinea width={70} /></div>
+                <div style={FICHA_PCT_LABEL_STYLE}><SkeletonLinea width={60} /></div>
+              </div>
+            </div>
+            <Skeleton height={10} radius={5} />
+            <div style={{
+              display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
+              paddingTop: 12, marginTop: 2, borderTop: '1px solid var(--border)',
+            }}>
+              {[0, 1, 2, 3].map(i => (
+                <div key={i} style={{ background: 'var(--bg-inset)', borderRadius: 8, padding: '10px 12px', minWidth: 0 }}>
+                  <div style={META_LABEL_STYLE}><SkeletonLinea width="40%" /></div>
+                  <div style={META_VALOR_STYLE}><SkeletonLinea width="75%" /></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const IMAGEN_BOX_STYLE = {
   position: 'relative', width: '100%', aspectRatio: '4 / 3',
   borderRadius: 8, border: '1px solid var(--border)',
@@ -164,7 +277,7 @@ export default function MedicionDetailPage() {
   const { user } = useAuth();
   // `?punto=` lo ponen los enlaces de la galería para hallar fotos antiguas.
   const [searchParams] = useSearchParams();
-  const { medicion, loading, error } = useMedicion(idMedicion, searchParams.get('punto'));
+  const { medicion, loading, error, noEncontrada, refetch } = useMedicion(idMedicion, searchParams.get('punto'));
   // El "Punto" viejo (GET /puntos/{id}) fue absorbido por "Bloque" -- no hay
   // endpoint por-id, así que se trae la lista completa y se filtra
   // client-side por bloque_id (mismo patrón que el filtro de bloque en
@@ -203,7 +316,12 @@ export default function MedicionDetailPage() {
     setErrorEliminar('');
     try {
       await apiDelete(`/mediciones/${medicion.bloque_id}?id_medicion=${encodeURIComponent(idMedicion)}`);
-      navigate('/galeria');
+      // Return to the punto's gallery folder when both ids are known.
+      navigate(
+        medicion.empresa_id && medicion.bloque_id
+          ? `/galeria/zona/${medicion.empresa_id}/${medicion.bloque_id}`
+          : '/galeria'
+      );
     } catch (err) {
       setErrorEliminar(err.message || 'No se pudo eliminar la medición.');
       setEliminando(false);
@@ -220,7 +338,9 @@ export default function MedicionDetailPage() {
   // tres ahora comparten ese mismo camino -- "original" se descarga tal cual
   // (sin pasar por canvas, conserva el archivo original byte a byte).
   const [descargandoVista, setDescargandoVista] = useState(false);
+  const [errorDescarga, setErrorDescarga] = useState('');
   async function handleDescargarVistaActual() {
+    setErrorDescarga('');
     if (!medicion?.url_imagen) return;
 
     setDescargandoVista(true);
@@ -282,7 +402,7 @@ export default function MedicionDetailPage() {
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Error al generar descarga de vista', err);
-      alert('No se pudo generar la descarga de esta vista. Probá de nuevo en unos minutos.');
+      setErrorDescarga('No se pudo generar la descarga de esta vista. Prueba de nuevo en unos minutos.');
     } finally {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
       setDescargandoVista(false);
@@ -301,18 +421,32 @@ export default function MedicionDetailPage() {
   }
 
   // ─── Loading / Error ─────────────────────────────────────────────────────
-  if (loading) {
+  if (loading) return <MedicionDetailSkeleton />;
+
+  // Not found is a normal outcome (e.g. the measurement was deleted), not a
+  // load failure: no retry, just a way back. Real load errors keep ErrorEstado.
+  if (noEncontrada && !medicion) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', flexDirection: 'column', gap: 'var(--space-3)' }}>
-        <div style={{
-          width: 36, height: 36, border: '3px solid var(--border)',
-          borderTopColor: 'var(--accent-amber)', borderRadius: '50%',
-          animation: 'spin 0.8s linear infinite',
-        }} />
-        <span style={{ fontFamily: 'var(--font-data)', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-          Cargando medición…
-        </span>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <div style={{ padding: 'var(--space-6)' }}>
+        <div role="status" style={{
+          padding: '32px 24px', background: 'var(--bg-card)',
+          border: '1px solid var(--border)', borderRadius: 10, textAlign: 'center',
+          fontFamily: 'var(--font-ui)', display: 'flex', flexDirection: 'column',
+          alignItems: 'center', gap: 'var(--space-3)',
+        }}>
+          <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
+            No encontramos esta medición. Puede que se haya eliminado.
+          </p>
+          <button type="button" onClick={handleBack} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '9px 16px', borderRadius: 8, cursor: 'pointer',
+            background: 'var(--bg-inset)', border: '1px solid var(--border-strong)',
+            color: 'var(--text-primary)', fontFamily: 'var(--font-ui)',
+            fontWeight: 600, fontSize: 'var(--text-sm)',
+          }}>
+            <IconoVolver size={16} aria-hidden="true" /> Volver a la galería
+          </button>
+        </div>
       </div>
     );
   }
@@ -326,17 +460,13 @@ export default function MedicionDetailPage() {
           color: 'var(--text-muted)', fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)',
           marginBottom: 20, padding: 0,
         }}>
-          <ArrowLeft size={16} /> Volver a galería
+          <IconoVolver size={16} /> Volver a galería
         </button>
         <div style={{
           padding: '32px 24px', background: 'var(--bg-card)',
           border: '1px solid var(--border)', borderRadius: 10, textAlign: 'center',
         }}>
-          <AlertCircle size={40} strokeWidth={1.5} style={{ color: 'var(--text-faint)', marginBottom: 'var(--space-3)' }} />
-          <div style={{ fontFamily: 'var(--font-ui)', fontSize: 'var(--text-md)', color: 'var(--text-primary)', marginBottom: 6 }}>
-            Medición no disponible
-          </div>
-          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>{error}</div>
+          <ErrorEstado titulo="No se pudo cargar la medición." detalle={error} onRetry={refetch} />
         </div>
       </div>
     );
@@ -396,12 +526,12 @@ export default function MedicionDetailPage() {
         onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
         onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
       >
-        <ArrowLeft size={16} />
+        <IconoVolver size={16} />
         Volver a galería
       </button>
 
       {/* Layout de dos columnas principales */}
-      <div style={{
+      <div className="detail-grid" style={{
         display: 'grid',
         gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)',
         gap: 20,
@@ -429,7 +559,7 @@ export default function MedicionDetailPage() {
                     fontFamily: 'var(--font-ui)', fontWeight: activeTab === tab.key ? 600 : 400,
                     fontSize: 'var(--text-sm)',
                     color: activeTab === tab.key ? 'var(--text-primary)' : 'var(--text-muted)',
-                    transition: 'color 0.13s, background-color 0.13s, border-bottom-color 0.13s',
+                    transition: 'color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), border-bottom-color var(--dur-fast) var(--ease-out)',
                   }}
                 >
                   {tab.label}
@@ -492,16 +622,10 @@ export default function MedicionDetailPage() {
         }}>
           {/* 1. Cabecera: Título (Punto) + Subtítulo (Zona · Ciudad · Fecha) */}
           <div>
-            <div style={{
-              fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 20,
-              color: 'var(--text-primary)', letterSpacing: '-0.01em', lineHeight: 1.15,
-            }}>
+            <div style={FICHA_TITULO_STYLE}>
               {medicion.nombre || (punto.sede ?? 'Punto sin nombre')}
             </div>
-            <div style={{
-              fontSize: 13, color: 'var(--text-muted)', fontWeight: 400, marginTop: 4,
-              fontFamily: 'var(--font-ui)',
-            }}>
+            <div style={FICHA_SUBTITULO_STYLE}>
               {medicion.nombre ? `${punto.sede || 'Punto sin nombre'} · ` : ''}{zonaNombre} · {punto.ciudad ?? '—'} · {tiempoRelativo(medicion.timestamp)}
             </div>
           </div>
@@ -519,25 +643,19 @@ export default function MedicionDetailPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, color }}>
                 <NivelIcon nivel={nivel} size={30} />
-                <span style={{
-                  fontFamily: 'var(--font-ui)', fontWeight: 800,
-                  fontSize: 26, color, letterSpacing: '-0.01em', lineHeight: 1.1,
-                  animation: nivel === 3 ? 'blink 1.2s ease-in-out infinite' : 'none',
-                }}>
+                <span
+                  className={nivel === 3 ? 'severa-pulse' : undefined}
+                  style={{ ...FICHA_VEREDICTO_STYLE, color }}
+                >
                   {nivelLabel(nivel)}
                 </span>
+                <NivelInfo nivel={nivel} color={color} />
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{
-                  fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800,
-                  fontSize: 30, color, letterSpacing: '-0.02em', lineHeight: 1.05,
-                }}>
+                <div style={{ ...FICHA_PCT_STYLE, color }}>
                   {formatoPct(medicion.area_corroida_pct)}
                 </div>
-                <div style={{
-                  fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 12,
-                  color: 'var(--text-muted)', marginTop: 2,
-                }}>
+                <div style={FICHA_PCT_LABEL_STYLE}>
                   Área corroída
                 </div>
               </div>
@@ -573,10 +691,10 @@ export default function MedicionDetailPage() {
                   }}
                 >
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <Thermometer size={14} style={{ color: 'var(--accent-amber)' }} />
+                    <IconoTemperatura size={14} style={{ color: 'var(--accent-amber)' }} />
                     Información meteorológica
                   </span>
-                  {showClimaFlashcard ? <ChevronUp size={15} color="var(--text-muted)" /> : <ChevronDown size={15} color="var(--text-muted)" />}
+                  {showClimaFlashcard ? <IconoFlechaArriba size={15} color="var(--text-muted)" /> : <IconoFlechaAbajo size={15} color="var(--text-muted)" />}
                 </button>
 
                 {showClimaFlashcard && (
@@ -584,10 +702,10 @@ export default function MedicionDetailPage() {
                     display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8,
                     marginTop: 8,
                   }}>
-                    {clima.temperatura_c != null && <ClimaItem icon={<Thermometer size={13} />} label="Temperatura" value={`${clima.temperatura_c}°C`} />}
-                    {clima.humedad_pct != null && <ClimaItem icon={<Droplets size={13} />} label="Humedad" value={`${clima.humedad_pct}%`} />}
-                    {vientoKmh != null && <ClimaItem icon={<Wind size={13} />} label="Viento" value={`${vientoKmh} km/h`} />}
-                    {clima.precipitacion_mm != null && <ClimaItem icon={<Droplets size={13} />} label="Precipitación" value={`${clima.precipitacion_mm} mm`} />}
+                    {clima.temperatura_c != null && <ClimaItem icon={<IconoTemperatura size={13} />} label="Temperatura" value={`${clima.temperatura_c}°C`} />}
+                    {clima.humedad_pct != null && <ClimaItem icon={<IconoHumedad size={13} />} label="Humedad" value={`${clima.humedad_pct}%`} />}
+                    {vientoKmh != null && <ClimaItem icon={<IconoViento size={13} />} label="Viento" value={`${vientoKmh} km/h`} />}
+                    {clima.precipitacion_mm != null && <ClimaItem icon={<IconoHumedad size={13} />} label="Precipitación" value={`${clima.precipitacion_mm} mm`} />}
                   </div>
                 )}
               </div>
@@ -610,7 +728,7 @@ export default function MedicionDetailPage() {
                 fontWeight: 600, fontSize: 12, cursor: 'pointer',
               }}
             >
-              <MapPin size={14} /> Ver en mapa
+              <IconoUbicacion size={14} /> Ver en mapa
             </button>
 
             <button
@@ -627,10 +745,13 @@ export default function MedicionDetailPage() {
                 opacity: (!medicion.url_imagen || descargandoVista) ? 0.5 : 1,
               }}
             >
-              <Download size={14} />
+              <IconoDescargar size={14} />
               {descargandoVista ? 'Generando…' : `Descargar (${TABS.find(t => t.key === activeTab)?.label})`}
             </button>
           </div>
+          {errorDescarga && (
+            <AvisoEnLinea tone="error" style={{ marginTop: 10 }}>{errorDescarga}</AvisoEnLinea>
+          )}
         </div>
       </div>
 
@@ -658,17 +779,17 @@ export default function MedicionDetailPage() {
             fontWeight: 600,
             fontSize: 'var(--text-sm)',
             color: 'var(--text-primary)',
-            transition: 'background-color 0.15s ease',
+            transition: 'background-color var(--dur-fast) var(--ease-out)',
           }}
         >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <Settings size={15} /> Más opciones y detalles técnicos
+            <IconoAjustes size={15} /> Más opciones y detalles técnicos
           </span>
-          {showMasOpciones ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+          {showMasOpciones ? <IconoFlechaArriba size={18} /> : <IconoFlechaAbajo size={18} />}
         </button>
 
         {showMasOpciones && (
-          <div style={{
+          <div className="detail-grid" style={{
             padding: '20px',
             borderTop: '1px solid var(--border)',
             display: 'grid',
@@ -689,9 +810,9 @@ export default function MedicionDetailPage() {
               </div>
               {tieneCoordenadas && (
                 <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', fontFamily: 'var(--font-data)', display: 'flex', gap: 'var(--space-3)', flexShrink: 0 }}>
-                  <span style={{ color: 'var(--accent-amber)' }}>● Punto: {lat?.toFixed(5)}, {lng?.toFixed(5)}</span>
+                  <span style={{ color: 'var(--accent-amber)', display: 'inline-flex', alignItems: 'center', gap: 5 }}><span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: 'currentColor' }} />Punto: {lat?.toFixed(5)}, {lng?.toFixed(5)}</span>
                   {medicion.latitud_real && medicion.longitud_real && (
-                    <span style={{ color: '#38bdf8' }}>● Foto: {medicion.latitud_real.toFixed(5)}, {medicion.longitud_real.toFixed(5)}</span>
+                    <span style={{ color: '#38bdf8', display: 'inline-flex', alignItems: 'center', gap: 5 }}><span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: 'currentColor' }} />Foto: {medicion.latitud_real.toFixed(5)}, {medicion.longitud_real.toFixed(5)}</span>
                   )}
                 </div>
               )}
@@ -771,24 +892,15 @@ export default function MedicionDetailPage() {
                       onGuardado={invalidate}
                     />
                   )}
-                  <ActionButton icon={<Download size={15} />} onClick={handleDescargarVistaActual} disabled={!medicion.url_imagen || descargandoVista}>
-                    {descargandoVista ? 'Generando…' : `Descargar vista (${TABS.find(t => t.key === activeTab)?.label})`}
-                  </ActionButton>
-                  <ActionButton icon={<Share2 size={15} />} onClick={handleCompartir}>
+                  <ActionButton icon={<IconoCompartir size={15} />} onClick={handleCompartir}>
                     {shareMsg || 'Copiar enlace'}
-                  </ActionButton>
-                  <ActionButton
-                    icon={<MapPin size={15} />}
-                    onClick={() => navigate(`/dashboard?punto=${medicion.bloque_id}`)}
-                  >
-                    Ver punto en dashboard
                   </ActionButton>
 
                   {/* Eliminar: super_admin, admin y tecnico */}
                   {puedeEliminar && (
                     <>
                       <ActionButton
-                        icon={<Trash2 size={15} />}
+                        icon={<IconoEliminar size={15} />}
                         danger
                         onClick={() => setShowDeleteConfirm(true)}
                         disabled={eliminando}
@@ -797,41 +909,20 @@ export default function MedicionDetailPage() {
                       </ActionButton>
 
                       {showDeleteConfirm && (
-                        <div style={{
-                          padding: '12px 14px',
-                          background: 'rgba(220,38,38,0.08)',
-                          border: '1px solid rgba(220,38,38,0.3)',
-                          borderRadius: 8, fontSize: 'var(--text-xs)',
-                          color: 'var(--text-secondary)', lineHeight: 1.5,
-                        }}>
-                          Esta acción borra la medición y su foto de forma permanente. ¿Confirmás?
+                        <ConfirmDialog
+                          title="¿Eliminar esta medición?"
+                          message="Se borrarán la medición y su foto. Esta acción no se puede deshacer."
+                          confirmLabel="Eliminar"
+                          loadingLabel="Eliminando…"
+                          tone="danger"
+                          onConfirm={handleEliminar}
+                          onCancel={() => { setShowDeleteConfirm(false); setErrorEliminar(''); }}
+                          loading={eliminando}
+                        >
                           {errorEliminar && (
-                            <div style={{ color: 'var(--accent-red)', marginTop: 6 }}>{errorEliminar}</div>
+                            <div role="alert" style={{ color: 'var(--accent-red)', fontSize: 'var(--text-xs)', marginTop: 'var(--space-3)' }}>{errorEliminar}</div>
                           )}
-                          <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
-                            <button
-                              onClick={handleEliminar}
-                              disabled={eliminando}
-                              style={{
-                                background: 'var(--accent-red)', border: 'none', borderRadius: 5,
-                                padding: '6px 12px', cursor: eliminando ? 'not-allowed' : 'pointer',
-                                fontSize: 'var(--text-2xs)', color: 'white', fontWeight: 600, opacity: eliminando ? 0.6 : 1,
-                              }}
-                            >
-                              {eliminando ? 'Eliminando…' : 'Sí, eliminar'}
-                            </button>
-                            <button
-                              onClick={() => { setShowDeleteConfirm(false); setErrorEliminar(''); }}
-                              disabled={eliminando}
-                              style={{
-                                background: 'transparent', border: '1px solid var(--border)', borderRadius: 5,
-                                padding: '6px 12px', cursor: 'pointer', fontSize: 'var(--text-2xs)', color: 'var(--text-muted)',
-                              }}
-                            >
-                              Cancelar
-                            </button>
-                          </div>
-                        </div>
+                        </ConfirmDialog>
                       )}
                     </>
                   )}
@@ -844,7 +935,7 @@ export default function MedicionDetailPage() {
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
-        @media (max-width: 768px) {
+        @media (max-width: 900px) {
           .detail-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
@@ -879,11 +970,8 @@ function MetaLabel({ children }) {
 function MetaItem({ label, value }) {
   return (
     <div style={{ background: 'var(--bg-inset)', borderRadius: 8, padding: '10px 12px', minWidth: 0 }}>
-      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 3, fontFamily: 'var(--font-ui)', fontWeight: 500 }}>{label}</div>
-      <div style={{
-        fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 16, lineHeight: 1.25,
-        color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      }}>{value}</div>
+      <div style={META_LABEL_STYLE}>{label}</div>
+      <div style={META_VALOR_STYLE}>{value}</div>
     </div>
   );
 }
@@ -973,7 +1061,7 @@ function ActionButton({ icon, onClick, danger, disabled, children }) {
         fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)',
         color: danger ? 'var(--accent-red)' : disabled ? 'var(--text-faint)' : 'var(--text-secondary)',
         opacity: disabled ? 0.5 : 1,
-        transition: 'background 0.12s',
+        transition: 'background var(--dur-fast) var(--ease-out)',
         textAlign: 'left',
       }}
       onMouseEnter={e => { if (!disabled) e.currentTarget.style.background = danger ? 'rgba(220,38,38,0.07)' : 'var(--bg-inset)'; }}
@@ -988,7 +1076,7 @@ function ActionButton({ icon, onClick, danger, disabled, children }) {
 function ClimaItem({ icon, label, value }) {
   return (
     <div style={{ background: 'var(--bg-inset)', borderRadius: 6, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', color: 'var(--text-faint)', fontSize: 9, fontFamily: 'var(--font-data)', letterSpacing: '0.08em' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', color: 'var(--text-faint)', fontSize: 11, fontFamily: 'var(--font-data)', letterSpacing: '0.08em' }}>
         {icon}
         {label.toUpperCase()}
       </div>
@@ -1007,7 +1095,7 @@ function PlaceholderImagen({ mensaje }) {
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'center', gap: 'var(--space-2-5)',
     }}>
-      <AlertCircle size={32} strokeWidth={1.5} style={{ color: 'var(--text-faint)' }} />
+      <IconoError size={32} style={{ color: 'var(--text-faint)' }} />
       <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>{mensaje}</div>
     </div>
   );

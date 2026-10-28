@@ -1,16 +1,10 @@
+import { AvisoEnLinea } from '../components/Aviso';
 import React, { useState } from 'react';
 import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth, obtenerRutaInicial } from '../auth/AuthContext';
+import PasswordChecklist from '../components/PasswordChecklist';
+import { isPasswordValid } from '../lib/passwordPolicy';
 import pixelrustLogo from '../assets/pixelrust-logo.png';
-
-// Valida requisitos mínimos de contraseña según política de Cognito
-function validarContraseña(pw) {
-  if (pw.length < 8) return 'Mínimo 8 caracteres.';
-  if (!/[A-Z]/.test(pw)) return 'Debe incluir al menos una mayúscula.';
-  if (!/[0-9]/.test(pw)) return 'Debe incluir al menos un número.';
-  if (!/[^A-Za-z0-9]/.test(pw)) return 'Debe incluir al menos un símbolo.';
-  return null;
-}
 
 const inputStyle = {
   width: '100%',
@@ -21,7 +15,7 @@ const inputStyle = {
   color: 'var(--text-primary)',
   fontFamily: 'var(--font-ui)',
   fontSize: 14,
-  transition: 'border-color 0.15s',
+  transition: 'border-color var(--dur-fast) var(--ease-out)',
   boxSizing: 'border-box',
 };
 
@@ -68,7 +62,7 @@ export default function LoginPage() {
       const identifier = loginMode === 'username' && !email.includes('@')
         ? `${email.trim().toLowerCase()}@corria.app`
         : email.trim();
-      const result = await login(identifier, password);
+      const result = await login(identifier, password, loginMode);
       if (result?.needsNewPassword) {
         // Cognito requiere cambio de contraseña en el primer ingreso
         setStep('nueva-contrasena');
@@ -88,8 +82,7 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
 
-    const validacion = validarContraseña(nuevaPw);
-    if (validacion) { setError(validacion); return; }
+    if (!isPasswordValid(nuevaPw)) { setError('La contraseña no cumple todos los requisitos.'); return; }
     if (nuevaPw !== confirmarPw) { setError('Las contraseñas no coinciden.'); return; }
 
     setSubmitting(true);
@@ -180,7 +173,7 @@ export default function LoginPage() {
                     cursor: 'pointer', border: 'none',
                     background: loginMode === mode ? 'var(--accent-amber)' : 'var(--bg-inset)',
                     color: loginMode === mode ? 'white' : 'var(--text-muted)',
-                    transition: 'background 0.15s, color 0.15s',
+                    transition: 'background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out)',
                   }}
                 >
                   {lbl}
@@ -198,7 +191,7 @@ export default function LoginPage() {
                 type={loginMode === 'email' ? 'email' : 'text'}
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                placeholder={loginMode === 'email' ? 'usuario@ejemplo.com' : 'Nombre de usuario'}
+                placeholder={loginMode === 'email' ? 'nombre@example.com' : 'ej: colaborador01'}
                 required
                 disabled={submitting}
                 autoComplete="username"
@@ -268,11 +261,13 @@ export default function LoginPage() {
                   required
                   disabled={submitting}
                   autoComplete="new-password"
+                  aria-describedby="nueva-password-requisitos"
                   autoFocus
                   style={inputStyle}
                   onFocus={e => e.target.style.borderColor = 'var(--accent-amber)'}
                   onBlur={e => e.target.style.borderColor = 'var(--border)'}
                 />
+                <PasswordChecklist id="nueva-password-requisitos" password={nuevaPw} />
               </div>
 
               <div style={{ marginBottom: 'var(--space-5)' }}>
@@ -292,24 +287,9 @@ export default function LoginPage() {
                 />
               </div>
 
-              {/* Requisitos de contraseña */}
-              <div style={{
-                padding: '8px 12px',
-                background: 'var(--bg-inset)',
-                border: '1px solid var(--border)',
-                borderRadius: 7,
-                marginBottom: 18,
-                fontFamily: 'var(--font-data)',
-                fontSize: 'var(--text-2xs)',
-                color: 'var(--text-faint)',
-                lineHeight: 1.7,
-              }}>
-                Mínimo 8 caracteres · Una mayúscula · Un número · Un símbolo
-              </div>
-
               {error && <ErrorBanner message={error} />}
 
-              <SubmitButton submitting={submitting} label="Establecer contraseña" />
+              <SubmitButton submitting={submitting} disabled={!isPasswordValid(nuevaPw)} label="Establecer contraseña" />
             </form>
           </>
         )}
@@ -347,32 +327,23 @@ export default function LoginPage() {
 
 function ErrorBanner({ message }) {
   return (
-    <div style={{
-      padding: '10px 14px',
-      background: 'rgba(220,38,38,0.08)',
-      border: '1px solid rgba(220,38,38,0.3)',
-      borderLeft: '3px solid var(--accent-red)',
-      borderRadius: '0 6px 6px 0',
-      marginBottom: 18,
-      fontFamily: 'var(--font-ui)',
-      fontSize: 'var(--text-sm)',
-      color: 'var(--accent-red)',
-      lineHeight: 1.5,
-    }}>
+    <AvisoEnLinea tone="error" style={{ marginBottom: 18 }}>
       {message}
-    </div>
+    </AvisoEnLinea>
   );
 }
 
-function SubmitButton({ submitting, label }) {
+function SubmitButton({ submitting, label, disabled = false }) {
+  const bloqueado = submitting || disabled;
   return (
     <button
       type="submit"
-      disabled={submitting}
+      disabled={bloqueado}
       style={{
         width: '100%',
         padding: 'var(--space-3)',
         background: submitting ? 'var(--bg-inset)' : 'var(--accent-amber)',
+        opacity: disabled && !submitting ? 0.5 : 1,
         border: 'none',
         borderRadius: 8,
         color: submitting ? 'var(--text-muted)' : 'white',
@@ -380,8 +351,8 @@ function SubmitButton({ submitting, label }) {
         fontWeight: 600,
         fontSize: 14,
         letterSpacing: '0.03em',
-        cursor: submitting ? 'not-allowed' : 'pointer',
-        transition: 'background 0.15s, opacity 0.15s',
+        cursor: bloqueado ? 'not-allowed' : 'pointer',
+        transition: 'background var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
