@@ -1,6 +1,7 @@
+import ErrorEstado from '../components/ErrorEstado';
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, useParams, useSearchParams, Link } from 'react-router-dom';
-import { Upload, AlertCircle, Search, X, ImageOff } from 'lucide-react';
+import { IconoBuscar, IconoCerrar, IconoSinImagen, IconoSubir } from '../components/Iconos';
 import { useMediciones } from '../hooks/useMediciones';
 import { useMedicionesPunto } from '../hooks/useMedicionesPunto';
 import { useBloques } from '../hooks/useBloques';
@@ -15,11 +16,77 @@ import {
 import GaleriaBreadcrumb from '../components/GaleriaBreadcrumb';
 import GaleriaCarpetas from '../components/GaleriaCarpetas';
 import GaleriaFotos from '../components/GaleriaFotos';
+import Skeleton, { SkeletonLinea, SkeletonCaja } from '../components/Skeleton';
+import { CARD_TITULO_STYLE, CARD_SUBTITULO_STYLE, CARD_PILDORA_STYLE } from '../components/cardTextStyles';
+import { useConteoRecordado } from '../hooks/useConteoRecordado';
 
 // El resumen de carpetas y la búsqueda usan las 1000 mediciones más recientes
 // (máximo del backend, sin máscaras ni detecciones). Las fotos de un punto se
 // piden aparte a /mediciones/{id_punto} para no quedar truncadas.
 const LIMITE_MEDICIONES = 1000;
+
+// Rejilla de tarjetas fantasma con la misma geometria y tipografia que
+// CarpetaCard / MedicionCard: cada barra de texto va dentro de un elemento con
+// el estilo del texto real, asi el alto de linea es el mismo y nada se estira.
+// `conNivel`: las tarjetas de punto llevan fila de nivel (las de zona, no).
+function GaleriaSkeleton({ cantidad, fotos = false, conNivel = false }) {
+  const filaNivel = (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 6, marginTop: 4,
+      fontSize: 13, fontWeight: 600, flexWrap: 'wrap', lineHeight: fotos ? undefined : 1.25,
+    }}>
+      <Skeleton width={20} height={20} radius="50%" />
+      <span><SkeletonLinea width={70} /></span>
+    </div>
+  );
+  return (
+    <div
+      aria-busy="true"
+      style={{
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+        gap: 'var(--space-4)',
+      }}
+    >
+      {Array.from({ length: cantidad }, (_, i) => (
+        <div
+          key={i}
+          style={{
+            display: 'flex', flexDirection: 'column', gap: 10, padding: 14,
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            borderRadius: 14, overflow: 'hidden', boxShadow: 'var(--shadow-sm)',
+          }}
+        >
+          <div>
+            <div style={CARD_TITULO_STYLE}><SkeletonLinea width="65%" /></div>
+            <div style={CARD_SUBTITULO_STYLE}><SkeletonLinea width="40%" /></div>
+          </div>
+          <Skeleton height={fotos ? 164 : 140} radius={10} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 2 }}>
+            {fotos ? (
+              <div>
+                <div style={{
+                  fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 18,
+                  lineHeight: 1.05, letterSpacing: '-0.02em',
+                }}>
+                  <SkeletonLinea width={48} />
+                </div>
+                {filaNivel}
+              </div>
+            ) : (
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontFamily: 'var(--font-ui)', fontWeight: 600 }}>
+                  <SkeletonLinea width={60} />
+                </div>
+                {conNivel && filaNivel}
+              </div>
+            )}
+            <SkeletonCaja width={fotos ? 56 : 30} style={CARD_PILDORA_STYLE} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function EstadoVacio({ icono: Icono, titulo, texto, children }) {
   return (
@@ -33,7 +100,7 @@ function EstadoVacio({ icono: Icono, titulo, texto, children }) {
         background: 'var(--bg-inset)', border: '1px solid var(--border)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <Icono size={26} strokeWidth={1.5} aria-hidden="true" style={{ color: 'var(--text-faint)' }} />
+        <Icono size={26} aria-hidden="true" style={{ color: 'var(--text-faint)' }} />
       </div>
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 16, color: 'var(--text-primary)', marginBottom: 6 }}>
@@ -68,14 +135,16 @@ export default function GaleriaPage() {
   const { empresaId, bloqueId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const { mediciones, loading, error } = useMediciones(LIMITE_MEDICIONES, { resumen: true });
+  const { mediciones, loading, error, refetch } = useMediciones(LIMITE_MEDICIONES, { resumen: true });
   // Las fotos sin punto ("_sin") no tienen id que consultar: salen del resumen.
   const idPuntoApi = bloqueId && bloqueId !== SIN_ASIGNAR ? bloqueId : null;
-  const { mediciones: medicionesPunto, loading: cargandoPunto, error: errorPunto } =
+  const { mediciones: medicionesPunto, loading: cargandoPunto, error: errorPunto, refetch: refetchPunto } =
     useMedicionesPunto(idPuntoApi, { completo: true });
   const { bloques } = useBloques(true);
   const { user } = useAuth();
   const esSuperAdmin = user?.groups?.includes('super_admin');
+  // /upload es solo para super_admin, admin y tecnico (RoleRoute): el cliente no ve el acceso.
+  const puedeSubir = ['super_admin', 'admin', 'tecnico'].some(r => user?.groups?.includes(r));
   const { empresas } = useEmpresas(esSuperAdmin);
   const { perfil } = useUsuarioPerfil();
 
@@ -95,11 +164,11 @@ export default function GaleriaPage() {
   // La medición solo trae empresa_id: super_admin resuelve contra la lista de
   // empresas; el resto solo ve su propia empresa (la del perfil).
   const nombreEmpresa = (id) => {
-    if (id === SIN_ASIGNAR) return 'Sin afiliación';
+    if (id === SIN_ASIGNAR) return 'Sin zona';
     const nombre = esSuperAdmin
       ? empresas.find(e => e.id_empresa === id)?.nombre
       : perfil?.empresa_nombre;
-    return nombre ?? 'Afiliación';
+    return nombre ?? 'Zona';
   };
   // Logo de la empresa (URL prefirmada de corta vigencia): super_admin lo toma de
   // la lista de empresas; el resto, de su propia afiliación en el perfil.
@@ -151,10 +220,10 @@ export default function GaleriaPage() {
     titulo = 'Resultados de la búsqueda';
     subtitulo = `${resultados.length} ${resultados.length === 1 ? 'foto' : 'fotos'}`;
   } else if (nivelVista === 'empresas') {
-    subtitulo = `${carpetasEmpresa.length} afiliaciones`;
+    subtitulo = `${carpetasEmpresa.length} ${carpetasEmpresa.length === 1 ? 'zona' : 'zonas'}`;
   } else if (nivelVista === 'puntos') {
     if (variasEmpresas) titulo = nombreEmpresa(empresaActual);
-    subtitulo = `${carpetasPunto.length} ${carpetasPunto.length === 1 ? 'punto' : 'puntos'} · ${deEmpresa.length} fotos`;
+    subtitulo = `${carpetasPunto.length} ${carpetasPunto.length === 1 ? 'punto' : 'puntos'} · ${deEmpresa.length} ${deEmpresa.length === 1 ? 'foto' : 'fotos'}`;
   } else {
     titulo = tituloPunto;
     subtitulo = ciudadDe(bloqueId) ?? '';
@@ -193,27 +262,41 @@ export default function GaleriaPage() {
   const fallo = enPunto ? errorPunto : error;
   const sinDatos = enPunto ? medicionesPunto.length === 0 : mediciones.length === 0;
 
+  // Cuantas tarjetas fantasma: lo que tenia esta misma vista la ultima vez.
+  const itemsConteo = nivelVista === 'busqueda' ? resultados
+    : nivelVista === 'fotos' ? fotosDelPunto
+    : nivelVista === 'empresas' ? itemsEmpresa : itemsPunto;
+  const claveConteo = consulta ? 'galeria:busqueda'
+    : bloqueId ? `galeria:fotos:${bloqueId}`
+    : `galeria:${empresaId ?? 'raiz'}`;
+  const cantidadSkeleton = useConteoRecordado(claveConteo, itemsConteo, cargando);
+
   let contenido;
   if (cargando) {
-    contenido = (
-      <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)', margin: '2px 0 0' }}>
-        Cargando…
-      </p>
-    );
+    contenido = <GaleriaSkeleton
+      cantidad={cantidadSkeleton}
+      fotos={!!bloqueId && !consulta}
+      conNivel={!!empresaId || !esSuperAdmin}
+    />;
   } else if (fallo && sinDatos) {
-    contenido = <EstadoVacio icono={AlertCircle} titulo="No se pudo cargar la galería" texto={fallo} />;
+    contenido = <ErrorEstado titulo="No se pudieron cargar las mediciones." detalle={fallo} onRetry={enPunto ? refetchPunto : refetch} />;
   } else if (!enPunto && mediciones.length === 0) {
     contenido = (
-      <EstadoVacio icono={ImageOff} titulo="Sin mediciones todavía" texto="Sube tu primera imagen para comenzar el monitoreo de corrosión.">
-        <button onClick={() => navigate('/upload')} style={botonAmbarStyle}>
-          <Upload size={15} aria-hidden="true" />
-          Subir primera medición
-        </button>
+      <EstadoVacio
+        icono={IconoSinImagen} titulo="Sin mediciones todavía"
+        texto={puedeSubir ? 'Sube tu primera imagen para comenzar el monitoreo de corrosión.' : 'Aún no hay mediciones registradas en tu afiliación.'}
+      >
+        {puedeSubir && (
+          <button onClick={() => navigate('/upload')} style={botonAmbarStyle}>
+            <IconoSubir size={15} aria-hidden="true" />
+            Subir primera medición
+          </button>
+        )}
       </EstadoVacio>
     );
   } else if (nivelVista === 'busqueda') {
     contenido = resultados.length === 0 ? (
-      <EstadoVacio icono={Search} titulo="Sin resultados" texto="Ninguna foto coincide con la búsqueda por nombre o notas." />
+      <EstadoVacio icono={IconoBuscar} titulo="Sin resultados" texto="Ninguna foto coincide con la búsqueda por nombre o notas." />
     ) : (
       <GaleriaFotos
         mediciones={resultados}
@@ -227,13 +310,13 @@ export default function GaleriaPage() {
     contenido = <GaleriaCarpetas items={itemsEmpresa} />;
   } else if (nivelVista === 'puntos') {
     contenido = itemsPunto.length === 0 ? (
-      <EstadoVacio icono={ImageOff} titulo="Esta carpeta no tiene fotos" texto="No hay mediciones en esta afiliación.">
+      <EstadoVacio icono={IconoSinImagen} titulo="Esta carpeta no tiene fotos" texto="No hay mediciones en esta zona.">
         <Link to="/galeria" style={botonAmbarStyle}>Volver a la galería</Link>
       </EstadoVacio>
     ) : <GaleriaCarpetas items={itemsPunto} />;
   } else {
     contenido = fotosDelPunto.length === 0 ? (
-      <EstadoVacio icono={ImageOff} titulo="Este punto no tiene fotos" texto="La carpeta no existe o no tiene mediciones cargadas.">
+      <EstadoVacio icono={IconoSinImagen} titulo="Este punto no tiene fotos" texto="La carpeta no existe o no tiene mediciones cargadas.">
         <Link to={variasEmpresas ? rutaEmpresa : '/galeria'} style={botonAmbarStyle}>Volver</Link>
       </EstadoVacio>
     ) : (
@@ -275,7 +358,7 @@ export default function GaleriaPage() {
         flexWrap: 'wrap', gap: 8, marginBottom: 10,
       }}>
         <div style={{ position: 'relative', flex: '1 1 220px', maxWidth: 320 }}>
-          <Search
+          <IconoBuscar
             size={13}
             aria-hidden="true"
             style={{
@@ -312,7 +395,7 @@ export default function GaleriaPage() {
                 display: 'flex', color: 'var(--text-faint)',
               }}
             >
-              <X size={12} />
+              <IconoCerrar size={12} />
             </button>
           )}
         </div>
@@ -321,16 +404,16 @@ export default function GaleriaPage() {
 
       {contenido}
 
-      {!seleccionando && (
+      {puedeSubir && !seleccionando && (
         <button
           type="button"
           onClick={() => navigate('/upload')}
           className="galeria-fab"
-          aria-label="Subir medición"
-          title="Subir medición"
+          aria-label="Nueva medición"
+          title="Nueva medición"
         >
-          <Upload size={16} aria-hidden="true" />
-          <span className="galeria-fab-label">Subir medición</span>
+          <IconoSubir size={16} aria-hidden="true" />
+          <span className="galeria-fab-label">Nueva medición</span>
         </button>
       )}
     </div>

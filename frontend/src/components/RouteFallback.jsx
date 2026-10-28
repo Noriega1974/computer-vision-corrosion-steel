@@ -1,48 +1,47 @@
 import React from 'react';
+import Skeleton, { SkeletonLinea } from './Skeleton';
 
 /**
  * Fallback de Suspense mientras se descarga el chunk de una ruta.
  *
- * Ocupa el alto disponible y no el de la ventana: se monta dentro del layout,
- * con el sidebar ya presente, asi que centrarlo contra 100vh lo empujaria
- * fuera de cuadro.
+ * Es un esqueleto generico de pagina (barra de titulo + tarjetas) y no un
+ * spinner: se monta dentro del layout, con el sidebar ya presente, asi que
+ * ocupa el ancho disponible sin depender del alto de la ventana.
  */
 export default function RouteFallback() {
   return (
     <div
       role="status"
-      aria-live="polite"
+      aria-busy="true"
+      aria-label="Cargando página"
       style={{
         flex: 1,
         minHeight: 240,
+        padding: 'var(--space-5)',
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
         flexDirection: 'column',
-        gap: 'var(--space-3-5)',
+        gap: 'var(--space-4)',
       }}
     >
+      <div style={{ fontSize: 'var(--text-lg)', lineHeight: 1.2 }}><SkeletonLinea width={220} /></div>
       <div
-        aria-hidden="true"
         style={{
-          width: 32,
-          height: 32,
-          border: '3px solid var(--border)',
-          borderTopColor: 'var(--accent-blue)',
-          borderRadius: '50%',
-          animation: 'spin 0.8s linear infinite',
-        }}
-      />
-      <span
-        style={{
-          fontFamily: 'var(--font-data)',
-          fontSize: 'var(--text-xs)',
-          color: 'var(--text-muted)',
-          letterSpacing: '0.08em',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+          gap: 'var(--space-4)',
         }}
       >
-        Cargando…
-      </span>
+        {[0, 1, 2].map(i => (
+          <div key={i} className="card" style={{ padding: '15px 17px', borderRadius: 12 }}>
+            <div style={{ fontSize: 'var(--text-xs)', lineHeight: 1.35 }}><SkeletonLinea width="50%" /></div>
+            <div style={{ fontSize: 'var(--text-2xl)', lineHeight: 1, marginTop: 14 }}><SkeletonLinea width="30%" /></div>
+          </div>
+        ))}
+      </div>
+      <div className="card" style={{ padding: 16, borderRadius: 12 }}>
+        <div style={{ fontSize: 'var(--text-sm)' }}><SkeletonLinea width={180} /></div>
+        <Skeleton height={190} radius={8} style={{ marginTop: 14 }} />
+      </div>
     </div>
   );
 }

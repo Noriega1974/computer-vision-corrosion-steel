@@ -7,10 +7,10 @@
 //   3: Severa          ≥25 %
 
 export const NIVELES = [
-  { status: 'OK',       label: 'Sin corrosión', short: 'Sin corrosión', range: 'Menor a 0,05%' },
-  { status: 'EARLY',    label: 'Leve',          short: 'Leve',          range: '0,05% a 10%' },
-  { status: 'MODERATE', label: 'Moderada',      short: 'Moderada',      range: '10% a 25%' },
-  { status: 'CRITICAL', label: 'Severa',        short: 'Severa',        range: '25% o más' },
+  { status: 'OK',       label: 'Sin corrosión', range: 'Menor a 0,05%' },
+  { status: 'EARLY',    label: 'Leve',          range: '0,05% a 10%' },
+  { status: 'MODERATE', label: 'Moderada',      range: '10% a 25%' },
+  { status: 'CRITICAL', label: 'Severa',        range: '25% o más' },
 ];
 
 const byStatus = (status) => NIVELES.find(n => n.status === status);
@@ -41,10 +41,6 @@ export function getStatusLabel(status) {
   return byStatus(status)?.label ?? status;
 }
 
-export function getStatusShortLabel(status) {
-  return byStatus(status)?.short ?? status;
-}
-
 // Atajo: nivel (0-3) directo a color
 export function nivelColor(nivel) {
   return getStatusColor(nivelToStatus(nivel));
@@ -53,15 +49,6 @@ export function nivelColor(nivel) {
 // Texto único para chips, filtros, mapa, KPI y gráficas: "Severa ≥25 %".
 export function nivelLabel(nivel) {
   return getStatusLabel(nivelToStatus(nivel));
-}
-
-// Rango de área corroída del nivel: "≥25 %".
-export function nivelRange(nivel) {
-  return NIVELES[nivel]?.range ?? '';
-}
-
-export function nivelShortLabel(nivel) {
-  return getStatusShortLabel(nivelToStatus(nivel));
 }
 
 export function nivelBg(nivel) {

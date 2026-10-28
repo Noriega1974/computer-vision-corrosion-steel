@@ -9,16 +9,44 @@ import {
 
 const AuthContext = createContext(null);
 
-// Mensajes de error legibles para los códigos de Cognito
-function parseAuthError(err) {
+// Readable Spanish messages for Cognito/Amplify error names. The raw English
+// `err.message` is never shown: unknown errors get a generic Spanish message.
+//   modo:     'email' | 'username' -- the login mode, so the text says "correo"
+//             or "usuario" instead of always "email".
+//   contexto: 'login' (default) | 'nueva' (new-password challenge) |
+//             'cambio' (change password while signed in)
+export function parseAuthError(err, { modo = 'email', contexto = 'login' } = {}) {
   const code = err?.name || err?.code || '';
-  if (code === 'NotAuthorizedException') return 'Credenciales inválidas. Verifica tu email y contraseña.';
-  if (code === 'UserNotFoundException') return 'Credenciales inválidas. Verifica tu email y contraseña.';
-  if (code === 'UserNotConfirmedException') return 'Cuenta pendiente de confirmación. Contacta al administrador.';
-  if (code === 'PasswordResetRequiredException') return 'Se requiere restablecer la contraseña. Contacta al administrador.';
-  if (code === 'UserDisabledException') return 'Cuenta deshabilitada. Contacta al administrador.';
-  if (code === 'TooManyRequestsException') return 'Demasiados intentos. Intenta de nuevo en unos minutos.';
-  return err?.message || 'Error de autenticación. Intenta de nuevo.';
+  const identificador = modo === 'username' ? 'usuario' : 'correo';
+  switch (code) {
+    case 'NotAuthorizedException':
+      if (contexto === 'cambio') return 'La contraseña actual no es correcta.';
+      if (contexto === 'nueva') return 'La sesión venció. Vuelve a ingresar con tu contraseña temporal.';
+      return `Credenciales inválidas. Verifica tu ${identificador} y contraseña.`;
+    case 'UserNotFoundException':
+      return `Credenciales inválidas. Verifica tu ${identificador} y contraseña.`;
+    case 'UserNotConfirmedException':
+      return 'Cuenta pendiente de confirmación. Contacta al administrador.';
+    case 'PasswordResetRequiredException':
+      return 'Se requiere restablecer la contraseña. Contacta al administrador.';
+    case 'UserDisabledException':
+      return 'Cuenta desactivada. Contacta al administrador.';
+    case 'TooManyRequestsException':
+    case 'LimitExceededException':
+    case 'TooManyFailedAttemptsException':
+      return 'Demasiados intentos. Intenta de nuevo en unos minutos.';
+    case 'InvalidParameterException':
+      if (contexto === 'login') return `Credenciales inválidas. Verifica tu ${identificador} y contraseña.`;
+      // falls through
+    case 'InvalidPasswordException':
+      return 'La contraseña no cumple los requisitos: mínimo 8 caracteres, una mayúscula, una minúscula y un número.';
+    case 'NetworkError':
+      return 'No hay conexión con el servidor. Revisa tu internet e intenta de nuevo.';
+    case 'PasoAdicionalRequerido':
+      return 'Se requiere un paso adicional. Contacta al administrador.';
+    default:
+      return 'No se pudo completar la acción. Intenta de nuevo.';
+  }
 }
 
 // Extrae sub, email, nombre y grupos del idToken de Cognito
@@ -79,7 +107,8 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener('auth:unauthorized', handler);
   }, []);
 
-  const login = useCallback(async (email, password) => {
+  // `modo` ('email' | 'username') only shapes the error wording.
+  const login = useCallback(async (email, password, modo = 'email') => {
     try {
       const result = await signIn({ username: email, password });
 
@@ -90,7 +119,7 @@ export function AuthProvider({ children }) {
 
       // Otros challenges no soportados (MFA, etc.)
       if (result.nextStep?.signInStep !== 'DONE' && result.nextStep?.signInStep !== undefined) {
-        throw new Error('Se requiere un paso adicional. Contacta al administrador.');
+        throw Object.assign(new Error('additional step required'), { name: 'PasoAdicionalRequerido' });
       }
 
       const session = await fetchAuthSession();
@@ -98,7 +127,7 @@ export function AuthProvider({ children }) {
       setUser(userData);
       return userData;
     } catch (err) {
-      throw new Error(parseAuthError(err));
+      throw new Error(parseAuthError(err, { modo }));
     }
   }, []);
 
@@ -111,7 +140,7 @@ export function AuthProvider({ children }) {
       setUser(userData);
       return userData;
     } catch (err) {
-      throw new Error(parseAuthError(err));
+      throw new Error(parseAuthError(err, { contexto: 'nueva' }));
     }
   }, []);
 

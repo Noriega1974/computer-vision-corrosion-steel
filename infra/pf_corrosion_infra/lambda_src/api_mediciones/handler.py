@@ -198,35 +198,56 @@ def _sin_campos_pesados(items: list) -> list:
     return items
 
 
-def _borrar_medicion(item: dict) -> None:
-    """Borra el ítem de DynamoDB y sus objetos en S3 (los fallos de S3 solo se
-    registran: el ítem ya no existe y un objeto huérfano no rompe nada)."""
+ADVERTENCIA_S3 = "La medición se eliminó, pero una de sus imágenes no se pudo borrar del almacenamiento."
+
+
+def _borrar_objeto_s3(key: str, contexto: str) -> bool:
+    """Borra un objeto de S3 con un reintento. Si sigue fallando deja una línea
+    ERROR greppable (`ORPHAN_S3 key=...`) en CloudWatch y devuelve False; nunca
+    lanza: el ítem de DynamoDB ya manda y un objeto huérfano no rompe nada."""
+    error = None
+    for _ in range(2):
+        try:
+            s3.delete_object(Bucket=BUCKET_NAME, Key=key)
+            return True
+        except Exception as e:
+            error = e
+    logger.error("ORPHAN_S3 key=%s contexto=%s error=%s", key, contexto, error)
+    return False
+
+
+def _borrar_medicion(item: dict) -> list:
+    """Borra el ítem de DynamoDB y sus objetos en S3. Devuelve las claves S3
+    que no se pudieron borrar (tras un reintento): el ítem ya no existe, así
+    que no se falla, pero quedan registradas como ORPHAN_S3."""
     tabla.delete_item(Key={"id_punto": item["id_punto"], "sk": item["sk"]})
+    huerfanas = []
     for campo in CAMPOS_S3:
         key = item.get(campo)
-        if key:
-            try:
-                s3.delete_object(Bucket=BUCKET_NAME, Key=key)
-            except Exception:
-                logger.warning("No se pudo borrar %s de S3", key)
+        if key and not _borrar_objeto_s3(key, "borrar_medicion"):
+            huerfanas.append(key)
+    return huerfanas
 
 
 def _eliminar_medicion(event: dict, id_punto: str) -> dict:
     creador = _usuario_actual(event)
     if not _puede_gestionar(creador):
-        return _respuesta(403, {"error": "No tienes permiso para eliminar mediciones"})
+        return _respuesta(403, {"error": "No tienes permiso para eliminar mediciones. Pide ayuda a un administrador"})
 
     qp = event.get("queryStringParameters") or {}
     id_medicion = qp.get("id_medicion")
     if not id_medicion:
-        return _respuesta(400, {"error": "Falta id_medicion en la query string"})
+        return _respuesta(400, {"error": "No se indicó qué medición usar. Recarga la página e inténtalo de nuevo"})
 
     item = next((i for i in _mediciones_de_punto(id_punto) if i.get("id_medicion") == id_medicion), None)
     if not item or not _item_permitido(creador, item):
-        return _respuesta(404, {"error": "Medición no encontrada"})
+        return _respuesta(404, {"error": "No se encontró la medición. Actualiza la lista e inténtalo de nuevo"})
 
-    _borrar_medicion(item)
-    return _respuesta(200, {"ok": True, "id_medicion": id_medicion})
+    huerfanas = _borrar_medicion(item)
+    cuerpo = {"ok": True, "id_medicion": id_medicion}
+    if huerfanas:
+        cuerpo["advertencias"] = [{"id_medicion": id_medicion, "motivo": ADVERTENCIA_S3}]
+    return _respuesta(200, cuerpo)
 
 
 # ── Acciones en lote ─────────────────────────────────────────────────────────
@@ -237,19 +258,19 @@ def _leer_lote(event: dict) -> tuple[list, dict]:
     try:
         body = json.loads(event.get("body") or "{}")
     except (TypeError, ValueError):
-        raise ValueError("El body no es JSON válido")
+        raise ValueError("No se pudo leer la solicitud. Recarga la página e inténtalo de nuevo")
     items = body.get("items") if isinstance(body, dict) else None
     if not isinstance(items, list) or not items:
-        raise ValueError("El body debe incluir items: [{id_punto, id_medicion}]")
+        raise ValueError("Selecciona al menos una medición e inténtalo de nuevo")
     if len(items) > LOTE_MAX:
-        raise ValueError(f"Máximo {LOTE_MAX} mediciones por solicitud")
+        raise ValueError(f"Puedes seleccionar máximo {LOTE_MAX} mediciones a la vez. Reduce la selección e inténtalo de nuevo")
     vistos, unicos = set(), []
     for it in items:
         if not isinstance(it, dict):
-            raise ValueError("Cada item debe ser {id_punto, id_medicion}")
+            raise ValueError("La selección de mediciones no es válida. Recarga la página e inténtalo de nuevo")
         par = (it.get("id_punto"), it.get("id_medicion"))
         if not all(isinstance(v, str) and v.strip() for v in par):
-            raise ValueError("Cada item debe incluir id_punto e id_medicion (texto)")
+            raise ValueError("La selección de mediciones no es válida. Recarga la página e inténtalo de nuevo")
         if par not in vistos:
             vistos.add(par)
             unicos.append({"id_punto": par[0], "id_medicion": par[1]})
@@ -269,29 +290,34 @@ def _resolver_lote(creador: dict, pedidos: list) -> tuple[list, list]:
             encontrados.append(item)
         else:
             # Mismo mensaje para "no existe" y "es de otra empresa": no revela nada.
-            errores.append({"id_medicion": p["id_medicion"], "motivo": "Medición no encontrada"})
+            errores.append({"id_medicion": p["id_medicion"], "motivo": "No se encontró la medición. Actualiza la lista e inténtalo de nuevo"})
     return encontrados, errores
 
 
 def _lote_eliminar(event: dict) -> dict:
     creador = _usuario_actual(event)
     if not _puede_gestionar(creador):
-        return _respuesta(403, {"error": "No tienes permiso para eliminar mediciones"})
+        return _respuesta(403, {"error": "No tienes permiso para eliminar mediciones. Pide ayuda a un administrador"})
     try:
         pedidos, _ = _leer_lote(event)
     except ValueError as e:
         return _respuesta(400, {"error": str(e)})
 
     encontrados, errores = _resolver_lote(creador, pedidos)
-    ok = []
+    ok, advertencias = [], []
     for item in encontrados:
         try:
-            _borrar_medicion(item)
+            huerfanas = _borrar_medicion(item)
             ok.append(item["id_medicion"])
+            if huerfanas:
+                advertencias.append({"id_medicion": item["id_medicion"], "motivo": ADVERTENCIA_S3})
         except Exception as e:
             logger.exception("No se pudo eliminar %s: %s", item.get("id_medicion"), e)
-            errores.append({"id_medicion": item["id_medicion"], "motivo": "No se pudo eliminar"})
-    return _respuesta(200, {"ok": ok, "error": errores})
+            errores.append({"id_medicion": item["id_medicion"], "motivo": "No se pudo eliminar. Inténtalo de nuevo"})
+    cuerpo = {"ok": ok, "error": errores}
+    if advertencias:
+        cuerpo["advertencias"] = advertencias
+    return _respuesta(200, cuerpo)
 
 
 def _copiar_resultado(origen: str, destino: str, id_punto: str, claves_nuevas: dict) -> None:
@@ -359,40 +385,34 @@ def _mover_medicion(item: dict, bloque: dict) -> None:
         ])
     except Exception:
         for key in copiadas:
-            try:
-                s3.delete_object(Bucket=BUCKET_NAME, Key=key)
-            except Exception:
-                logger.warning("No se pudo quitar la copia %s tras un movimiento fallido", key)
+            _borrar_objeto_s3(key, "mover_rollback_copia")
         raise
 
     for key in viejas.values():
-        try:
-            s3.delete_object(Bucket=BUCKET_NAME, Key=key)
-        except Exception:
-            logger.warning("No se pudo borrar %s de S3 tras mover", key)
+        _borrar_objeto_s3(key, "mover_borrar_original")
 
 
 def _lote_mover(event: dict) -> dict:
     creador = _usuario_actual(event)
     if not _puede_gestionar(creador):
-        return _respuesta(403, {"error": "No tienes permiso para mover mediciones"})
+        return _respuesta(403, {"error": "No tienes permiso para mover mediciones. Pide ayuda a un administrador"})
     try:
         pedidos, body = _leer_lote(event)
         destino = body.get("destino_bloque_id")
         if not isinstance(destino, str) or not destino.strip():
-            raise ValueError("Falta destino_bloque_id")
+            raise ValueError("Elige el punto de destino")
     except ValueError as e:
         return _respuesta(400, {"error": str(e)})
 
     bloque = tabla_bloques.get_item(Key={"id_bloque": destino}).get("Item")
     if not bloque:
-        return _respuesta(404, {"error": "El punto destino no existe"})
+        return _respuesta(404, {"error": "No se encontró el punto de destino. Actualiza la lista e inténtalo de nuevo"})
     if creador.get("rol") != "super_admin" and (
         not creador.get("empresa_id") or bloque.get("empresa_id") != creador.get("empresa_id")
     ):
-        return _respuesta(403, {"error": "El punto destino pertenece a otra empresa"})
+        return _respuesta(403, {"error": "El punto de destino pertenece a otra zona. Elige un punto de tu zona"})
     if bloque.get("activo") is False:
-        return _respuesta(400, {"error": "El punto destino está inactivo"})
+        return _respuesta(400, {"error": "El punto de destino está inactivo. Actívalo o elige otro punto"})
 
     encontrados, errores = _resolver_lote(creador, pedidos)
     ok = []
@@ -405,7 +425,7 @@ def _lote_mover(event: dict) -> dict:
             ok.append(item["id_medicion"])
         except Exception as e:
             logger.exception("No se pudo mover %s: %s", item.get("id_medicion"), e)
-            errores.append({"id_medicion": item["id_medicion"], "motivo": "No se pudo mover"})
+            errores.append({"id_medicion": item["id_medicion"], "motivo": "No se pudo mover. Inténtalo de nuevo"})
     return _respuesta(200, {"ok": ok, "error": errores})
 
 
@@ -422,24 +442,24 @@ def _renombrar_medicion(event: dict, id_punto: str) -> dict:
     análisis y no se reescribe (la web lee `nombre` del ítem)."""
     creador = _usuario_actual(event)
     if not creador or creador.get("rol") not in ("admin", "super_admin"):
-        return _respuesta(403, {"error": "Solo administradores pueden renombrar mediciones"})
+        return _respuesta(403, {"error": "Solo los administradores pueden renombrar mediciones. Pide ayuda a un administrador"})
 
     qp = event.get("queryStringParameters") or {}
     id_medicion = qp.get("id_medicion")
     if not id_medicion:
-        return _respuesta(400, {"error": "Falta id_medicion en la query string"})
+        return _respuesta(400, {"error": "No se indicó qué medición usar. Recarga la página e inténtalo de nuevo"})
 
     try:
         body = json.loads(event.get("body") or "{}")
     except (TypeError, ValueError):
         body = None
     if not isinstance(body, dict) or not isinstance(body.get("nombre"), str):
-        return _respuesta(400, {"error": "El body debe ser {\"nombre\": \"...\"}"})
+        return _respuesta(400, {"error": "No se pudo leer el nombre nuevo. Escríbelo de nuevo e inténtalo otra vez"})
     nombre = _nombre_foto(body["nombre"])
 
     item = next((i for i in _mediciones_de_punto(id_punto) if i.get("id_medicion") == id_medicion), None)
     if not item or not _item_permitido(creador, item):
-        return _respuesta(404, {"error": "Medición no encontrada"})
+        return _respuesta(404, {"error": "No se encontró la medición. Actualiza la lista e inténtalo de nuevo"})
 
     # "name" es palabra reservada de DynamoDB: va por alias.
     if nombre:
@@ -545,8 +565,8 @@ def lambda_handler(event: dict, context) -> dict:
                 "mediciones": items,
             })
 
-        return _respuesta(400, {"error": "Ruta no reconocida"})
+        return _respuesta(400, {"error": "Esta acción no está disponible. Recarga la página e inténtalo de nuevo"})
 
     except Exception as e:
         logger.exception("Error en api_mediciones: %s", e)
-        return _respuesta(500, {"error": str(e)})
+        return _respuesta(500, {"error": "Ocurrió un error inesperado. Inténtalo de nuevo; si persiste, contacta a un administrador"})

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { IconoVolver } from '../components/Iconos';
 
 /**
  * Aviso de datos.
@@ -87,7 +87,7 @@ export default function PrivacidadPage() {
             cursor: 'pointer',
           }}
         >
-          <ArrowLeft size={14} /> Volver atrás
+          <IconoVolver size={14} /> Volver atrás
         </button>
 
         <h2
@@ -249,7 +249,7 @@ export default function PrivacidadPage() {
             cursor: 'pointer',
           }}
         >
-          <ArrowLeft size={14} /> Volver atrás
+          <IconoVolver size={14} /> Volver atrás
         </button>
       </div>
     </div>

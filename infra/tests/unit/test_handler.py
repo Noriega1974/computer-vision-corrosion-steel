@@ -112,14 +112,16 @@ def test_yolo_umbral_de_confianza_desde_el_entorno(h, monkeypatch, tmp_path):
     assert _ok(h.lambda_handler(_evento(_foto()), None))["detecciones"] == []
 
 
-def test_onnx_con_otro_tamano_de_entrada_falla_claro(h, monkeypatch, tmp_path):
+def test_onnx_con_otro_tamano_de_entrada_falla_claro(h, monkeypatch, tmp_path, caplog):
     origen = modelo_falso_onnx.construir(tmp_path / "chico.onnx", size=640)
     h.s3.archivos_descargables[("bucket-modelos", "unet/chico.onnx")] = origen
     monkeypatch.setenv("MODEL_TYPE", "unet")
     monkeypatch.setenv("MODEL_BUCKET", "bucket-modelos")
     monkeypatch.setenv("MODEL_KEY", "unet/chico.onnx")
     resp = h.lambda_handler(_evento(_foto()), None)
-    assert resp["statusCode"] == 500 and "1x3x1024x1024" in json.loads(resp["body"])["error"]
+    # El cliente recibe un mensaje genérico; la causa técnica queda en el log.
+    assert resp["statusCode"] == 500 and "error inesperado" in json.loads(resp["body"])["error"]
+    assert "1x3x1024x1024" in caplog.text
     assert h.s3.objetos == {} and h.tabla_mediciones.escritos == []  # nada a medias
 
 
@@ -181,10 +183,12 @@ def test_unet_error_de_modelo_no_deja_basura(h, monkeypatch, tmp_path):
     assert h.s3.objetos == {} and h.tabla_mediciones.escritos == []
 
 
-def test_model_type_invalido(h, monkeypatch):
+def test_model_type_invalido(h, monkeypatch, caplog):
     monkeypatch.setenv("MODEL_TYPE", "resnet")
     resp = h.lambda_handler(_evento(_foto()), None)
-    assert resp["statusCode"] == 500 and "MODEL_TYPE" in json.loads(resp["body"])["error"]
+    # El cliente recibe un mensaje genérico; la causa técnica queda en el log.
+    assert resp["statusCode"] == 500 and "error inesperado" in json.loads(resp["body"])["error"]
+    assert "MODEL_TYPE" in caplog.text
 
 
 def test_tiempos_en_log(h, monkeypatch, tmp_path, caplog):

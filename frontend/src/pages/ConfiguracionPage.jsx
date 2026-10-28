@@ -1,21 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { updatePassword } from 'aws-amplify/auth';
-import {
-  Settings,
-  RefreshCw,
-  ShieldCheck,
-  Brain,
-  Check,
-  User,
-  Lock,
-  AlertCircle,
-  Camera,
-  X,
-} from 'lucide-react';
+import { IconoActualizar, IconoAjustes, IconoCamara, IconoCandado, IconoCerrar, IconoCheck, IconoError, IconoModeloIA, IconoSeguridad, IconoUsuario } from '../components/Iconos';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth, parseAuthError } from '../auth/AuthContext';
 import { getDateFormat, setDateFormat as guardarFormatoFecha } from '../utils/dateFormat';
 import AvatarCropper from '../components/AvatarCropper';
+import Skeleton, { SkeletonLinea, SkeletonCaja } from '../components/Skeleton';
+import PasswordChecklist from '../components/PasswordChecklist';
+import { isPasswordValid } from '../lib/passwordPolicy';
 
 const AVATAR_COLORS = [
   { value: '#1432A3', label: 'Navy' },
@@ -42,15 +34,6 @@ function getInitials(name = '') {
   const parts = name.trim().split(/\s+/);
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
   return name.slice(0, 2).toUpperCase();
-}
-
-function validatePassword(pw) {
-  const errors = [];
-  if (pw.length < 8) errors.push('Mínimo 8 caracteres');
-  if (!/[A-Z]/.test(pw)) errors.push('Al menos una mayúscula');
-  if (!/[0-9]/.test(pw)) errors.push('Al menos un número');
-  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pw)) errors.push('Al menos un símbolo');
-  return errors;
 }
 
 const inputStyle = {
@@ -314,8 +297,7 @@ export default function ConfiguracionPage() {
   const handleChangePassword = async () => {
     setPwMsg(null);
     setPwError(null);
-    const errors = validatePassword(pwNew);
-    if (errors.length > 0) { setPwError(errors.join(' · ')); return; }
+    if (!isPasswordValid(pwNew)) { setPwError('La nueva contraseña no cumple todos los requisitos.'); return; }
     if (pwNew !== pwConfirm) { setPwError('Las contraseñas nuevas no coinciden.'); return; }
     setPwLoading(true);
     try {
@@ -323,21 +305,21 @@ export default function ConfiguracionPage() {
       setPwMsg('Contraseña actualizada correctamente.');
       setPwOld(''); setPwNew(''); setPwConfirm('');
     } catch (err) {
-      setPwError(err.message ?? 'Error al cambiar la contraseña.');
+      setPwError(parseAuthError(err, { contexto: 'cambio' }));
     } finally {
       setPwLoading(false);
     }
   };
 
   const displayName = nombre || perfil?.nombre || user?.name || user?.email || '';
-  const pwErrors = pwNew ? validatePassword(pwNew) : [];
+  const pwBloqueado = pwLoading || !pwOld || !isPasswordValid(pwNew) || !pwConfirm;
 
   return (
     <>
       <style>{`
         .config-select,
         .config-input {
-          transition: border-color 0.15s ease, box-shadow 0.15s ease;
+          transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
         }
 
         .config-select:focus,
@@ -346,7 +328,6 @@ export default function ConfiguracionPage() {
           box-shadow: 0 0 0 2px rgba(156,54,16,0.08);
         }
 
-        @keyframes shimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
       `}</style>
 
       <div style={{ padding: 'var(--space-5)', maxWidth: 1360, width: '100%', margin: '0 auto' }}>
@@ -413,7 +394,7 @@ export default function ConfiguracionPage() {
 
         <div style={sectionStyle}>
           <SectionHeader
-            icon={User}
+            icon={IconoUsuario}
             title="Mi perfil"
             description="Foto, nombre y datos de tu cuenta."
           />
@@ -449,14 +430,15 @@ export default function ConfiguracionPage() {
                   borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)', color: 'var(--accent-amber)',
                 }}
               >
-                <Camera size={14} /> {mostrarCropper ? 'Cerrar' : 'Cambiar foto'}
+                <IconoCamara size={14} /> {mostrarCropper ? 'Cerrar' : 'Cambiar foto'}
               </button>
               {avatarFoto && (
                 <button
-                  type="button" onClick={handleQuitarFoto} title="Quitar foto"
-                  style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 9px', cursor: 'pointer', color: '#dc2626', display: 'flex' }}
+                  type="button" onClick={handleQuitarFoto} title="Quitar foto" aria-label="Quitar foto"
+                  className="btn-accion"
+                  style={{ borderRadius: 8, padding: '7px 9px' }}
                 >
-                  <X size={14} />
+                  <IconoCerrar size={14} />
                 </button>
               )}
             </div>
@@ -473,14 +455,41 @@ export default function ConfiguracionPage() {
 
         <div style={sectionStyle}>
           <SectionHeader
-            icon={User}
+            icon={IconoUsuario}
             title="Información personal"
             description="Nombre, correo y color de avatar."
           />
 
           <div style={{ padding: 18 }}>
             {loading ? (
-              <div style={{ height: 60, background: 'var(--border)', borderRadius: 6, animation: 'shimmer 1.5s infinite' }} />
+              // Mismo esqueleto que el formulario: cada texto dentro de un elemento con
+              // la tipografia real (labelStyle / inputStyle), asi el alto no cambia.
+              <div aria-busy="true">
+                {[0, 1].map(i => (
+                  <div key={i} style={{ marginBottom: 'var(--space-4)' }}>
+                    {/* label e input son inline en el real (el margen del label no cuenta): igual aqui */}
+                    <span style={labelStyle}><SkeletonLinea width={110} /></span>
+                    <div style={{ ...inputStyle, display: 'inline-block' }}><SkeletonLinea width="35%" /></div>
+                  </div>
+                ))}
+                <div style={{ marginBottom: 'var(--space-4)' }}>
+                  <span style={{ ...labelStyle, display: 'block', marginBottom: 'var(--space-2)' }}>
+                    <SkeletonLinea width={90} />
+                  </span>
+                  <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                    {Array.from({ length: AVATAR_COLORS.length }, (_, i) => (
+                      <Skeleton key={i} width={28} height={28} radius={7} />
+                    ))}
+                  </div>
+                </div>
+                <SkeletonCaja
+                  width={100}
+                  style={{
+                    padding: '8px 20px', borderRadius: 8,
+                    fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)',
+                  }}
+                />
+              </div>
             ) : (
               <>
                 <Field label="Nombre completo" htmlFor="perfil-nombre">
@@ -488,7 +497,7 @@ export default function ConfiguracionPage() {
                     id="perfil-nombre" name="name" autoComplete="name"
                     value={nombre} onChange={e => setNombre(e.target.value)}
                     className="config-input"
-                    style={inputStyle} placeholder="Tu nombre"
+                    style={inputStyle} placeholder="ej: Ana Ejemplo"
                   />
                 </Field>
                 <Field label="Correo electrónico" htmlFor="perfil-email">
@@ -518,7 +527,7 @@ export default function ConfiguracionPage() {
                         outlineOffset: 2,
                       }}>
                         {avatarColor === c.value && (
-                          <Check size={14} style={{ color: 'white', position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }} />
+                          <IconoCheck size={14} style={{ color: 'white', position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }} />
                         )}
                       </button>
                     ))}
@@ -527,12 +536,12 @@ export default function ConfiguracionPage() {
 
                 {infoMsg && (
                   <div style={{ padding: '8px 12px', background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.25)', borderRadius: 7, color: '#16a34a', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Check size={13} /> {infoMsg}
+                    <IconoCheck size={13} /> {infoMsg}
                   </div>
                 )}
                 {(infoError || saveError) && (
                   <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, color: '#dc2626', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <AlertCircle size={13} /> {infoError || saveError}
+                    <IconoError size={13} /> {infoError || saveError}
                   </div>
                 )}
                 <button onClick={handleSaveInfo} disabled={saving} style={{
@@ -553,7 +562,7 @@ export default function ConfiguracionPage() {
 
         <div style={sectionStyle}>
           <SectionHeader
-            icon={Lock}
+            icon={IconoCandado}
             title="Cambiar contraseña"
           />
 
@@ -562,16 +571,8 @@ export default function ConfiguracionPage() {
               <input id="perfil-pw-actual" name="current-password" type="password" value={pwOld} onChange={e => setPwOld(e.target.value)} className="config-input" style={inputStyle} autoComplete="current-password" />
             </Field>
             <Field label="Nueva contraseña" htmlFor="perfil-pw-nueva">
-              <input id="perfil-pw-nueva" name="new-password" type="password" value={pwNew} onChange={e => setPwNew(e.target.value)} className="config-input" style={inputStyle} autoComplete="new-password" />
-              {pwNew && pwErrors.length > 0 && (
-                <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 'var(--space-1)' }}>
-                  {pwErrors.map(e => (
-                    <span key={e} style={{ fontSize: 'var(--text-3xs)', padding: '2px 7px', borderRadius: 4, background: 'rgba(220,38,38,0.08)', color: '#dc2626', fontFamily: 'var(--font-data)' }}>
-                      {e}
-                    </span>
-                  ))}
-                </div>
-              )}
+              <input id="perfil-pw-nueva" name="new-password" aria-describedby="perfil-pw-requisitos" type="password" value={pwNew} onChange={e => setPwNew(e.target.value)} className="config-input" style={inputStyle} autoComplete="new-password" />
+              <PasswordChecklist id="perfil-pw-requisitos" password={pwNew} />
             </Field>
             <Field label="Confirmar nueva contraseña" htmlFor="perfil-pw-confirmar">
               <input id="perfil-pw-confirmar" name="confirm-password" type="password" value={pwConfirm} onChange={e => setPwConfirm(e.target.value)} className="config-input" style={inputStyle} autoComplete="new-password" />
@@ -579,19 +580,19 @@ export default function ConfiguracionPage() {
 
             {pwMsg && (
               <div style={{ padding: '8px 12px', background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.25)', borderRadius: 7, color: '#16a34a', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Check size={13} /> {pwMsg}
+                <IconoCheck size={13} /> {pwMsg}
               </div>
             )}
             {pwError && (
               <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, color: '#dc2626', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <AlertCircle size={13} /> {pwError}
+                <IconoError size={13} /> {pwError}
               </div>
             )}
-            <button onClick={handleChangePassword} disabled={pwLoading || !pwOld || !pwNew || !pwConfirm} style={{
+            <button onClick={handleChangePassword} disabled={pwBloqueado} style={{
               padding: '8px 20px', background: 'var(--accent-amber)', border: 'none',
-              borderRadius: 8, cursor: pwLoading || !pwOld || !pwNew || !pwConfirm ? 'not-allowed' : 'pointer',
+              borderRadius: 8, cursor: pwBloqueado ? 'not-allowed' : 'pointer',
               fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'white',
-              opacity: pwLoading || !pwOld || !pwNew || !pwConfirm ? 0.5 : 1,
+              opacity: pwBloqueado ? 0.5 : 1,
             }}>
               {pwLoading ? 'Actualizando…' : 'Cambiar contraseña'}
             </button>
@@ -603,7 +604,7 @@ export default function ConfiguracionPage() {
 
         <div style={sectionStyle}>
           <SectionHeader
-            icon={Settings}
+            icon={IconoAjustes}
             title="Preferencias del sistema"
             description="Configura el comportamiento general de la plataforma."
           />
@@ -664,7 +665,7 @@ export default function ConfiguracionPage() {
 
         <div style={sectionStyle}>
           <SectionHeader
-            icon={ShieldCheck}
+            icon={IconoSeguridad}
             title="Información del sistema"
             description="Información general de la plataforma y del modelo de análisis."
           />
@@ -680,39 +681,6 @@ export default function ConfiguracionPage() {
               style={{
                 padding: '15px 18px',
                 borderRight: '1px solid var(--border)',
-                borderBottom: '1px solid var(--border)',
-              }}
-            >
-              <div style={labelStyle}>Estado del sistema</div>
-
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 7,
-                  fontFamily: 'var(--font-ui)',
-                  fontSize: 'var(--text-sm)',
-                  fontWeight: 600,
-                  color: 'var(--text-primary)',
-                }}
-              >
-                <span
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    background: 'var(--accent-green)',
-                    display: 'inline-block',
-                  }}
-                />
-                Operativo
-              </div>
-            </div>
-
-
-            <div
-              style={{
-                padding: '15px 18px',
                 borderBottom: '1px solid var(--border)',
               }}
             >
@@ -733,7 +701,7 @@ export default function ConfiguracionPage() {
             <div
               style={{
                 padding: '15px 18px',
-                borderRight: '1px solid var(--border)',
+                borderBottom: '1px solid var(--border)',
               }}
             >
               <div style={labelStyle}>Modelo de IA</div>
@@ -748,11 +716,11 @@ export default function ConfiguracionPage() {
                   color: 'var(--text-primary)',
                 }}
               >
-                <Brain
+                <IconoModeloIA
                   size={14}
                   color="var(--accent-blue)"
                 />
-                Producción_v2
+                Modelo de detección de corrosión
               </div>
             </div>
 
@@ -774,11 +742,11 @@ export default function ConfiguracionPage() {
                   color: 'var(--text-primary)',
                 }}
               >
-                <RefreshCw
+                <IconoActualizar
                   size={14}
                   color="var(--accent-blue)"
                 />
-                Automática
+                Al subir, editar o eliminar
               </div>
             </div>
 

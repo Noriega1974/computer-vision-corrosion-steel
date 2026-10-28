@@ -1,6 +1,7 @@
+import { CARD_TITULO_STYLE, CARD_SUBTITULO_STYLE, CARD_PILDORA_STYLE } from './cardTextStyles';
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, CheckSquare, Square } from 'lucide-react';
+import { IconoCasilla, IconoCasillaMarcada, IconoError } from './Iconos';
 import NivelIcon from './NivelIcon';
 import { nivelColor, nivelLabel } from '../lib/statusUtils';
 import { formatFecha } from '../utils/dateFormat';
@@ -65,23 +66,16 @@ export default function MedicionCard({ medicion, to, state, contexto, seleccion 
           padding: 3, borderRadius: 6, background: 'var(--bg-card-solid)', border: '1px solid var(--border-strong)',
           color: seleccion.marcada ? 'var(--accent-amber)' : 'var(--text-faint)',
         }}>
-          {seleccion.marcada ? <CheckSquare size={20} /> : <Square size={20} />}
+          {seleccion.marcada ? <IconoCasillaMarcada size={20} /> : <IconoCasilla size={20} />}
         </span>
       )}
 
       {/* 1. Cabecera: Título en negrita + subtítulo suave */}
       <div>
-        <div style={{
-          fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 15,
-          color: 'var(--text-primary)', lineHeight: 1.2,
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        }}>
+        <div style={{ ...CARD_TITULO_STYLE, color: 'var(--text-primary)' }}>
           {titulo}
         </div>
-        <div style={{
-          fontSize: 12, color: 'var(--text-muted)', marginTop: 2,
-          fontFamily: 'var(--font-ui)',
-        }}>
+        <div style={{ ...CARD_SUBTITULO_STYLE, color: 'var(--text-muted)' }}>
           {prefijo ? `${prefijo} · ` : ''}{tiempoRelativo(medicion.timestamp)}
         </div>
       </div>
@@ -105,7 +99,7 @@ export default function MedicionCard({ medicion, to, state, contexto, seleccion 
             display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center', gap: 'var(--space-2)',
           }}>
-            <AlertCircle size={28} strokeWidth={1.5} style={{ color: 'var(--text-faint)' }} />
+            <IconoError size={28} style={{ color: 'var(--text-faint)' }} />
             <span style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', fontFamily: 'var(--font-data)' }}>
               Sin imagen
             </span>
@@ -155,10 +149,8 @@ export default function MedicionCard({ medicion, to, state, contexto, seleccion 
         </div>
 
         <span style={{
-          padding: '7px 14px', borderRadius: 999,
+          ...CARD_PILDORA_STYLE,
           background: 'var(--text-primary)', color: 'var(--bg-card-solid)',
-          fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 12,
-          lineHeight: 1, flexShrink: 0,
         }}>
           Ver detalle
         </span>

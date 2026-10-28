@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { IconoFlechaAbajo } from './Iconos';
 
 import { normalizar } from '../lib/textUtils';
 
@@ -115,7 +115,7 @@ export default function SearchableSelect({
           style={{ ...inputStyle, paddingRight: 30, opacity: disabled ? 0.6 : 1, cursor: disabled ? 'not-allowed' : 'text' }}
           autoComplete="off"
         />
-        <ChevronDown size={14} style={{
+        <IconoFlechaAbajo size={14} style={{
           position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
           color: 'var(--text-faint)', pointerEvents: 'none',
         }} />

@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Upload, ChevronDown, ChevronUp, BarChart3 } from 'lucide-react';
+import { IconoFlechaAbajo, IconoFlechaArriba, IconoGrafico, IconoSubir } from '../components/Iconos';
 
 import KPIBar from '../components/KPIBar';
 import ColombiaMap from '../components/ColombiaMap';
 import PlantDetail from '../components/PlantDetail';
 import PlantsTable from '../components/PlantsTable';
 import ChartsRow from '../components/ChartsRow';
+import Skeleton from '../components/Skeleton';
 
 import { useBloques } from '../hooks/useBloques';
 import { useEmpresas } from '../hooks/useEmpresas';
@@ -60,6 +61,8 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const esSuperAdmin = user?.groups?.includes('super_admin');
   const { empresas } = useEmpresas(esSuperAdmin);
+  // /upload es solo para super_admin, admin y tecnico (RoleRoute): el cliente no ve el acceso.
+  const puedeSubir = ['super_admin', 'admin', 'tecnico'].some(r => user?.groups?.includes(r));
 
   // "puntos" aquí son bloques (el "Punto" viejo fue absorbido por "Bloque",
   // ver hooks/useBloques.js) -- se mantiene el nombre de variable para no
@@ -67,7 +70,8 @@ export default function DashboardPage() {
   const {
     bloques: puntos,
     loading: loadingPuntos,
-    error: errorPuntos
+    error: errorPuntos,
+    refetch: refetchPuntos
   } = useBloques();
 
   // "Ver punto en dashboard" (MedicionDetailPage) navega a /dashboard?punto=X
@@ -151,16 +155,18 @@ export default function DashboardPage() {
 
             {/* Nueva medición */}
 
+            {puedeSubir && (
             <Link
               to="/upload"
               className="dashboard-action"
             >
 
-              <Upload size={14} />
+              <IconoSubir size={14} />
 
-              Nueva medida
+              Nueva medición
 
             </Link>
+            )}
 
           </div>
 
@@ -208,6 +214,7 @@ export default function DashboardPage() {
                 puntos={puntos}
                 loading={loadingPuntos}
                 error={errorPuntos}
+                onRetry={refetchPuntos}
                 selectedPunto={selectedPunto}
                 onSelectPunto={setSelectedPunto}
                 empresas={empresas}
@@ -247,7 +254,7 @@ export default function DashboardPage() {
               <div
                 style={{
                   fontFamily: 'var(--font-data)',
-                  fontSize: 10,
+                  fontSize: 11,
                   letterSpacing: '0.04em',
                   color: 'var(--text-faint)',
                   textTransform: 'uppercase',
@@ -274,17 +281,8 @@ export default function DashboardPage() {
                   selectedZona={selectedZona}
                 />
               ) : (
-                <div
-                  style={{
-                    height: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'var(--text-muted)',
-                    fontSize: 'var(--text-sm)',
-                  }}
-                >
-                  Cargando mapa…
+                <div aria-busy="true" style={{ height: '100%' }}>
+                  <Skeleton height="100%" radius={0} />
                 </div>
               )}
             </div>
@@ -349,7 +347,7 @@ export default function DashboardPage() {
               cursor: 'pointer',
               fontFamily: 'var(--font-ui)',
               textAlign: 'left',
-              transition: 'background-color 0.15s ease',
+              transition: 'background-color var(--dur-fast) var(--ease-out)',
             }}
           >
             <div>
@@ -357,7 +355,7 @@ export default function DashboardPage() {
                 className="dashboard-section-title"
                 style={{ display: 'flex', alignItems: 'center', gap: 8 }}
               >
-                <BarChart3 size={16} /> Análisis y métricas avanzadas (en desarrollo)
+                <IconoGrafico size={16} /> Análisis y métricas avanzadas (en desarrollo)
               </div>
               <div
                 style={{
@@ -369,7 +367,7 @@ export default function DashboardPage() {
                 Comportamiento y distribución de la corrosión por ciudad y severidad
               </div>
             </div>
-            {showAnalisis ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            {showAnalisis ? <IconoFlechaArriba size={18} /> : <IconoFlechaAbajo size={18} />}
           </button>
 
           {showAnalisis && (

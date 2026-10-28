@@ -8,7 +8,7 @@ export function useMedicionesPunto(idPunto, { completo = false } = {}) {
   const { key: globalKey } = useRefreshKey();
   const [localKey, setLocalKey] = useState(0);
   const [mediciones, setMediciones] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(Boolean(idPunto));
   const [error, setError] = useState(null);
   const idPuntoPrevio = useRef(idPunto);
 

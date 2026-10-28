@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
-import { SearchX, CheckSquare } from 'lucide-react';
+import { IconoCasillaMarcada, IconoSinResultados } from './Iconos';
 import MedicionCard from './MedicionCard';
 import BarraSeleccion from './BarraSeleccion';
 import { EliminarLoteDialog, MoverLoteDialog } from './LoteDialogs';
 import { useAuth } from '../auth/AuthContext';
 import { useAccionesLote } from '../hooks/useAccionesLote';
 import { NIVELES, nivelColor, nivelLabel } from '../lib/statusUtils';
+import NivelInfo from './NivelInfo';
 
 const ORDENES = [
   { key: 'recientes', label: 'Más recientes' },
@@ -110,10 +111,12 @@ export default function GaleriaFotos({
     return () => window.removeEventListener('keydown', alTecla);
   }, [seleccionando, dialogo, procesando]);
 
-  async function ejecutar(accion, verbo) {
+  async function ejecutar(accion, verbo, destinoNombre) {
     const nombres = new Map(elegidas.map(m => [m.id_medicion, m.nombre || m.bloque_nombre || m.id_medicion]));
     const { ok, error } = await accion(elegidas.map(m => ({ id_punto: idPuntoDe(m), id_medicion: m.id_medicion })));
-    const partes = [`${ok.length} ${ok.length === 1 ? verbo.sing : verbo.plur}`];
+    // "3 fotos movidas a <punto>" / "1 foto eliminada".
+    const accionTxt = `${ok.length} ${ok.length === 1 ? 'foto' : 'fotos'} ${ok.length === 1 ? verbo.sing : verbo.plur}`;
+    const partes = [destinoNombre ? `${accionTxt} a ${destinoNombre}` : accionTxt];
     if (error.length) partes.push(`${error.length} con error`);
     setResumen({
       texto: partes.join(', '),
@@ -145,7 +148,7 @@ export default function GaleriaFotos({
             fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
           }}
         >
-          <CheckSquare size={14} aria-hidden="true" />
+          <IconoCasillaMarcada size={14} aria-hidden="true" />
           Seleccionar
         </button>
       )}
@@ -183,12 +186,13 @@ export default function GaleriaFotos({
                 color: nivelFilter === key ? color : 'var(--text-muted)',
                 fontFamily: 'var(--font-ui)', fontSize: 'var(--text-2xs)', cursor: 'pointer',
                 fontWeight: nivelFilter === key ? 600 : 400, lineHeight: 1.35,
-                transition: 'color 0.12s, background-color 0.12s, border-color 0.12s',
+                transition: 'color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out)',
               }}
             >
               {label}
             </button>
           ))}
+          <NivelInfo />
         </div>
 
         <div style={{
@@ -243,7 +247,7 @@ export default function GaleriaFotos({
           textAlign: 'center', padding: '40px 20px',
           color: 'var(--text-muted)', fontFamily: 'var(--font-ui)',
         }}>
-          <SearchX size={26} strokeWidth={1.5} aria-hidden="true" style={{ color: 'var(--text-faint)' }} />
+          <IconoSinResultados size={26} aria-hidden="true" style={{ color: 'var(--text-faint)' }} />
           No hay fotos que coincidan con los filtros seleccionados.
         </div>
       ) : (
@@ -292,7 +296,7 @@ export default function GaleriaFotos({
           puntoActual={puntoActual}
           procesando={procesando}
           onCancelar={() => setDialogo(null)}
-          onConfirmar={(destino) => ejecutar(items => mover(items, destino), { sing: 'movida', plur: 'movidas' })}
+          onConfirmar={(destino, nombreDestino) => ejecutar(items => mover(items, destino), { sing: 'movida', plur: 'movidas' }, nombreDestino)}
         />
       )}
     </>

@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { BarChart3 } from 'lucide-react';
+import { IconoGrafico } from './Iconos';
 import {
   XAxis,
   YAxis,
@@ -12,8 +12,9 @@ import {
   Bar,
 } from 'recharts';
 
-import { useMediciones } from '../hooks/useMediciones';
+import { useMediciones, LIMITE_DASHBOARD } from '../hooks/useMediciones';
 import { useBloques } from '../hooks/useBloques';
+import Skeleton, { SkeletonLinea } from './Skeleton';
 import {
   nivelColor,
   nivelLabel,
@@ -73,6 +74,58 @@ const CustomTooltip = ({ active, payload, label }) => {
   );
 };
 
+// Skeletons con el mismo alto que los graficos reales (160 + leyenda / 150).
+function PieSkeleton() {
+  return (
+    <div aria-busy="true">
+      <div
+        style={{
+          height: 160,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Skeleton width={130} height={130} radius="50%" />
+      </div>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          gap: '6px 12px',
+          padding: '0 8px 4px',
+        }}
+      >
+        {[0, 1, 2].map(i => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', fontSize: 12 }}>
+            <SkeletonLinea width={56} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BarsSkeleton() {
+  const alturas = [70, 100, 55, 85, 40];
+  return (
+    <div
+      aria-busy="true"
+      style={{
+        height: 150,
+        display: 'flex',
+        alignItems: 'flex-end',
+        justifyContent: 'space-around',
+        padding: '4px 8px 0',
+      }}
+    >
+      {alturas.map((h, i) => (
+        <Skeleton key={i} width={28} height={`${h}%`} radius="2px 2px 0 0" />
+      ))}
+    </div>
+  );
+}
+
 function EmptyChart({ message }) {
   return (
     <div
@@ -90,7 +143,7 @@ function EmptyChart({ message }) {
           opacity: 0.3,
         }}
       >
-        <BarChart3 size={24} aria-hidden="true" />
+        <IconoGrafico size={24} aria-hidden="true" />
       </div>
 
       <div
@@ -111,7 +164,7 @@ export default function ChartsRow() {
   const {
     mediciones,
     loading,
-  } = useMediciones(100);
+  } = useMediciones(LIMITE_DASHBOARD, { resumen: true });
 
   // Ciudad ya no viaja denormalizada en la medición -- se resuelve por
   // bloque_id contra la lista de puntos (bloques).
@@ -129,7 +182,7 @@ export default function ChartsRow() {
     .map(n => ({
       name: nivelLabel(n),
       value: mediciones.filter(
-        m => (m.nivel_corrosion ?? 0) === n
+        m => m.nivel_corrosion === n
       ).length,
       fill: nivelColor(n),
       nivel: n,
@@ -173,14 +226,10 @@ export default function ChartsRow() {
         title="DISTRIBUCIÓN"
         subtitle="POR NIVEL DE CORROSIÓN"
       >
-        {loading || nivelCounts.length === 0 ? (
-          <EmptyChart
-            message={
-              loading
-                ? 'Cargando…'
-                : 'Sin mediciones'
-            }
-          />
+        {loading ? (
+          <PieSkeleton />
+        ) : nivelCounts.length === 0 ? (
+          <EmptyChart message="Sin mediciones" />
         ) : (
           <>
             <ResponsiveContainer
@@ -231,7 +280,7 @@ export default function ChartsRow() {
                     display: 'flex',
                     alignItems: 'center',
                     gap: 'var(--space-1)',
-                    fontSize: 9,
+                    fontSize: 12,
                   }}
                 >
                   <div
@@ -265,14 +314,10 @@ export default function ChartsRow() {
         title="MEDICIONES POR CIUDAD"
         subtitle="TOP INSTALACIONES · CANTIDAD DE REGISTROS"
       >
-        {loading || cityData.length === 0 ? (
-          <EmptyChart
-            message={
-              loading
-                ? 'Cargando…'
-                : 'Sin datos suficientes para mostrar tendencias'
-            }
-          />
+        {loading ? (
+          <BarsSkeleton />
+        ) : cityData.length === 0 ? (
+          <EmptyChart message="Sin datos suficientes para mostrar tendencias" />
         ) : (
           <ResponsiveContainer width="100%" height={150}>
             <BarChart

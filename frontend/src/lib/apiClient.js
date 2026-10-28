@@ -41,6 +41,27 @@ async function fetchConRedLegible(url, options) {
   }
 }
 
+// Mensaje para el usuario cuando el backend no envía `error`/`message`.
+function mensajeAmigable(status) {
+  if (status === 403) return 'No tienes permiso para hacer esto. Si crees que es un error, contacta a un administrador.';
+  if (status === 404) return 'No encontramos lo que buscas. Puede que se haya eliminado.';
+  if (status === 413) return 'La foto es demasiado grande. Prueba con una de menor tamaño.';
+  if (status === 429) return 'Hay demasiadas solicitudes. Espera unos segundos e inténtalo de nuevo.';
+  if (status >= 500 && status <= 503) return 'El servidor tuvo un problema. Inténtalo de nuevo en unos minutos.';
+  if (status === 504) return 'El servidor tardó demasiado en responder. Inténtalo de nuevo.';
+  return 'Ocurrió un error inesperado. Inténtalo de nuevo.';
+}
+
+// En el backend "bloque" siempre significa Punto en la interfaz. Solo se
+// reemplaza la palabra completa, conservando mayúsculas.
+function bloqueAPunto(texto) {
+  return texto.replace(/\bbloque(s?)(?![\p{L}\d_])/giu, (m, plural) => {
+    const base = m.slice(0, 6);
+    const punto = base === base.toUpperCase() ? 'PUNTO' : base[0] === base[0].toUpperCase() ? 'Punto' : 'punto';
+    return plural ? (punto === 'PUNTO' ? 'PUNTOS' : punto + 's') : punto;
+  });
+}
+
 async function request(method, path, body) {
   const token = await getIdToken();
 
@@ -67,14 +88,15 @@ async function request(method, path, body) {
   }
 
   if (!res.ok) {
-    let message = `Error ${res.status}: ${res.statusText}`;
+    // Friendly fallback by status, used only when the backend sends no message.
+    let message = mensajeAmigable(res.status);
     try {
       const errBody = await res.json();
       // El backend devuelve {"error": "..."} en todos los endpoints; se
       // deja el chequeo de "message" como respaldo por si algún handler
       // difiere.
-      if (errBody.error) message = errBody.error;
-      else if (errBody.message) message = errBody.message;
+      if (errBody.error) message = bloqueAPunto(String(errBody.error));
+      else if (errBody.message) message = bloqueAPunto(String(errBody.message));
     } catch { /* sin cuerpo JSON */ }
     // `status` viaja en el error para que quien llama pueda distinguir un
     // 403 (sin permiso / sin registro) de un 500 o un fallo de red, sin
@@ -118,14 +140,39 @@ export const apiDelete = (path) => request('DELETE', path);
 // Sube un archivo a S3 con un POST prefirmado ({url, fields} de
 // POST /medicion/upload-url). S3 exige los campos primero y el archivo AL
 // FINAL; no se fija Content-Type a mano (el navegador arma el multipart).
-export async function apiSubirS3({ url, fields }, file) {
+// `onProgress(fraction)` es opcional (0..1). fetch no expone el progreso de
+// subida, así que con callback se usa XMLHttpRequest; sin él, el camino
+// original con fetch queda intacto.
+export async function apiSubirS3({ url, fields }, file, onProgress) {
   const form = new FormData();
   Object.entries(fields).forEach(([k, v]) => form.append(k, v));
   form.append('file', file);
-  const res = await fetchConRedLegible(url, { method: 'POST', body: form });
-  if (!res.ok) {
-    const err = new Error(`No se pudo subir la foto (error ${res.status}). Inténtalo de nuevo.`);
-    err.status = res.status;
-    throw err;
+
+  const errorHttp = (status) => {
+    const err = new Error(`No se pudo subir la foto (error ${status}). Inténtalo de nuevo.`);
+    err.status = status;
+    return err;
+  };
+
+  if (typeof onProgress !== 'function') {
+    const res = await fetchConRedLegible(url, { method: 'POST', body: form });
+    if (!res.ok) throw errorHttp(res.status);
+    return;
   }
+
+  await new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && e.total > 0) onProgress(e.loaded / e.total);
+    };
+    xhr.onload = () => {
+      // Same success criterion as fetch's `res.ok` (2xx).
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(errorHttp(xhr.status));
+    };
+    // Same message fetch produces for unreadable responses (network, CORS).
+    xhr.onerror = () => reject(new Error('No se pudo conectar con el servidor. Revisa tu conexión a internet e inténtalo de nuevo.'));
+    xhr.send(form);
+  });
 }

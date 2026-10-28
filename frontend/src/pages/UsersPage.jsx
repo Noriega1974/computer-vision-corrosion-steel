@@ -1,14 +1,52 @@
+import Aviso, { AvisoEnLinea } from '../components/Aviso';
+import ErrorEstado from '../components/ErrorEstado';
 import React, { useState, useMemo, useEffect } from 'react';
-import {
-  Plus, Edit2, X, AlertCircle, Check,
-  RefreshCw, UserX, Trash2, ChevronUp, ChevronDown, Clock,
-} from 'lucide-react';
 import { useGestionUsuarios } from '../hooks/useUsuarios';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
-import { Building2, CheckCircle2 } from 'lucide-react';
+import { IconoActualizar, IconoAgregar, IconoCerrar, IconoCheck, IconoCopiar, IconoDesactivarUsuario, IconoEditar, IconoEliminar, IconoEmpresa, IconoError, IconoExito, IconoFlechaAbajo, IconoFlechaArriba, IconoReloj } from '../components/Iconos';
 import { formatFecha } from '../utils/dateFormat';
+import { SkeletonLinea } from '../components/Skeleton';
+import { useConteoRecordado } from '../hooks/useConteoRecordado';
+import ConfirmDialog from '../components/ConfirmDialog';
+import FormModal from '../components/FormModal';
+import PasswordChecklist from '../components/PasswordChecklist';
+import { isPasswordValid } from '../lib/passwordPolicy';
+
+// Copies `texto` to the clipboard and confirms inline for 2s.
+function CopiarBoton({ texto, label = 'Copiar', ariaLabel }) {
+  const [copiado, setCopiado] = useState(false);
+  useEffect(() => {
+    if (!copiado) return undefined;
+    const t = setTimeout(() => setCopiado(false), 2000);
+    return () => clearTimeout(t);
+  }, [copiado]);
+  const copiar = async () => {
+    try {
+      await navigator.clipboard.writeText(texto);
+      setCopiado(true);
+    } catch {
+      // Clipboard can fail outside secure contexts; the text stays selectable.
+    }
+  };
+  const Icono = copiado ? IconoCheck : IconoCopiar;
+  return (
+    <button
+      type="button" onClick={copiar} aria-label={ariaLabel || label}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 4,
+        padding: '4px 8px', minHeight: 28, borderRadius: 6,
+        border: '1px solid var(--border)', background: 'transparent',
+        color: copiado ? 'var(--accent-green)' : 'var(--text-muted)',
+        fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)', fontWeight: 600, cursor: 'pointer',
+      }}
+    >
+      <Icono size={14} />
+      <span aria-live="polite">{copiado ? 'Copiado' : label}</span>
+    </button>
+  );
+}
 
 // ─── RBAC multi-empresa ────────────────────────────────────────────────────
 // Jerarquía de creación de usuarios, espejo de CREATABLE_ROLES en
@@ -22,7 +60,7 @@ const CREATABLE_ROLES = {
 };
 
 const TODOS_ROLES = [
-  { value: 'super_admin', label: 'Super Admin' },
+  { value: 'super_admin', label: 'Superadministrador' },
   { value: 'admin', label: 'Administrador' },
   { value: 'tecnico', label: 'Técnico' },
   { value: 'cliente', label: 'Cliente' },
@@ -39,10 +77,10 @@ function getRol(groups = []) {
 // ─── Skeleton ────────────────────────────────────────────────────────────────
 function SkeletonRow() {
   return (
-    <tr>
+    <tr aria-busy="true" style={{ borderBottom: '1px solid var(--border)' }}>
       {[70, 85, 55, 60, 50].map((w, i) => (
         <td key={i} style={{ padding: '10px 14px' }}>
-          <div style={{ height: 13, borderRadius: 4, background: 'var(--border)', width: `${w}%`, animation: 'shimmer 1.5s infinite' }} />
+          <SkeletonLinea width={`${w}%`} />
         </td>
       ))}
     </tr>
@@ -51,7 +89,7 @@ function SkeletonRow() {
 
 // ─── Role badge ──────────────────────────────────────────────────────────────
 const ROL_STYLES = {
-  super_admin: { bg: 'rgba(124,58,237,0.12)', color: '#7c3aed', label: 'Super Admin' },
+  super_admin: { bg: 'rgba(124,58,237,0.12)', color: '#7c3aed', label: 'Superadministrador' },
   admin:   { bg: 'rgba(37,99,235,0.12)',  color: '#2563eb',  label: 'Administrador' },
   tecnico: { bg: 'rgba(59,130,246,0.10)', color: '#3b82f6',  label: 'Técnico' },
   cliente: { bg: 'rgba(100,116,139,0.1)', color: '#64748b',  label: 'Cliente' },
@@ -87,40 +125,10 @@ function SortableHeader({ label, col, sortCol, sortDir, onSort }) {
     >
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
         {label}
-        {active && sortDir === 'asc'  && <ChevronUp   size={11} />}
-        {active && sortDir === 'desc' && <ChevronDown  size={11} />}
+        {active && sortDir === 'asc'  && <IconoFlechaArriba   size={11} />}
+        {active && sortDir === 'desc' && <IconoFlechaAbajo  size={11} />}
       </span>
     </th>
-  );
-}
-
-// ─── Modal wrapper ───────────────────────────────────────────────────────────
-function Modal({ title, onClose, children, maxWidth = 500 }) {
-  return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 400,
-      background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-4)',
-    }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{
-        // Mismo motivo que en PlantsPage: --bg-card es 72% opaco, pensado
-        // para ir sobre el blur del dashboard. Sin blur propio, un modal
-        // con ese fondo deja leerse lo de atrás -- --bg-card-solid es la
-        // variante opaca para este caso.
-        background: 'var(--bg-card-solid)', border: '1px solid var(--border)',
-        borderRadius: 12, width: '100%', maxWidth,
-        maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-          <span style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{title}</span>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: 'var(--space-1)', borderRadius: 6 }}>
-            <X size={16} />
-          </button>
-        </div>
-        <div style={{ overflowY: 'auto', flex: 1, padding: '20px' }}>
-          {children}
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -140,10 +148,9 @@ const labelStyle = {
 };
 
 // ─── Formulario de usuario ────────────────────────────────────────────────────
-// `rolesPermitidos` limita el selector de rol al crear (según CREATABLE_ROLES
-// del usuario logueado) — defensa en profundidad, la validación real ya está
-// en el backend. Al editar se muestran los 4 roles sin restricción (fuera de
-// alcance de esta tarea: el backend tampoco valida CREATABLE_ROLES en PUT).
+// `rolesPermitidos` limita el selector de rol, al crear y al editar (según
+// CREATABLE_ROLES del usuario logueado; el backend aplica el mismo límite en
+// POST y PUT) — defensa en profundidad, la validación real está en el backend.
 // `requiereEmpresa`/`empresasDisponibles`: solo al CREAR y solo para
 // super_admin -- es el único que no tiene empresa propia de la cual el
 // backend pueda forzarla (POST /usuarios responde 400 "empresa_id es
@@ -155,9 +162,10 @@ const labelStyle = {
 // pertenece a ninguna empresa (ve todo, cross-empresa), así que `mostrarEmpresa`
 // depende de `requiereEmpresa` Y de que el rol seleccionado no sea super_admin.
 function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error, rolesPermitidos, empresasDisponibles, requiereEmpresa }) {
-  const opcionesRol = isEdit
-    ? TODOS_ROLES
-    : TODOS_ROLES.filter(r => (rolesPermitidos ?? []).includes(r.value));
+  // Al editar se conserva el rol actual aunque no se pueda asignar (el backend
+  // rechaza otorgar un rol que quien edita no podría crear).
+  const rolActual = initial.rol ?? initial.role;
+  const opcionesRol = TODOS_ROLES.filter(r => (rolesPermitidos ?? []).includes(r.value) || (isEdit && r.value === rolActual));
 
   const [form, setForm] = useState({
     email: initial.email ?? '',
@@ -195,6 +203,7 @@ function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error, rolesPermi
           id="usuario-email" name="email" autoComplete="email"
           spellCheck={false} autoCapitalize="none"
           type="email" required value={form.email} onChange={set('email')}
+          placeholder={isEdit ? undefined : 'nombre@example.com'}
           disabled={isEdit} style={{ ...inputStyle, opacity: isEdit ? 0.6 : 1, cursor: isEdit ? 'not-allowed' : 'text' }}
         />
       </div>
@@ -214,7 +223,7 @@ function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error, rolesPermi
           }}
         >
           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <ChevronDown size={14} style={{ transform: showOptional ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+            <IconoFlechaAbajo size={14} style={{ transform: showOptional ? 'rotate(180deg)' : 'none', transition: 'transform var(--dur-fast) var(--ease-out)' }} />
             <span>Información adicional (opcional)</span>
           </span>
           <span style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)' }}>
@@ -232,7 +241,7 @@ function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error, rolesPermi
             </label>
             <input
               id="usuario-nombre" name="name" autoComplete="name"
-              placeholder="ej: Juan Pérez"
+              placeholder="ej: Ana Ejemplo"
               value={form.nombre} onChange={set('nombre')} style={inputStyle}
             />
           </div>
@@ -267,7 +276,7 @@ function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error, rolesPermi
       )}
       {(validationError || error) && (
         <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, color: '#dc2626', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3-5)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <AlertCircle size={13} /> {validationError || error}
+          <IconoError size={13} /> {validationError || error}
         </div>
       )}
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -281,64 +290,6 @@ function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error, rolesPermi
         </button>
       </div>
     </form>
-  );
-}
-
-// ─── Confirm dialog ──────────────────────────────────────────────────────────
-function ConfirmDialog({ message, onConfirm, onCancel, loading, confirmLabel = 'Confirmar', danger = false }) {
-  return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 500,
-      background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-4)',
-    }}>
-      <div style={{
-        background: 'var(--bg-card)', border: '1px solid var(--border)',
-        borderRadius: 12, maxWidth: 400, width: '100%', padding: '24px 20px',
-      }}>
-        <div style={{ fontSize: 14, color: 'var(--text-primary)', fontFamily: 'var(--font-ui)', marginBottom: 20, lineHeight: 1.6 }}>
-          {message}
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2-5)' }}>
-          <button onClick={onCancel} disabled={loading} style={{
-            padding: '7px 16px', background: 'transparent', border: '1px solid var(--border)',
-            borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)', color: 'var(--text-muted)',
-          }}>
-            Cancelar
-          </button>
-          <button onClick={onConfirm} disabled={loading} style={{
-            padding: '7px 16px', background: danger ? '#dc2626' : 'var(--accent-amber)', border: 'none',
-            borderRadius: 8, cursor: loading ? 'not-allowed' : 'pointer',
-            fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'white',
-            opacity: loading ? 0.6 : 1,
-          }}>
-            {loading ? 'Procesando…' : confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Toast simple ─────────────────────────────────────────────────────────────
-function Toast({ message, onDismiss }) {
-  useEffect(() => {
-    const t = setTimeout(onDismiss, 3500);
-    return () => clearTimeout(t);
-  }, [onDismiss]);
-
-  return (
-    <div style={{
-      position: 'fixed', bottom: 24, right: 24, zIndex: 600,
-      display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
-      padding: '10px 16px',
-      background: 'var(--bg-card)', border: '1px solid var(--border)',
-      borderLeft: '3px solid #16a34a', borderRadius: 8,
-      boxShadow: 'var(--shadow-lg)',
-      fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)', color: 'var(--text-primary)',
-    }}>
-      <Check size={14} color="#16a34a" />
-      {message}
-    </div>
   );
 }
 
@@ -358,8 +309,20 @@ function nextDir(col, sortCol, sortDir) {
 }
 
 // ─── Formulario de colaborador temporal ──────────────────────────────────────
-function ColaboradorForm({ onSubmit, saving, error }) {
-  const [form, setForm] = useState({ nickname: '', password: '', dias: 7, rol: 'tecnico' });
+const ROLES_COLABORADOR = [
+  { value: 'admin', label: 'Administrador' },
+  { value: 'tecnico', label: 'Técnico' },
+  { value: 'cliente', label: 'Cliente' },
+];
+
+// `rolesPermitidos` = roles que quien crea puede asignar (CREATABLE_ROLES): un
+// administrador no debe ofrecer un colaborador de rango igual al suyo.
+function ColaboradorForm({ onSubmit, saving, error, rolesPermitidos }) {
+  const opcionesRol = ROLES_COLABORADOR.filter(r => (rolesPermitidos ?? []).includes(r.value));
+  const [form, setForm] = useState({
+    nickname: '', password: '', dias: 7,
+    rol: opcionesRol.some(r => r.value === 'tecnico') ? 'tecnico' : (opcionesRol[0]?.value ?? 'cliente'),
+  });
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
 
   return (
@@ -375,7 +338,7 @@ function ColaboradorForm({ onSubmit, saving, error }) {
           id="colaborador-nickname" name="nickname" autoComplete="off"
           spellCheck={false} autoCapitalize="none"
           required value={form.nickname} onChange={set('nickname')}
-          placeholder="ej: CorpAcero-tecnico" style={inputStyle}
+          placeholder="ej: colaborador01" style={inputStyle}
         />
       </div>
       <div style={{ marginBottom: 'var(--space-3-5)' }}>
@@ -383,9 +346,9 @@ function ColaboradorForm({ onSubmit, saving, error }) {
           Rol *
         </label>
         <select id="colaborador-rol" name="rol" value={form.rol} onChange={set('rol')} style={inputStyle}>
-          <option value="admin">Administrador</option>
-          <option value="tecnico">Técnico</option>
-          <option value="cliente">Cliente</option>
+          {opcionesRol.map(r => (
+            <option key={r.value} value={r.value}>{r.label}</option>
+          ))}
         </select>
       </div>
       <div style={{ marginBottom: 'var(--space-3-5)' }}>
@@ -398,11 +361,9 @@ function ColaboradorForm({ onSubmit, saving, error }) {
           id="colaborador-password" name="new-password" autoComplete="new-password"
           aria-describedby="colaborador-password-requisitos"
           required type="password" value={form.password} onChange={set('password')}
-          placeholder="ej: Admin1507!" style={inputStyle}
+          style={inputStyle}
         />
-        <div id="colaborador-password-requisitos" style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-faint)', marginTop: 'var(--space-1)' }}>
-          Debe tener mayúscula, minúscula, número y símbolo (ej: <code>Admin1507!</code>)
-        </div>
+        <PasswordChecklist id="colaborador-password-requisitos" password={form.password} />
       </div>
       <div style={{ marginBottom: 18 }}>
         <label htmlFor="colaborador-dias" style={labelStyle}>
@@ -419,15 +380,15 @@ function ColaboradorForm({ onSubmit, saving, error }) {
       </div>
       {error && (
         <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, color: '#dc2626', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3-5)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <AlertCircle size={13} /> {error}
+          <IconoError size={13} /> {error}
         </div>
       )}
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button type="submit" disabled={saving} style={{
+        <button type="submit" disabled={saving || !isPasswordValid(form.password)} style={{
           padding: '8px 20px', background: 'var(--accent-amber)', border: 'none',
-          borderRadius: 8, cursor: saving ? 'not-allowed' : 'pointer',
+          borderRadius: 8, cursor: saving || !isPasswordValid(form.password) ? 'not-allowed' : 'pointer',
           fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'white',
-          opacity: saving ? 0.6 : 1,
+          opacity: saving || !isPasswordValid(form.password) ? 0.6 : 1,
         }}>
           {saving ? 'Creando…' : 'Crear colaborador'}
         </button>
@@ -450,7 +411,7 @@ export default function UsersPage() {
   // el backend rechaza cualquier otro rol con 403).
   const esSuperAdmin = miRol === 'super_admin';
 
-  const { usuarios, loading, mutating, mutError, crearUsuario, crearColaborador, editarUsuario, deshabilitarUsuario, habilitarUsuario, eliminarUsuario } = useGestionUsuarios();
+  const { usuarios, loading, error, refetch, mutating, mutError, crearUsuario, crearColaborador, editarUsuario, deshabilitarUsuario, habilitarUsuario, eliminarUsuario } = useGestionUsuarios();
   // Gestión de zonas/afiliaciones (crear, editar, dibujar el área en el
   // mapa) vive en su propia página /zonas -- acá solo se lee la lista para
   // resolver nombres y para el selector de UsuarioForm.
@@ -528,6 +489,8 @@ export default function UsersPage() {
 
     return list;
   }, [usuarios, search, sortCol, sortDir, miRol, miPerfil]);
+  // Sin filtros: lo que se recuerda es la lista completa, no la busqueda del momento.
+  const filasSkeleton = useConteoRecordado('usuarios:lista', usuarios, loading, 5);
 
   function handleSort(col) {
     const dir = nextDir(col, sortCol, sortDir);
@@ -572,10 +535,10 @@ export default function UsersPage() {
     try {
       if (confirmToggle.activarDespues) {
         await habilitarUsuario(id);
-        setToast('Usuario reactivado correctamente.');
+        setToast('Usuario activado correctamente.');
       } else {
         await deshabilitarUsuario(id);
-        setToast('Usuario deshabilitado correctamente.');
+        setToast('Usuario desactivado correctamente.');
       }
       setConfirmToggle(null);
     } catch { /* mutError maneja la visualización del error */ }
@@ -601,9 +564,6 @@ export default function UsersPage() {
 
   return (
     <>
-      <style>{`
-        @keyframes shimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-      `}</style>
 
       <div style={{ padding: 'var(--space-5)' }}>
         {/* Encabezado */}
@@ -626,7 +586,7 @@ export default function UsersPage() {
                   cursor: 'pointer', fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
                   color: 'var(--accent-amber)',
                 }}>
-                  <Clock size={14} /> Añadir colaborador
+                  <IconoReloj size={14} /> Añadir colaborador
                 </button>
               )}
               {/* Nuevo usuario: super_admin/admin/tecnico (tecnico solo
@@ -638,7 +598,7 @@ export default function UsersPage() {
                   padding: '8px 14px', background: 'var(--accent-amber)', border: 'none',
                   borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)', color: 'white',
                 }}>
-                  <Plus size={14} /> Nuevo usuario
+                  <IconoAgregar size={14} /> Nuevo usuario
                 </button>
               )}
             </div>
@@ -650,7 +610,7 @@ export default function UsersPage() {
             pertenecen, resuelto por el backend en GET /usuarios/me. */}
         {!esSuperAdmin && miPerfil?.empresa_nombre && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: '10px 14px', background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 'var(--space-3-5)', color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>
-            <Building2 size={14} />
+            <IconoEmpresa size={14} />
             Tu afiliación: <strong style={{ color: 'var(--text-primary)' }}>{miPerfil.empresa_nombre}</strong>
           </div>
         )}
@@ -687,7 +647,7 @@ export default function UsersPage() {
         {/* Error de mutación */}
         {mutError && (
           <div style={{ padding: '8px 14px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 8, color: '#dc2626', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3-5)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <AlertCircle size={13} /> {mutError}
+            <IconoError size={13} /> {mutError}
           </div>
         )}
 
@@ -707,7 +667,7 @@ export default function UsersPage() {
               </thead>
               <tbody>
                 {loading
-                  ? Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
+                  ? Array.from({ length: filasSkeleton }).map((_, i) => <SkeletonRow key={i} />)
                   : displayList.map(u => {
                       const activo = esActivo(u);
                       const rolKey = u.rol ?? u.role ?? u.grupos?.[0] ?? 'cliente';
@@ -731,7 +691,7 @@ export default function UsersPage() {
                           <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>
                             {esColab
                               ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)', fontSize: 'var(--text-2xs)', color: diasRestantes === 0 ? '#dc2626' : diasRestantes <= 3 ? '#d97706' : 'var(--text-muted)' }}>
-                                  <Clock size={11} />
+                                  <IconoReloj size={11} />
                                   {diasRestantes === 0 ? 'Vencido' : `${diasRestantes}d restantes`}
                                 </span>
                               : u.email
@@ -746,8 +706,8 @@ export default function UsersPage() {
                               background: activo ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)',
                               color: activo ? '#16a34a' : '#dc2626',
                             }}>
-                              {activo ? <Check size={11} /> : <X size={11} />}
-                              {activo ? 'Activo' : 'Deshabilitado'}
+                              {activo ? <IconoCheck size={11} /> : <IconoCerrar size={11} />}
+                              {activo ? 'Activo' : 'Inactivo'}
                             </span>
                           </td>
                           {isAdmin && (
@@ -757,26 +717,29 @@ export default function UsersPage() {
                                 <button
                                   onClick={() => { setEditUsuario(u); setFormError(null); }}
                                   title="Editar"
-                                  style={{ padding: '5px 8px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 7, cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}
+                                  aria-label="Editar"
+                                className="btn-accion btn-accion--plain"
                                 >
-                                  <Edit2 size={13} />
+                                  <IconoEditar size={13} />
                                 </button>
                                 {/* Deshabilitar / Reactivar */}
                                 <button
                                   onClick={() => setConfirmToggle({ usuario: u, activarDespues: !activo })}
-                                  title={activo ? 'Deshabilitar' : 'Reactivar'}
-                                  style={{ padding: '5px 8px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 7, cursor: 'pointer', color: activo ? '#dc2626' : '#16a34a', display: 'flex' }}
+                                  title={activo ? 'Desactivar' : 'Activar'}
+                                  aria-label={activo ? 'Desactivar' : 'Activar'}
+                                  className={activo ? 'btn-accion' : 'btn-accion btn-accion--ok'}
                                 >
-                                  {activo ? <UserX size={13} /> : <RefreshCw size={13} />}
+                                  {activo ? <IconoDesactivarUsuario size={13} /> : <IconoActualizar size={13} />}
                                 </button>
                                 {/* Eliminar permanentemente — oculto para el propio usuario */}
                                 {!esSelf && (
                                   <button
                                     onClick={() => { setConfirmEliminar({ usuario: u }); setEliminarError(null); }}
                                     title="Eliminar permanentemente"
-                                    style={{ padding: '5px 8px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 7, cursor: 'pointer', color: '#dc2626', display: 'flex' }}
+                                    aria-label="Eliminar permanentemente"
+                                    className="btn-accion btn-accion--danger"
                                   >
-                                    <Trash2 size={13} />
+                                    <IconoEliminar size={13} />
                                   </button>
                                 )}
                               </div>
@@ -788,7 +751,9 @@ export default function UsersPage() {
                 }
                 {!loading && displayList.length === 0 && (
                   <tr><td colSpan={colCount} style={{ padding: 'var(--space-6)', textAlign: 'center', color: 'var(--text-faint)', fontSize: 'var(--text-sm)' }}>
-                    {search ? 'Sin resultados para la búsqueda' : 'No hay usuarios registrados'}
+                    {error
+                      ? <ErrorEstado compacto titulo="No se pudieron cargar los usuarios." detalle={error} onRetry={refetch} />
+                      : search ? 'Sin resultados para la búsqueda' : 'No hay usuarios registrados'}
                   </td></tr>
                 )}
               </tbody>
@@ -801,34 +766,34 @@ export default function UsersPage() {
 
       {/* ── Modal: Editar usuario ── */}
       {editUsuario && (
-        <Modal title="Editar usuario" onClose={() => setEditUsuario(null)}>
-          <UsuarioForm initial={editUsuario} isEdit onSubmit={handleEdit} saving={mutating} error={formError} />
-        </Modal>
+        <FormModal title="Editar usuario" onClose={() => setEditUsuario(null)} saving={mutating}>
+          <UsuarioForm initial={editUsuario} isEdit onSubmit={handleEdit} saving={mutating} error={formError} rolesPermitidos={rolesCreables} />
+        </FormModal>
       )}
 
       {/* ── Modal: Crear usuario ── */}
       {showCreate && (
-        <Modal title="Nuevo usuario" onClose={() => setShowCreate(false)}>
+        <FormModal title="Nuevo usuario" onClose={() => setShowCreate(false)} saving={mutating}>
           <UsuarioForm
             onSubmit={handleCreate} saving={mutating} error={formError} rolesPermitidos={rolesCreables}
             empresasDisponibles={empresas} requiereEmpresa={esSuperAdmin}
           />
-        </Modal>
+        </FormModal>
       )}
 
       {/* ── Modal: Añadir colaborador ── */}
       {showColaborador && (
-        <Modal title="Añadir colaborador temporal" onClose={() => setShowColaborador(false)}>
-          <ColaboradorForm onSubmit={handleCrearColaborador} saving={mutating} error={formError} />
-        </Modal>
+        <FormModal title="Añadir colaborador temporal" onClose={() => setShowColaborador(false)} saving={mutating}>
+          <ColaboradorForm onSubmit={handleCrearColaborador} saving={mutating} error={formError} rolesPermitidos={rolesCreables} />
+        </FormModal>
       )}
 
       {/* ── Modal: Resultado colaborador creado ── */}
       {colaboradorResult && (
-        <Modal title="Colaborador creado" onClose={() => setColaboradorResult(null)}>
+        <FormModal title="Colaborador creado" onClose={() => setColaboradorResult(null)}>
           <div style={{ textAlign: 'center', padding: '8px 0 16px' }}>
             <div style={{ display: 'flex', justifyContent: 'center', color: 'var(--accent-green)', marginBottom: 'var(--space-3)' }}>
-              <CheckCircle2 size={36} aria-hidden="true" />
+              <IconoExito size={36} aria-hidden="true" />
             </div>
             <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 16, color: 'var(--text-primary)', marginBottom: 6 }}>
               {colaboradorResult.nickname}
@@ -838,20 +803,29 @@ export default function UsersPage() {
             </div>
             <div style={{ background: 'var(--bg-inset)', borderRadius: 8, padding: '14px 20px', textAlign: 'left', marginBottom: 'var(--space-4)' }}>
               <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', fontFamily: 'var(--font-data)', letterSpacing: '0.1em', marginBottom: 'var(--space-2)' }}>CREDENCIALES DE ACCESO</div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 6 }}>
                 <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Usuario</span>
-                <code style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--accent-amber)' }}>{colaboradorResult.nickname}</code>
+                <code style={{ marginLeft: 'auto', fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--accent-amber)' }}>{colaboradorResult.nickname}</code>
+                <CopiarBoton texto={colaboradorResult.nickname} ariaLabel="Copiar usuario" />
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
                 <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Contraseña</span>
-                <code style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--accent-amber)' }}>{colaboradorResult.password}</code>
+                <code style={{ marginLeft: 'auto', fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--accent-amber)' }}>{colaboradorResult.password}</code>
+                <CopiarBoton texto={colaboradorResult.password} ariaLabel="Copiar contraseña" />
               </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'var(--space-3)' }}>
+              <CopiarBoton
+                texto={`Usuario: ${colaboradorResult.nickname}\nContraseña: ${colaboradorResult.password}`}
+                label="Copiar ambos"
+              />
             </div>
             <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-faint)', fontFamily: 'var(--font-ui)' }}>
-              Compartí estas credenciales de forma segura. El acceso se revoca automáticamente al vencer.
+              <strong style={{ color: 'var(--text-primary)' }}>Guarda estas credenciales ahora: no se vuelven a mostrar.</strong>{' '}
+              El acceso se revoca automáticamente al vencer.
             </div>
           </div>
-        </Modal>
+        </FormModal>
       )}
 
       {/* ── Confirm: deshabilitar / reactivar ── */}
@@ -859,15 +833,18 @@ export default function UsersPage() {
         <ConfirmDialog
           message={
             confirmToggle.activarDespues
-              ? `¿Reactivar a ${confirmToggle.usuario.email}?`
-              : `¿Deshabilitar a ${confirmToggle.usuario.email}?`
+              ? `¿Activar a ${confirmToggle.usuario.email}?`
+              : `¿Desactivar a ${confirmToggle.usuario.email}?`
           }
-          confirmLabel={confirmToggle.activarDespues ? 'Reactivar' : 'Deshabilitar'}
-          danger={!confirmToggle.activarDespues}
+          confirmLabel={confirmToggle.activarDespues ? 'Activar' : 'Desactivar'}
+          tone={confirmToggle.activarDespues ? 'default' : 'warning'}
           onConfirm={handleToggle}
           onCancel={() => setConfirmToggle(null)}
           loading={mutating}
-        />
+        >
+          {/* The page-level error banner sits behind the modal, so show it here. */}
+          {mutError && <AvisoEnLinea tone="error" style={{ marginTop: 'var(--space-3)' }}>{mutError}</AvisoEnLinea>}
+        </ConfirmDialog>
       )}
 
       {/* ── Confirm: eliminar permanentemente ── */}
@@ -878,17 +855,17 @@ export default function UsersPage() {
               <span>¿Eliminar permanentemente a <strong>{confirmEliminar.usuario.email}</strong>?</span>
               <br /><br />
               <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
-                Esta acción no se puede deshacer. El usuario perderá acceso inmediatamente y todos sus datos serán eliminados.
+                El usuario perderá acceso inmediatamente y todos sus datos serán eliminados. Esta acción no se puede deshacer.
               </span>
               {eliminarError && (
                 <div style={{ marginTop: 'var(--space-3)', padding: '8px 12px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, color: '#dc2626', fontSize: 'var(--text-xs)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <AlertCircle size={13} /> {eliminarError}
+                  <IconoError size={13} /> {eliminarError}
                 </div>
               )}
             </>
           }
           confirmLabel="Eliminar"
-          danger
+          tone="danger"
           onConfirm={handleEliminar}
           onCancel={() => setConfirmEliminar(null)}
           loading={mutating}
@@ -896,7 +873,7 @@ export default function UsersPage() {
       )}
 
       {/* ── Toast de éxito ── */}
-      {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
+      {toast && <Aviso message={toast} onDismiss={() => setToast(null)} />}
     </>
   );
 }

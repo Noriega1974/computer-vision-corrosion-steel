@@ -1,19 +1,6 @@
 import React from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import {
-  LayoutDashboard,
-  LayoutGrid,
-  MapPin,
-  Globe,
-  Users,
-  Settings,
-  LogOut,
-  ChevronLeft,
-  ChevronRight,
-  X,
-  Upload,
-  Info,
-} from 'lucide-react';
+import { IconoAjustes, IconoCerrar, IconoCuadricula, IconoFlechaAdelante, IconoFlechaAtras, IconoInfo, IconoMundo, IconoPanel, IconoSalir, IconoSubir, IconoUbicacion, IconoUsuarios } from './Iconos';
 
 import { useAuth } from '../auth/AuthContext';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
@@ -40,26 +27,26 @@ function claveDeUsuario(base, email) {
 const NAV_ITEMS = [
   {
     path: '/que-es-pixelrust',
-    icon: Info,
+    icon: IconoInfo,
     label: '¿Qué es PixelRust?',
   },
 
   {
     path: '/dashboard',
-    icon: LayoutDashboard,
+    icon: IconoPanel,
     label: 'Dashboard',
   },
 
   {
     path: '/upload',
-    icon: Upload,
-    label: 'Subir medición',
+    icon: IconoSubir,
+    label: 'Nueva medición',
     roles: ['super_admin', 'admin', 'tecnico'],
   },
 
   {
     path: '/galeria',
-    icon: LayoutGrid,
+    icon: IconoCuadricula,
     label: 'Galería',
   },
 
@@ -67,21 +54,21 @@ const NAV_ITEMS = [
 
   {
     path: '/zonas',
-    icon: Globe,
+    icon: IconoMundo,
     label: 'Zonas',
     roles: ['super_admin'],
   },
 
   {
     path: '/puntos',
-    icon: MapPin,
+    icon: IconoUbicacion,
     label: 'Puntos',
     roles: ['super_admin', 'admin', 'tecnico'],
   },
 
   {
     path: '/usuarios',
-    icon: Users,
+    icon: IconoUsuarios,
     label: 'Usuarios',
     roles: ['super_admin', 'admin', 'tecnico'],
   },
@@ -92,7 +79,7 @@ const NAV_ITEMS = [
     // Incluye "Mi perfil" (foto, nombre, contraseña) -- ya no es pestaña
     // aparte, así que sin `roles` queda visible para los 4 roles.
     path: '/configuracion',
-    icon: Settings,
+    icon: IconoAjustes,
     label: 'Configuración',
   },
 ];
@@ -115,7 +102,7 @@ function getInitials(name = '') {
 }
 
 const ROL_LABELS = {
-  super_admin: 'Super Admin',
+  super_admin: 'Superadministrador',
   admin: 'Administrador',
   tecnico: 'Técnico',
   cliente: 'Cliente',
@@ -453,7 +440,7 @@ export default function Sidebar({
           : 'translateX(0)',
 
         transition:
-          'transform 0.22s ease',
+          'transform var(--dur-base) var(--ease-out)',
 
         boxShadow:
           '12px 0 40px rgba(15,45,90,0.18)',
@@ -473,7 +460,7 @@ export default function Sidebar({
         zIndex: 20,
 
         transition:
-          'width 0.2s ease',
+          'width var(--dur-base) var(--ease-out)',
 
         overflow: 'hidden',
       };
@@ -673,7 +660,7 @@ export default function Sidebar({
             flexShrink: 0,
 
             transition:
-              'all 0.18s ease',
+              'all var(--dur-base) var(--ease-out)',
           }}
           onMouseEnter={e => {
             e.currentTarget.style.background =
@@ -691,11 +678,11 @@ export default function Sidebar({
           }}
         >
           {isMobile ? (
-            <X size={18} />
+            <IconoCerrar size={18} />
           ) : collapsed ? (
-            <ChevronRight size={16} />
+            <IconoFlechaAdelante size={16} />
           ) : (
-            <ChevronLeft size={16} />
+            <IconoFlechaAtras size={16} />
           )}
         </button>
       </div>
@@ -795,7 +782,7 @@ export default function Sidebar({
                   '1px solid transparent',
 
                 transition:
-                  'all 0.18s ease',
+                  'all var(--dur-base) var(--ease-out)',
               }}
               onMouseEnter={e => {
                 e.currentTarget.style.background =
@@ -902,7 +889,7 @@ export default function Sidebar({
                       fontFamily:
                         'var(--font-data)',
 
-                      fontSize: 9,
+                      fontSize: 11,
 
                       color:
                         'var(--nav-active-text)',
@@ -995,7 +982,9 @@ export default function Sidebar({
         ─────────────────────────────────────────────── */}
 
         <button
+          className="sidebar-nav-item"
           onClick={onLogout}
+          aria-label="Cerrar sesión"
           title={
             collapsed &&
             !isMobile
@@ -1027,18 +1016,9 @@ export default function Sidebar({
                 ? '9px 0'
                 : '9px 10px',
 
-            background:
-              'transparent',
-
-            border:
-              '1px solid transparent',
-
             cursor: 'pointer',
 
             borderRadius: 10,
-
-            color:
-              'var(--accent-red)',
 
             fontFamily:
               'var(--font-ui)',
@@ -1047,25 +1027,9 @@ export default function Sidebar({
 
             fontSize: 'var(--text-xs)',
 
-            transition:
-              'all 0.18s ease',
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.background =
-              'rgba(220,38,38,0.07)';
-
-            e.currentTarget.style.border =
-              '1px solid rgba(220,38,38,0.10)';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.background =
-              'transparent';
-
-            e.currentTarget.style.border =
-              '1px solid transparent';
           }}
         >
-          <LogOut
+          <IconoSalir
             size={17}
             strokeWidth={1.8}
             style={{
