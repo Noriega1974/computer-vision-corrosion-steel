@@ -32,6 +32,15 @@ Rutas API Gateway:
                                              (no bloqueante)
   PUT    /empresas/{id_empresa}           → editar nombre, activar-desactivar, departamento,
                                              ciudad, tipo_material y/o `zonas` (solo super_admin)
+  POST   /empresas/{id_empresa}/logo/upload-url → POST prefirmado de S3 para el logo (imagen
+                                             JPEG/PNG/WebP, máx. 5 MB); body {content_type}
+  PUT    /empresas/{id_empresa}/logo      → fija `logo_key` (la clave devuelta por upload-url) y
+                                             borra el logo anterior; body {logo_key}
+  DELETE /empresas/{id_empresa}/logo      → quita el logo (atributo + objeto en S3)
+                                             Las tres: super_admin cualquier empresa; admin y
+                                             tecnico solo la suya; cliente 403.
+                                             GET /empresas y GET /usuarios/me devuelven `logo_url`
+                                             / `empresa_logo_url` (GET prefirmado, 15 min).
 
 Evento directo (EventBridge cron diario):
   Sin httpMethod → ejecuta limpieza de colaboradores vencidos
@@ -58,6 +67,8 @@ from datetime import datetime, timezone, timedelta
 
 import boto3
 from boto3.dynamodb.conditions import Key, Attr
+from botocore.config import Config
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -75,8 +86,17 @@ tabla_empresas = dynamodb.Table(TABLA_EMPRESAS)
 tabla_puntos_mediciones = dynamodb.Table(TABLA_PUNTOS_MEDICIONES)
 cognito  = boto3.client("cognito-idp", region_name=REGION)
 # Solo para dejar el marcador `empresas/{id_empresa}/` al crear una empresa
-# (grant acotado a PutObject bajo ese prefijo, ver CorriaComputeStack).
-s3 = boto3.client("s3", region_name=REGION)
+# (grant acotado a PutObject bajo ese prefijo, ver CorriaComputeStack). También
+# firma el POST/GET del logo (`empresas/{id}/logo/*`), de ahí la firma v4.
+s3 = boto3.client("s3", region_name=REGION, config=Config(signature_version="s3v4"))
+
+# Logo de la empresa: solo imágenes, máx. 5 MB, subida directa a S3 (POST prefirmado).
+LOGO_MAX_BYTES = 5 * 1024 * 1024
+EXPIRA_SUBIDA_S = 600       # vigencia del POST prefirmado
+EXPIRA_LECTURA_S = 900      # vigencia del GET prefirmado del logo
+EXTENSIONES_IMAGEN = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+_EXT_LOGO = "|".join(EXTENSIONES_IMAGEN.values())
+_CLAVE_LOGO = re.compile(rf"^empresas/[^/]+/logo/[0-9a-f-]{{36}}\.({_EXT_LOGO})$")
 
 ROLES_VALIDOS = {"super_admin", "admin", "tecnico", "cliente"}
 CAMPOS_PROTEGIDOS_ME    = {"email", "rol", "id_usuario", "cognito_sub", "fecha_creacion"}
@@ -191,6 +211,112 @@ def _usuario_actual(event: dict) -> dict | None:
     )
     items = resp.get("Items", [])
     return items[0] if items else None
+
+def _puede_gestionar_logo(creador: dict | None, id_empresa: str) -> bool:
+    """super_admin: cualquier empresa. admin y tecnico: solo la suya.
+    cliente (o sin registro / sin empresa): nunca."""
+    if not creador:
+        return False
+    rol = creador.get("rol")
+    if rol == "super_admin":
+        return True
+    return rol in ("admin", "tecnico") and bool(creador.get("empresa_id")) and creador.get("empresa_id") == id_empresa
+
+def _url_logo(clave: str | None) -> str | None:
+    """GET prefirmado de corta vigencia; None si no hay logo o falla la firma."""
+    if not clave:
+        return None
+    try:
+        return s3.generate_presigned_url(
+            "get_object", Params={"Bucket": BUCKET_NAME, "Key": clave}, ExpiresIn=EXPIRA_LECTURA_S
+        )
+    except Exception as e:
+        logger.warning("No se pudo firmar el logo %s: %s", clave, e)
+        return None
+
+def _con_logo_url(empresa: dict) -> dict:
+    """Copia de la empresa con `logo_url` (si tiene `logo_key`)."""
+    out = dict(empresa)
+    url = _url_logo(empresa.get("logo_key"))
+    if url:
+        out["logo_url"] = url
+    return out
+
+def _borrar_objeto(clave: str | None) -> None:
+    """Borrado best-effort del logo anterior: el ítem en DynamoDB manda."""
+    if not clave:
+        return
+    try:
+        s3.delete_object(Bucket=BUCKET_NAME, Key=clave)
+    except Exception as e:
+        logger.warning("No se pudo borrar el objeto %s: %s", clave, e)
+
+def _logo_upload_url(event: dict, id_empresa: str) -> dict:
+    """POST /empresas/{id}/logo/upload-url -> POST prefirmado (clave, tipo y
+    tamaño fijados por la política; S3 rechaza lo demás)."""
+    try:
+        body = json.loads(event.get("body") or "{}")
+    except ValueError:
+        return _respuesta(400, {"error": "El cuerpo debe ser JSON"})
+    content_type = str(body.get("content_type") or "").strip().lower()
+    extension = EXTENSIONES_IMAGEN.get(content_type)
+    if not extension:
+        return _respuesta(400, {"error": f"Tipo de imagen no soportado: {content_type or 'vacío'}. Usa JPEG, PNG o WebP"})
+    clave = f"empresas/{id_empresa}/logo/{uuid.uuid4()}.{extension}"
+    post = s3.generate_presigned_post(
+        Bucket=BUCKET_NAME,
+        Key=clave,
+        Fields={"Content-Type": content_type},
+        Conditions=[{"Content-Type": content_type}, ["content-length-range", 1, LOGO_MAX_BYTES]],
+        ExpiresIn=EXPIRA_SUBIDA_S,
+    )
+    return _respuesta(200, {
+        "url": post["url"],
+        "fields": post["fields"],
+        "logo_key": clave,
+        "max_bytes": LOGO_MAX_BYTES,
+        "expira_en_s": EXPIRA_SUBIDA_S,
+    })
+
+def _logo_fijar(event: dict, empresa: dict) -> dict:
+    """PUT /empresas/{id}/logo: valida la clave (prefijo propio, formato y
+    existencia), la guarda y borra el logo anterior."""
+    try:
+        body = json.loads(event.get("body") or "{}")
+    except ValueError:
+        return _respuesta(400, {"error": "El cuerpo debe ser JSON"})
+    clave = body.get("logo_key")
+    id_empresa = empresa["id_empresa"]
+    if not isinstance(clave, str) or not _CLAVE_LOGO.match(clave) or not clave.startswith(f"empresas/{id_empresa}/logo/"):
+        return _respuesta(400, {"error": "logo_key inválida"})
+    try:
+        peso = s3.head_object(Bucket=BUCKET_NAME, Key=clave)["ContentLength"]
+    except ClientError:
+        return _respuesta(400, {"error": "La imagen no se encontró: vuelve a subirla"})
+    if peso > LOGO_MAX_BYTES:
+        _borrar_objeto(clave)
+        return _respuesta(400, {"error": "La imagen supera los 5 MB"})
+    anterior = empresa.get("logo_key")
+    tabla_empresas.update_item(
+        Key={"id_empresa": id_empresa},
+        UpdateExpression="SET logo_key = :k",
+        ExpressionAttributeValues={":k": clave},
+    )
+    if anterior and anterior != clave:
+        _borrar_objeto(anterior)
+    return _respuesta(200, _con_logo_url(tabla_empresas.get_item(Key={"id_empresa": id_empresa}).get("Item", {})))
+
+def _logo_quitar(empresa: dict) -> dict:
+    """DELETE /empresas/{id}/logo: quita el atributo y el objeto."""
+    id_empresa = empresa["id_empresa"]
+    anterior = empresa.get("logo_key")
+    if anterior:
+        tabla_empresas.update_item(
+            Key={"id_empresa": id_empresa},
+            UpdateExpression="REMOVE logo_key",
+        )
+        _borrar_objeto(anterior)
+    return _respuesta(200, _con_logo_url(tabla_empresas.get_item(Key={"id_empresa": id_empresa}).get("Item", {})))
 
 def _fuera_de_alcance(creador: dict, usuario_objetivo: dict) -> bool:
     """True si `creador` (no super_admin) intenta operar sobre un usuario de
@@ -367,6 +493,7 @@ def lambda_handler(event: dict, context) -> dict:
                     "empresa_departamento": empresa.get("departamento") if empresa else None,
                     "empresa_ciudad": empresa.get("ciudad") if empresa else None,
                     "empresa_zonas": empresa.get("zonas") if empresa else None,
+                    "empresa_logo_url": _url_logo(empresa.get("logo_key")) if empresa else None,
                 }
             return _respuesta(200, usuario)
 
@@ -405,6 +532,7 @@ def lambda_handler(event: dict, context) -> dict:
                     "empresa_zonas": empresa.get("zonas") if empresa else None,
                     "empresa_departamento": empresa.get("departamento") if empresa else None,
                     "empresa_ciudad": empresa.get("ciudad") if empresa else None,
+                    "empresa_logo_url": _url_logo(empresa.get("logo_key")) if empresa else None,
                 }
             return _respuesta(200, actualizado)
 
@@ -780,7 +908,7 @@ def lambda_handler(event: dict, context) -> dict:
             if not creador or creador.get("rol") != "super_admin":
                 return _respuesta(403, {"error": "Solo super_admin puede ver la lista de empresas"})
             resp = tabla_empresas.scan()
-            return _respuesta(200, {"empresas": resp.get("Items", [])})
+            return _respuesta(200, {"empresas": [_con_logo_url(e) for e in resp.get("Items", [])]})
 
         # ── POST /empresas — crear (solo super_admin) ──────────────────────────
         elif metodo == "POST" and resource == "/empresas":
@@ -915,7 +1043,23 @@ def lambda_handler(event: dict, context) -> dict:
                 ExpressionAttributeNames=nombres,
                 ExpressionAttributeValues=valores,
             )
-            return _respuesta(200, tabla_empresas.get_item(Key={"id_empresa": id_empresa}).get("Item", {}))
+            return _respuesta(200, _con_logo_url(tabla_empresas.get_item(Key={"id_empresa": id_empresa}).get("Item", {})))
+
+        # ── Logo de la empresa: super_admin cualquiera; admin y tecnico solo la
+        # suya; cliente nunca (ver _puede_gestionar_logo) ──────────────────────
+        elif resource in ("/empresas/{id_empresa}/logo/upload-url", "/empresas/{id_empresa}/logo") and id_empresa:
+            creador = _usuario_actual(event)
+            if not _puede_gestionar_logo(creador, id_empresa):
+                return _respuesta(403, {"error": "No tienes permiso para cambiar el logo de esta empresa"})
+            empresa = tabla_empresas.get_item(Key={"id_empresa": id_empresa}).get("Item")
+            if not empresa:
+                return _respuesta(404, {"error": f"Empresa {id_empresa} no encontrada"})
+            if metodo == "POST" and resource.endswith("/upload-url"):
+                return _logo_upload_url(event, id_empresa)
+            if metodo == "PUT" and resource.endswith("/logo"):
+                return _logo_fijar(event, empresa)
+            if metodo == "DELETE" and resource.endswith("/logo"):
+                return _logo_quitar(empresa)
 
         return _respuesta(405, {"error": f"Método {metodo} no permitido"})
 

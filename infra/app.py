@@ -30,6 +30,7 @@ compute_stack = CorriaComputeStack(
     bloques_table=storage_stack.bloques_table,
     puntos_mediciones_table=storage_stack.puntos_mediciones_table,
     images_bucket=storage_stack.images_bucket,
+    models_bucket=storage_stack.models_bucket,
     user_pool=auth_stack.user_pool,
 )
 compute_stack.add_stack_dependency(storage_stack)
@@ -43,7 +44,6 @@ api_stack = CorriaApiStack(
     api_usuarios_fn=compute_stack.api_usuarios_fn,
     api_puntos_fn=compute_stack.api_puntos_fn,
     api_mediciones_fn=compute_stack.api_mediciones_fn,
-    api_alertas_fn=compute_stack.api_alertas_fn,
     inference_fn=compute_stack.inference_fn,
 )
 api_stack.add_stack_dependency(compute_stack)

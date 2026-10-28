@@ -1,13 +1,15 @@
 """
-CorriaComputeStack — 5 Lambda functions (api-reportes was eliminated, not
-ported — see README).
+CorriaComputeStack — 4 Lambda functions (api-reportes and api-alertas were
+eliminated, not ported/removed — see README).
 
 IAM is scoped per function to the minimum actually used by its handler code:
   - pf-corrosion-api-usuarios:    read/write on `usuarios` and `empresas`
                                    tables, + narrow Cognito admin-* actions on
                                    the user pool, + PutObject on the images
                                    bucket restricted to `empresas/*` (folder
-                                   marker created with each new empresa).
+                                   marker created with each new empresa) and
+                                   read/delete only under `empresas/*/logo/*`
+                                   (company logo: presigned POST/GET).
   - pf-corrosion-api-puntos:      read/write on the fused table and on
                                    `bloques` (the /bloques CRUD lives here),
                                    READ-ONLY on `usuarios` (multi-empresa
@@ -15,14 +17,20 @@ IAM is scoped per function to the minimum actually used by its handler code:
                                    empresa_id/rol via `_usuario_actual`, see
                                    handler.py) and `empresas`, + PutObject on
                                    the images bucket restricted to
-                                   `empresas/*` (folder marker per bloque).
+                                   `empresas/*` (folder marker per bloque) and
+                                   read/delete only under
+                                   `empresas/*/*/portada/*` (point cover photo).
   - pf-corrosion-api-mediciones:  read/write on the fused table + READ-ONLY
-                                   on `usuarios` (same RBAC need as above).
-  - pf-corrosion-api-alertas:     READ-ONLY on the fused table (the handler
-                                   only calls `tabla.query` — no writes) +
-                                   READ-ONLY on `usuarios` (RBAC).
+                                   on `usuarios` (same RBAC need as above) and
+                                   on `bloques` (validate the destination of a
+                                   bulk move) + PutObject on the images bucket
+                                   restricted to `empresas/*` (a move copies the
+                                   photo, thumbnail and result to the new
+                                   bloque prefix).
   - pf-corrosion-inference:       read/write on the fused table + S3
-                                   read/write on the images bucket + READ-ONLY
+                                   read/write on the images bucket, only under
+                                   `empresas/*` and `uploads/*` (presigned
+                                   uploads of big photos) + READ-ONLY
                                    on `usuarios` (RBAC: resolve empresa_id/rol
                                    of the caller uploading a medición, block
                                    `cliente`) and on `bloques` (validate the
@@ -37,6 +45,18 @@ IAM is scoped per function to the minimum actually used by its handler code:
                                    here is a *read-only* grant on `usuarios`,
                                    strictly required to resolve empresa_id,
                                    never a write path back into it.
+                                   Also READ-ONLY (s3:GetObject, prefixes
+                                   `unet/*` and `yolo/*`) on the models bucket,
+                                   to download the ONNX model at cold start.
+
+Model selection (CDK context, all optional). The defaults are the production
+state: U-Net final, no flags needed. YOLO exists only to time it against the
+U-Net on the same infrastructure (docs/runbook_unet.md):
+  -c model_type=unet|yolo        MODEL_TYPE env of the inference Lambda
+  -c model_key=<prefix>/<file>   S3 key inside the models bucket; the prefix
+                                 must match model_type (IAM is scoped to it)
+  -c model_sha256=<hex>          optional integrity check after the download
+The Lambda memory is fixed at 3008 MB for both models (fair timing).
 """
 import os
 
@@ -55,6 +75,20 @@ from constructs import Construct
 
 LAMBDA_SRC = os.path.join(os.path.dirname(__file__), "..", "lambda_src")
 
+MODEL_TYPES = ("yolo", "unet")
+DEFAULT_MODEL_TYPE = "unet"
+DEFAULT_MODEL_KEYS = {
+    "unet": "unet/unet_final_1024.onnx",
+    "yolo": "yolo/yolo_final_ep80_1024.onnx",
+}
+# Lambda CPU scales with memory (~1 vCPU per 1769 MB). The U-Net peaks at
+# ~1.2 GB RSS; 3008 MB gives ~1.7 vCPU and ~2x memory headroom. The same value
+# is used for YOLO so the latency comparison is fair.
+INFERENCE_MEMORY_MB = 3008
+# Decision thresholds (definitive values from the final evaluation).
+CONF_MINIMA = "0.25"      # YOLO confidence
+UNET_THRESHOLD = "0.5"    # U-Net probability
+
 
 class CorriaComputeStack(Stack):
     def __init__(
@@ -67,6 +101,7 @@ class CorriaComputeStack(Stack):
         bloques_table: dynamodb.Table,
         puntos_mediciones_table: dynamodb.Table,
         images_bucket: s3.Bucket,
+        models_bucket: s3.Bucket,
         user_pool: cognito.UserPool,
         **kwargs,
     ) -> None:
@@ -74,6 +109,18 @@ class CorriaComputeStack(Stack):
 
         region = Stack.of(self).region
         common_env = {"REGION": region}
+
+        # ── Model selection (context, see module docstring) ──────────────
+        model_type = str(self.node.try_get_context("model_type") or DEFAULT_MODEL_TYPE).strip().lower()
+        if model_type not in MODEL_TYPES:
+            raise ValueError(f"context model_type must be one of {MODEL_TYPES}, got {model_type!r}")
+        model_key = str(self.node.try_get_context("model_key") or DEFAULT_MODEL_KEYS[model_type])
+        if not model_key.startswith(f"{model_type}/"):
+            raise ValueError(
+                f"context model_key must live under the {model_type}/ prefix for model_type={model_type} "
+                "(IAM is scoped to the unet/ and yolo/ prefixes)"
+            )
+        model_sha256 = str(self.node.try_get_context("model_sha256") or "")
 
         # ── api-usuarios ─────────────────────────────────────────────────
         self.api_usuarios_fn = _lambda.Function(
@@ -99,6 +146,12 @@ class CorriaComputeStack(Stack):
         # bucket (carpeta lógica de la empresa). Solo PutObject y solo bajo
         # ese prefijo — nunca lectura ni borrado del bucket.
         images_bucket.grant_put(self.api_usuarios_fn, "empresas/*")
+        # Logo de la empresa (`empresas/{id}/logo/*`): la subida es un POST
+        # prefirmado (lo firma este rol, cubierto por el PutObject de arriba);
+        # además lee (GET prefirmado, HEAD al fijar) y borra el logo anterior,
+        # solo bajo ese prefijo.
+        images_bucket.grant_read(self.api_usuarios_fn, "empresas/*/logo/*")
+        images_bucket.grant_delete(self.api_usuarios_fn, "empresas/*/logo/*")
         # Lectura: verificar que un empresa_id exista al crear un usuario con
         # empresa explícita (super_admin). Escritura: POST /empresas (crear
         # empresas nuevas), restringido a super_admin dentro del handler.
@@ -157,6 +210,11 @@ class CorriaComputeStack(Stack):
         # POST /bloques deja un marcador vacío `empresas/{empresa_id}/{id_bloque}/`
         # en el bucket. Solo PutObject bajo ese prefijo.
         images_bucket.grant_put(self.api_puntos_fn, "empresas/*")
+        # Foto de portada del punto (`empresas/{e}/{b}/portada/*`): POST
+        # prefirmado (lo firma este rol), GET prefirmado, HEAD al fijar y
+        # borrado de la anterior, solo bajo ese prefijo.
+        images_bucket.grant_read(self.api_puntos_fn, "empresas/*/*/portada/*")
+        images_bucket.grant_delete(self.api_puntos_fn, "empresas/*/*/portada/*")
 
         # ── api-mediciones ───────────────────────────────────────────────
         self.api_mediciones_fn = _lambda.Function(
@@ -172,37 +230,23 @@ class CorriaComputeStack(Stack):
                 **common_env,
                 "TABLA_MEDICIONES": puntos_mediciones_table.table_name,
                 "TABLA_USUARIOS": usuarios_table.table_name,
+                "TABLA_BLOQUES": bloques_table.table_name,
                 "BUCKET_NAME": images_bucket.bucket_name,
             },
         )
         puntos_mediciones_table.grant_read_write_data(self.api_mediciones_fn)
+        # TransactWriteItems (mover en lote) se autoriza con PutItem/DeleteItem,
+        # que el grant anterior ya cubre: no hace falta otra acción IAM.
+        # Solo lee: validar el punto destino de POST /mediciones/lote/mover.
+        bloques_table.grant_read_data(self.api_mediciones_fn)
         # RBAC multi-empresa: solo lee `usuarios` (resolver caller) — nunca escribe.
         usuarios_table.grant_read_data(self.api_mediciones_fn)
-        # Mínimo privilegio: el handler solo lee (generate_presigned_url para
-        # GET) y borra objetos (DELETE /mediciones) — nunca escribe (PutObject)
-        # a este bucket, así que no le damos grant_read_write.
+        # Mínimo privilegio: lee (presigned GET, y origen de las copias al
+        # mover) y borra objetos (DELETE y movimientos). Escribir (PutObject)
+        # solo bajo `empresas/*`: el destino de las copias de un movimiento.
         images_bucket.grant_read(self.api_mediciones_fn)
         images_bucket.grant_delete(self.api_mediciones_fn)
-
-        # ── api-alertas (read-only — handler only queries) ─────────────────
-        self.api_alertas_fn = _lambda.Function(
-            self,
-            "ApiAlertasFunction",
-            function_name="pf-corrosion-api-alertas",
-            runtime=_lambda.Runtime.PYTHON_3_11,
-            handler="handler.lambda_handler",
-            code=_lambda.Code.from_asset(os.path.join(LAMBDA_SRC, "api_alertas")),
-            memory_size=128,
-            timeout=Duration.seconds(30),
-            environment={
-                **common_env,
-                "TABLA_MEDICIONES": puntos_mediciones_table.table_name,
-                "TABLA_USUARIOS": usuarios_table.table_name,
-            },
-        )
-        puntos_mediciones_table.grant_read_data(self.api_alertas_fn)
-        # RBAC multi-empresa: solo lee `usuarios` (resolver caller) — nunca escribe.
-        usuarios_table.grant_read_data(self.api_alertas_fn)
+        images_bucket.grant_put(self.api_mediciones_fn, "empresas/*")
 
         # ── inference ────────────────────────────────────────────────────
         # Runtime deps (onnxruntime, numpy, Pillow) ship via a Lambda Layer
@@ -216,7 +260,10 @@ class CorriaComputeStack(Stack):
             layer_version_name="pf-corrosion-inference-deps",
             code=_lambda.Code.from_asset(os.path.join(LAMBDA_SRC, "inference", "layer")),
             compatible_runtimes=[_lambda.Runtime.PYTHON_3_11],
-            description="onnxruntime, numpy, Pillow — see requirements.txt in this asset",
+            # NOTE: the deployed CloudFormation template holds "?" where an em dash was
+            # written (a Windows encoding accident). Keep the literal "?" so cdk diff
+            # does not see a description change, which would REPLACE the layer.
+            description="onnxruntime, numpy, Pillow ? see requirements.txt in this asset",
         )
 
         self.inference_fn = _lambda.Function(
@@ -234,15 +281,25 @@ class CorriaComputeStack(Stack):
                 exclude=["layer", "__pycache__"],
             ),
             layers=[inference_deps_layer],
-            memory_size=1024,
+            memory_size=INFERENCE_MEMORY_MB,
+            # 30 s = API Gateway's 29 s integration limit, rounded; a cold
+            # start (download ~98 MB + session load) still fits. The ONNX is
+            # cached in /tmp (512 MB default is enough for either model).
             timeout=Duration.seconds(30),
             environment={
                 **common_env,
-                "TABLA_PUNTOS": puntos_mediciones_table.table_name,
                 "TABLA_MEDICIONES": puntos_mediciones_table.table_name,
                 "TABLA_USUARIOS": usuarios_table.table_name,
                 "TABLA_BLOQUES": bloques_table.table_name,
                 "BUCKET_NAME": images_bucket.bucket_name,
+                # Model selection: the ONNX is downloaded from the models
+                # bucket at cold start (nothing is packaged in the zip).
+                "MODEL_TYPE": model_type,
+                "MODEL_BUCKET": models_bucket.bucket_name,
+                "MODEL_KEY": model_key,
+                **({"MODEL_SHA256": model_sha256} if model_sha256 else {}),
+                "CONF_MINIMA": CONF_MINIMA,
+                "UNET_THRESHOLD": UNET_THRESHOLD,
                 # Intentionally NO USER_POOL_ID / Cognito admin-* actions —
                 # see security fix note in this module's docstring. Only a
                 # READ-ONLY DynamoDB grant on `usuarios` was added (RBAC:
@@ -250,11 +307,26 @@ class CorriaComputeStack(Stack):
             },
         )
         puntos_mediciones_table.grant_read_write_data(self.inference_fn)
-        images_bucket.grant_read_write(self.inference_fn)
+        # Mínimo privilegio sobre el bucket de imágenes: `empresas/*` (fotos,
+        # miniaturas y resultados definitivos) y `uploads/*` (fotos que la web
+        # sube con el POST prefirmado de POST /medicion/upload-url: la Lambda
+        # firma con su rol, así que necesita PutObject ahí; después las lee y
+        # las borra). Nada más del bucket.
+        images_bucket.grant_read_write(self.inference_fn, "empresas/*")
+        images_bucket.grant_read_write(self.inference_fn, "uploads/*")
         usuarios_table.grant_read_data(self.inference_fn)
         # Solo lee: validar el bloque_id opcional al crear un punto y
         # congelar bloque_nombre en la medición — nunca escribe bloques.
         bloques_table.grant_read_data(self.inference_fn)
+        # Model download: GetObject only, only under unet/ and yolo/ (no
+        # List, no write, no other prefix). Without s3:ListBucket a missing
+        # key shows up as AccessDenied instead of NoSuchKey -- see the runbook.
+        self.inference_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["s3:GetObject"],
+                resources=[models_bucket.arn_for_objects("unet/*"), models_bucket.arn_for_objects("yolo/*")],
+            )
+        )
         # Intentionally NOT granted: write access to usuarios_table, Cognito actions.
 
         # ── EventBridge cleanup rule (collaborator expiry) ──────────────────
