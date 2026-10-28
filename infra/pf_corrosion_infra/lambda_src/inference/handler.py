@@ -1,7 +1,16 @@
 """
-pf-corrosion - Lambda de inferencia YOLOv8-seg ONNX.
+pf-corrosion - Lambda de inferencia (U-Net final ONNX; YOLOv8n-seg ONNX solo
+para la medicion comparativa de latencia).
 
-Recibe una imagen en base64 + el `bloque_id` de un bloque YA EXISTENTE
+El modelo se elige por configuracion: MODEL_TYPE ("yolo" | "unet") y MODEL_KEY
+(clave S3 del ONNX en el bucket de modelos, MODEL_BUCKET). Ningun modelo va
+empaquetado en la Lambda: model_store.py lo baja a /tmp una vez por arranque en
+frio (ver yolo_model.py, unet_model.py y docs/runbook_unet.md). Ambos devuelven
+el mismo contrato de respuesta, con el area calculada sobre la foto completa y
+los niveles ISO 10289 de _calcular_nivel.
+
+Recibe una imagen -- en base64 (`imagen_base64`, app movil) o ya subida a S3
+(`imagen_key`, web, ver abajo) -- + el `bloque_id` de un bloque YA EXISTENTE
 (elegido por el usuario de una lista), corre inferencia ONNX, guarda imagen
 + resultado en S3 y registra la medición en DynamoDB. Ya no se crea (ni se
 resuelve por clave lógica) ningún punto/bloque al subir una foto -- el
@@ -28,6 +37,15 @@ subir mediciones (403) — solo super_admin/admin/tecnico. El bloque elegido
 debe pertenecer a la empresa de quien sube (o el que sube es super_admin) y
 estar activo (ver _validar_bloque).
 
+Fotos grandes: Lambda/API Gateway rechazan cuerpos de ~6 MB (una foto de
+celular en base64 ya los supera). La web pide a POST /medicion/upload-url un
+POST prefirmado de S3, sube la foto directo al bucket bajo
+`uploads/{sub}/{uuid}.{ext}` (hasta 50 MB, lo impone S3 con la politica) y luego
+llama POST /medicion con `imagen_key`. La clave solo se acepta si cuelga del
+prefijo del propio usuario. El objeto temporal se borra al terminar (la copia
+definitiva es el JPEG re-codificado de abajo); lo que quede huerfano lo expira
+la regla de ciclo de vida del bucket (storage_stack.py).
+
 Layout S3: `empresas/{empresa_id}/{bloque_id}/{id_medicion}[_thumb].jpg|.json`.
 Reemplaza el viejo `raw/{id_punto}/...` + `resultados/{id_punto}/...`; las
 keys anteriores NO se migran — cada medición guarda las suyas en DynamoDB y
@@ -37,19 +55,25 @@ import base64
 import io
 import json
 import logging
+import math
 import os
+import re
+import time
 import uuid
 import urllib.request
 import urllib.error
 from decimal import Decimal
 from datetime import datetime, timezone
-from pathlib import Path
 
 import boto3
 from boto3.dynamodb.conditions import Key
-from PIL import Image
-import numpy as np
-import onnxruntime as ort
+from botocore.config import Config
+from botocore.exceptions import ClientError
+from PIL import Image, ImageOps
+
+import model_store
+import unet_model
+import yolo_model
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -60,20 +84,38 @@ TABLA_USUARIOS = os.environ["TABLA_USUARIOS"]
 TABLA_BLOQUES = os.environ["TABLA_BLOQUES"]
 REGION = os.environ["REGION"]
 
-RUTA_MODELO = Path(__file__).parent / "model" / "yolov8n-seg.onnx"
-CONF_MINIMA = 0.4
-# 2026-08-18: modelo "produccion_v3" (corrosion-beta/runs/definitivo/split_10_2),
-# entrenado y validado a 1024px -- antes era 640. Todo lo que sigue en este
-# archivo deriva el tamano de IMGSZ, asi que no hay mas literales que tocar.
-IMGSZ = 1024
+_primera_inferencia = True  # True hasta que este contenedor atiende su 1a foto
 
-_sesion_onnx: ort.InferenceSession | None = None
-
-s3 = boto3.client("s3", region_name=REGION)
+# SigV4 explicito: el POST prefirmado (generate_presigned_post) con las
+# credenciales temporales del rol lo necesita para quedar firmado en us-east-1.
+s3 = boto3.client("s3", region_name=REGION, config=Config(signature_version="s3v4"))
 dynamodb = boto3.resource("dynamodb", region_name=REGION)
 tabla_mediciones = dynamodb.Table(TABLA_MEDICIONES)
 tabla_usuarios = dynamodb.Table(TABLA_USUARIOS)
 tabla_bloques = dynamodb.Table(TABLA_BLOQUES)
+
+
+# Pillow avisa por encima de MAX_IMAGE_PIXELS y lanza DecompressionBombError por
+# encima del doble (por defecto ~89 MP / ~178 MP). Una foto de celular de 200 MP
+# es legitima: subimos el limite (el doble = 500 MP sigue protegiendo de bombas).
+Image.MAX_IMAGE_PIXELS = 250_000_000
+# Por encima de este tamano un JPEG se decodifica a media resolucion
+# (Image.draft): a 200 MP serian ~600 MB por copia y el handler llega a tener
+# 3-4 copias a la vez mas el modelo (~1,2 GB) en 3008 MB. Las fotos normales
+# (<= 100 MP) NO se tocan: la entrada de los modelos es identica al evaluador.
+MAX_PIXELES_SIN_REDUCIR = 100_000_000
+
+MAX_BYTES_FOTO = 50 * 1024 * 1024        # tope de la foto subida (50 MB)
+PREFIJO_SUBIDAS = "uploads"
+EXPIRA_SUBIDA_S = 600                     # vigencia del POST prefirmado
+EXTENSIONES = {                           # content-type permitido -> extension
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/bmp": "bmp",
+    "image/tiff": "tif",
+}
+_CLAVE_SUBIDA = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 # ── Helpers de tipo ─────────────────────────────────────────────────────────
@@ -153,247 +195,69 @@ def _validar_bloque(bloque_id, empresa_id_creador: str | None, es_super_admin: b
 
 # ── Inferencia ONNX ──────────────────────────────────────────────────────────
 
-def _obtener_sesion() -> ort.InferenceSession:
-    global _sesion_onnx
-    if _sesion_onnx is None:
-        logger.info("Cargando modelo ONNX desde %s", RUTA_MODELO)
-        _sesion_onnx = ort.InferenceSession(
-            str(RUTA_MODELO),
-            providers=["CPUExecutionProvider"],
-        )
-    return _sesion_onnx
+IMGSZ = 1024  # lado de entrada de AMBOS ONNX (se valida al cargar la sesion)
 
 
-def _preprocesar(imagen: Image.Image) -> tuple[np.ndarray, int, int]:
-    orig_w, orig_h = imagen.size
-    imagen_r = imagen.resize((IMGSZ, IMGSZ))
-    arr = np.array(imagen_r, dtype=np.float32) / 255.0
-    arr = arr.transpose(2, 0, 1)[np.newaxis, ...]
-    return arr, orig_w, orig_h
+def _abrir_imagen(datos: bytes) -> Image.Image:
+    """Decodifica la foto y aplica la orientacion EXIF ANTES de cualquier
+    otra cosa: modelo, JPEG guardado y miniatura ven la foto derecha."""
+    img = Image.open(io.BytesIO(datos))
+    ancho, alto = img.size
+    if img.format == "JPEG" and ancho * alto > MAX_PIXELES_SIN_REDUCIR:
+        # Solo fotos gigantes: el decodificador JPEG baja 1/2, 1/4 o 1/8 sin
+        # materializar la imagen completa (antes de cargarla).
+        img.draft("RGB", (ancho // 2, alto // 2))
+    return ImageOps.exif_transpose(img).convert("RGB")
 
 
 def _calcular_nivel(area_pct: float) -> int:
-    if area_pct <= 0:
+    """Niveles ISO 10289 sobre el % de la foto completa: 0 = sin corrosion
+    (< 0.05 %), 1 = leve (< 10 %), 2 = moderada (< 25 %), 3 = severa (>= 25 %)."""
+    if area_pct < 0.05:
         return 0
-    elif area_pct <= 10:
+    elif area_pct < 10:
         return 1
-    elif area_pct <= 30:
+    elif area_pct < 25:
         return 2
     return 3
 
 
-def _bbox_a_poligono(cx: float, cy: float, w: float, h: float) -> list[dict]:
-    """Convierte un bbox (centro normalizado) a polígono de 4 puntos [0,1].
+def _inferir(imagen: Image.Image, tiempos: dict | None = None) -> dict:
+    """Despacha al modelo elegido por MODEL_TYPE y devuelve SIEMPRE el mismo
+    contrato:
 
-    Se usa como respaldo cuando una máscara decodificada queda vacía (no
-    debería pasar en la práctica, pero un polígono degenerado rompería
-    SegmentationOverlay en el frontend).
+      nivel_corrosion, area_corroida_pct, confianza_promedio,
+      detecciones [{x,y,w,h,confianza,clase}], mascaras [{puntos:[{x,y}]}],
+      modelo (aditivo: "yolo:<archivo>" o "unet:<archivo>")
+
+    Llena `tiempos` (si se pasa) con los campos de TIEMPOS_INFERENCIA que se
+    conocen aqui; lambda_handler agrega el total y escribe la linea.
     """
-    x1 = max(0.0, cx - w / 2)
-    y1 = max(0.0, cy - h / 2)
-    x2 = min(1.0, cx + w / 2)
-    y2 = min(1.0, cy + h / 2)
-    return [
-        {"x": x1, "y": y1},
-        {"x": x2, "y": y1},
-        {"x": x2, "y": y2},
-        {"x": x1, "y": y2},
-    ]
+    global _primera_inferencia
+    tipo = model_store.tipo_modelo()
+    frio = _primera_inferencia
+    t0 = time.perf_counter()
 
+    sesion, t_modelo = model_store.obtener_sesion(s3, IMGSZ)
+    t1 = time.perf_counter()
+    modulo = unet_model if tipo == "unet" else yolo_model
+    resultado, onnx_ms = modulo.inferir(imagen, sesion)
+    resultado["nivel_corrosion"] = _calcular_nivel(resultado["area_corroida_pct"])
+    resultado["modelo"] = model_store.etiqueta_modelo(tipo)
 
-def _nms(cajas_xyxy: np.ndarray, confianzas: np.ndarray, iou_umbral: float = 0.7) -> list[int]:
-    """Non-Maximum Suppression clásico, greedy. `cajas_xyxy`: (N,4) en
-    x1,y1,x2,y2. Devuelve los índices que sobreviven, ordenados de mayor a
-    menor confianza.
-
-    iou_umbral=0.7 replica el default de Ultralytics (que el ONNX exportado
-    NO trae incorporado -- el postprocesado de NMS de Ultralytics no forma
-    parte del grafo ONNX, hay que hacerlo acá).
-    """
-    x1, y1, x2, y2 = cajas_xyxy[:, 0], cajas_xyxy[:, 1], cajas_xyxy[:, 2], cajas_xyxy[:, 3]
-    areas = (x2 - x1) * (y2 - y1)
-    orden = confianzas.argsort()[::-1]
-
-    sobreviven = []
-    while orden.size > 0:
-        i = orden[0]
-        sobreviven.append(int(i))
-        resto = orden[1:]
-        if resto.size == 0:
-            break
-
-        xx1 = np.maximum(x1[i], x1[resto])
-        yy1 = np.maximum(y1[i], y1[resto])
-        xx2 = np.minimum(x2[i], x2[resto])
-        yy2 = np.minimum(y2[i], y2[resto])
-        inter = np.maximum(0.0, xx2 - xx1) * np.maximum(0.0, yy2 - yy1)
-        iou = inter / (areas[i] + areas[resto] - inter)
-
-        orden = resto[iou <= iou_umbral]
-
-    return sobreviven
-
-
-def _casco_convexo(mask: np.ndarray) -> np.ndarray | None:
-    """Casco convexo (algoritmo de la cadena monótona de Andrew) de los
-    píxeles True de una máscara binaria. Devuelve un array (K,2) de puntos
-    (x,y) en píxeles, o None si la máscara no tiene suficientes puntos.
-
-    Es una aproximación real a la forma de la mancha -- ya no un rectángulo
-    -- pero no captura concavidades (una "C" de corrosión se dibujaría con
-    la abertura rellena). Trazar el contorno exacto pixel a pixel pide un
-    algoritmo de vision (Moore/Suzuki) que no está en ninguna librería ya
-    instalada en el layer de la Lambda (no hay cv2 ni skimage, solo numpy y
-    PIL) -- implementarlo a mano a esta altura es más riesgo de bug sutil en
-    producción del que vale la pena para esta pasada. El casco convexo usa
-    solo numpy, es un algoritmo de texto de facultad sin casos borde raros,
-    y ya es una mejora real sobre el rectángulo.
-    """
-    ys, xs = np.nonzero(mask)
-    if len(xs) < 3:
-        return None
-    puntos = sorted(set(zip(xs.tolist(), ys.tolist())))
-    if len(puntos) < 3:
-        return None
-
-    def cruz(o, a, b):
-        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
-
-    inferior: list[tuple[int, int]] = []
-    for p in puntos:
-        while len(inferior) >= 2 and cruz(inferior[-2], inferior[-1], p) <= 0:
-            inferior.pop()
-        inferior.append(p)
-
-    superior: list[tuple[int, int]] = []
-    for p in reversed(puntos):
-        while len(superior) >= 2 and cruz(superior[-2], superior[-1], p) <= 0:
-            superior.pop()
-        superior.append(p)
-
-    casco = inferior[:-1] + superior[:-1]
-    return np.array(casco)
-
-
-def _mascara_binaria(mask_coefs: np.ndarray, protos: np.ndarray, cx: float, cy: float, w: float, h: float, imgsz: int) -> np.ndarray:
-    """Decodifica la máscara real de UNA detección (mask_coefs @ prototipos),
-    la sube a resolución imgsz y la recorta a su bbox.
-    """
-    mh, mw = protos.shape[1], protos.shape[2]
-    logits = mask_coefs @ protos.reshape(32, -1)
-    mask_baja = (1 / (1 + np.exp(-logits))).reshape(mh, mw)
-
-    mask_img = Image.fromarray((mask_baja * 255).astype(np.uint8))
-    mask_completa = np.asarray(mask_img.resize((imgsz, imgsz), Image.BILINEAR), dtype=np.float32) / 255.0
-
-    x1 = max(0, int((cx - w / 2) * imgsz))
-    y1 = max(0, int((cy - h / 2) * imgsz))
-    x2 = min(imgsz, int((cx + w / 2) * imgsz))
-    y2 = min(imgsz, int((cy + h / 2) * imgsz))
-
-    binaria = np.zeros((imgsz, imgsz), dtype=bool)
-    if x2 > x1 and y2 > y1:
-        binaria[y1:y2, x1:x2] = mask_completa[y1:y2, x1:x2] > 0.5
-    return binaria
-
-
-def _inferir(imagen: Image.Image) -> dict:
-    """
-    Corre inferencia YOLOv8-seg ONNX y devuelve:
-      - nivel_corrosion, area_corroida_pct, confianza_promedio  (métricas globales)
-      - detecciones: [{x, y, w, h, confianza, clase}]           (para BoundingBoxOverlay)
-      - mascaras: [{puntos: [{x, y}...]}]                       (para SegmentationOverlay)
-
-    YOLOv8n-seg (1 clase) devuelve, a 1024px de entrada:
-      output0: [1, 37, 21504] — bbox(4) + conf(1) + mask_coefs(32)
-      output1: [1, 32, 256, 256] — prototipos de máscara
-
-    El ONNX exportado NO trae NMS incorporado (Ultralytics lo aplica en su
-    postprocesado normal, que queda afuera del grafo al exportar) -- de las
-    21504 celdas de la grilla, decenas caen sobre la misma mancha real y
-    pasaban el filtro de confianza todas. Confirmado en una foto real: 460
-    detecciones para un puñado de manchas. Ahora se filtra por confianza,
-    se aplica NMS (descarta cajas muy superpuestas con otra de más
-    confianza) y recién con lo que sobrevive se decodifica la máscara real
-    -- además de arreglar las cajas duplicadas en pantalla, evita decodificar
-    460 máscaras cuando alcanza con una decena.
-
-    `mascaras` ya no es el bbox como rectángulo: es el casco convexo de la
-    máscara real decodificada (ver _casco_convexo -- aproxima la forma real,
-    no captura concavidades). area_corroida_pct sale de unir esas mismas
-    máscaras en un solo mapa de píxeles antes de contar, así una mancha
-    cubierta por dos detecciones no se cuenta dos veces.
-    """
-    sesion = _obtener_sesion()
-    arr, orig_w, orig_h = _preprocesar(imagen)
-
-    nombre_entrada = sesion.get_inputs()[0].name
-    salidas = sesion.run(None, {nombre_entrada: arr})
-
-    dets_raw = salidas[0][0].T          # [N, 37]
-    protos = salidas[1][0]              # [32, 256, 256]
-
-    # Filtro de confianza, vectorizado, antes de tocar máscaras.
-    confs_todas = dets_raw[:, 4]
-    pasan = confs_todas >= CONF_MINIMA
-    dets_pasan = dets_raw[pasan]
-
-    area_total_px = IMGSZ * IMGSZ
-    area_union = np.zeros((IMGSZ, IMGSZ), dtype=bool)
-    detecciones = []
-    mascaras = []
-    confianzas = []
-
-    if dets_pasan.shape[0] > 0:
-        cx_n = dets_pasan[:, 0] / IMGSZ
-        cy_n = dets_pasan[:, 1] / IMGSZ
-        w_n  = dets_pasan[:, 2] / IMGSZ
-        h_n  = dets_pasan[:, 3] / IMGSZ
-        conf_n = dets_pasan[:, 4]
-
-        cajas_xyxy = np.stack([cx_n - w_n / 2, cy_n - h_n / 2, cx_n + w_n / 2, cy_n + h_n / 2], axis=1)
-        sobrevive = _nms(cajas_xyxy, conf_n)
-
-        for i in sobrevive:
-            cx, cy, w, h, conf = float(cx_n[i]), float(cy_n[i]), float(w_n[i]), float(h_n[i]), float(conf_n[i])
-
-            detecciones.append({
-                "x": round(cx, 5),
-                "y": round(cy, 5),
-                "w": round(w, 5),
-                "h": round(h, 5),
-                "confianza": round(conf, 4),
-                "clase": "corrosion",
-            })
-
-            mask_coefs = dets_pasan[i, 5:37]
-            binaria = _mascara_binaria(mask_coefs, protos, cx, cy, w, h, IMGSZ)
-            area_union |= binaria
-
-            casco = _casco_convexo(binaria)
-            if casco is not None:
-                puntos = [{"x": round(float(px) / IMGSZ, 5), "y": round(float(py) / IMGSZ, 5)} for px, py in casco]
-                mascaras.append({"puntos": puntos})
-            else:
-                mascaras.append({"puntos": _bbox_a_poligono(cx, cy, w, h)})
-
-            confianzas.append(conf)
-
-    area_pct = (area_union.sum() / area_total_px) * 100
-    conf_promedio = float(np.mean(confianzas)) if confianzas else 0.0
-
-    logger.info(
-        "Inferencia: %d detecciones, área=%.1f%%, conf_avg=%.3f",
-        len(detecciones), area_pct, conf_promedio,
-    )
-
-    return {
-        "nivel_corrosion": _calcular_nivel(area_pct),
-        "area_corroida_pct": round(area_pct, 2),
-        "confianza_promedio": round(conf_promedio, 4),
-        "detecciones": detecciones,
-        "mascaras": mascaras,
-    }
+    _primera_inferencia = False
+    if tiempos is not None:
+        tiempos.update({
+            "modelo": resultado["modelo"],
+            "arranque_en_frio": frio,
+            "descarga_ms": t_modelo["descarga_ms"],
+            "carga_ms": t_modelo["carga_ms"],
+            "inferencia_ms": round((time.perf_counter() - t1) * 1000),
+            "onnx_ms": onnx_ms,
+            "modelo_total_ms": round((time.perf_counter() - t0) * 1000),
+            "foto_px": list(imagen.size),
+        })
+    return resultado
 
 
 # ── Datos meteorológicos ─────────────────────────────────────────────────────
@@ -443,9 +307,135 @@ def _obtener_clima(lat: float, lng: float, fecha: str | None = None) -> dict | N
         return None
 
 
+# ── Subida directa a S3 (fotos grandes) ──────────────────────────────────────
+
+def _prefijo_usuario(sub: str) -> str:
+    return f"{PREFIJO_SUBIDAS}/{sub}/"
+
+
+def _generar_url_subida(event: dict) -> dict:
+    """POST /medicion/upload-url -> POST prefirmado de S3 para una foto.
+
+    Body: {"content_type": "image/jpeg"}. La politica fija la clave exacta, el
+    content-type y el tamano (1 byte a MAX_BYTES_FOTO); S3 rechaza lo demas.
+    Mismo bloqueo de rol que POST /medicion: `cliente` no sube fotos."""
+    creador = _usuario_actual(event)
+    if creador and creador.get("rol") == "cliente":
+        return _respuesta(403, {"error": "Tu rol no puede subir mediciones"})
+    sub = _claims(event).get("sub", "")
+    if not sub:
+        return _respuesta(401, {"error": "No se pudo identificar al usuario"})
+
+    try:
+        body = json.loads(event.get("body") or "{}")
+    except ValueError:
+        return _respuesta(400, {"error": "El cuerpo debe ser JSON"})
+    content_type = str(body.get("content_type") or "image/jpeg").strip().lower()
+    extension = EXTENSIONES.get(content_type)
+    if not extension:
+        return _respuesta(400, {"error": f"Tipo de imagen no soportado: {content_type}. Usa JPEG, PNG o WebP"})
+
+    clave = f"{_prefijo_usuario(sub)}{uuid.uuid4()}.{extension}"
+    post = s3.generate_presigned_post(
+        Bucket=BUCKET_NAME,
+        Key=clave,
+        Fields={"Content-Type": content_type},
+        Conditions=[
+            {"Content-Type": content_type},
+            ["content-length-range", 1, MAX_BYTES_FOTO],
+        ],
+        ExpiresIn=EXPIRA_SUBIDA_S,
+    )
+    return _respuesta(200, {
+        "url": post["url"],
+        "fields": post["fields"],
+        "imagen_key": clave,
+        "max_bytes": MAX_BYTES_FOTO,
+        "expira_en_s": EXPIRA_SUBIDA_S,
+    })
+
+
+def _leer_subida(imagen_key, sub: str) -> bytes:
+    """Lee de S3 la foto subida con el POST prefirmado. La clave debe colgar de
+    `uploads/{sub}/` (el `sub` del JWT, nunca del body): nadie puede analizar
+    la foto de otro usuario ni leer otro prefijo del bucket. Lanza ValueError
+    (→400) si la clave es invalida, no existe o pesa mas de MAX_BYTES_FOTO."""
+    if not isinstance(imagen_key, str) or not imagen_key.strip():
+        raise ValueError("imagen_key debe ser un texto no vacío")
+    prefijo = _prefijo_usuario(sub) if sub else None
+    resto = imagen_key[len(prefijo):] if prefijo and imagen_key.startswith(prefijo) else None
+    if not resto or not _CLAVE_SUBIDA.match(resto) or resto in (".", ".."):
+        raise ValueError("imagen_key no es válida para este usuario")
+    try:
+        meta = s3.head_object(Bucket=BUCKET_NAME, Key=imagen_key)
+        if meta["ContentLength"] > MAX_BYTES_FOTO:
+            _borrar_subida(imagen_key)
+            raise ValueError(f"La foto supera el máximo de {MAX_BYTES_FOTO // (1024 * 1024)} MB")
+        return s3.get_object(Bucket=BUCKET_NAME, Key=imagen_key)["Body"].read()
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
+            raise ValueError("La foto no existe o expiró; vuelve a subirla") from e
+        raise
+
+
+def _borrar_subida(imagen_key: str) -> None:
+    """Borra el objeto temporal; un fallo aqui no debe tumbar la solicitud (la
+    regla de ciclo de vida del bucket lo expira igual)."""
+    try:
+        s3.delete_object(Bucket=BUCKET_NAME, Key=imagen_key)
+    except Exception as exc:
+        logger.warning("No se pudo borrar la subida temporal %s: %s", imagen_key, exc)
+
+
 # ── Handler principal ────────────────────────────────────────────────────────
 
 def lambda_handler(event: dict, context) -> dict:
+    """Envuelve _procesar_solicitud y deja UNA linea TIEMPOS_INFERENCIA por
+    solicitud (modelo, arranque en frio, descarga, carga, inferencia, total del
+    handler) para el estudio de latencia. En CloudWatch se filtra con
+    `TIEMPOS_INFERENCIA`; `total_ms` incluye validacion, clima, S3 y DynamoDB."""
+    t0 = time.perf_counter()
+    tiempos: dict = {}
+    ruta = event.get("resource") or event.get("path") or ""
+    if ruta.endswith("/upload-url"):
+        try:
+            return _generar_url_subida(event)
+        except Exception as e:
+            logger.exception("Error generando la URL de subida: %s", e)
+            return _respuesta(500, {"error": str(e)})
+    resp = _procesar_solicitud(event, tiempos)
+    if tiempos:  # vacio si la solicitud fallo o se rechazo antes de inferir
+        tiempos["total_ms"] = round((time.perf_counter() - t0) * 1000)
+        tiempos["status"] = resp["statusCode"]
+        logger.info("TIEMPOS_INFERENCIA %s", json.dumps(tiempos))
+    return resp
+
+
+def _tiempo_subida(valor) -> float | None:
+    """`tiempo_subida_s` opcional del cliente: numero finito entre 0 y 600.
+    Cualquier otra cosa se ignora (None); nunca debe tumbar la solicitud."""
+    if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+        return None
+    if not math.isfinite(valor) or not 0 <= valor <= 600:
+        return None
+    return round(float(valor), 2)
+
+
+NOMBRE_MAX = 80
+_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+
+def _nombre_foto(valor) -> str:
+    """`nombre` opcional que el usuario le da a la foto: sin caracteres de
+    control, espacios colapsados, recortado y truncado a 80. Vacio = no se guarda."""
+    if not isinstance(valor, str):
+        return ""
+    limpio = " ".join(_CONTROL_RE.sub(" ", valor).split())
+    return limpio[:NOMBRE_MAX].rstrip()
+
+
+def _procesar_solicitud(event: dict, tiempos: dict) -> dict:
+    t_inicio = time.perf_counter()
     try:
         creador = _usuario_actual(event)
         if creador and creador.get("rol") == "cliente":
@@ -458,16 +448,19 @@ def lambda_handler(event: dict, context) -> dict:
         body = json.loads(event.get("body", "{}"))
 
         imagen_b64       = body.get("imagen_base64")
+        imagen_key       = body.get("imagen_key")
         fuente           = body.get("fuente", "movil")
         bloque_id_body   = body.get("bloque_id")
         inferencia_local = body.get("inferencia_local", None)
         latitud_real     = body.get("latitud_real")
         longitud_real    = body.get("longitud_real")
         notas            = body.get("notas", "")
+        nombre           = _nombre_foto(body.get("nombre"))  # opcional
         timestamp_custom = body.get("timestamp_medicion")  # YYYY-MM-DD, opcional
+        tiempo_subida_s  = _tiempo_subida(body.get("tiempo_subida_s"))  # opcional
 
-        if not imagen_b64:
-            return _respuesta(400, {"error": "imagen_base64 es requerido"})
+        if not imagen_b64 and imagen_key is None:
+            return _respuesta(400, {"error": "imagen_base64 o imagen_key es requerido"})
         if not bloque_id_body:
             return _respuesta(400, {"error": "bloque_id es requerido"})
 
@@ -500,10 +493,20 @@ def lambda_handler(event: dict, context) -> dict:
         fecha_clima = timestamp_custom if timestamp_custom else None
         clima = _obtener_clima(coords.get("lat"), coords.get("lng"), fecha_clima) if coords.get("lat") is not None else None
 
-        datos_imagen = base64.b64decode(imagen_b64)
-        imagen = Image.open(io.BytesIO(datos_imagen)).convert("RGB")
+        if imagen_b64:
+            datos_imagen = base64.b64decode(imagen_b64)
+        else:
+            try:
+                datos_imagen = _leer_subida(imagen_key, tomado_por_id)
+            except ValueError as e:
+                return _respuesta(400, {"error": str(e)})
+        try:
+            imagen = _abrir_imagen(datos_imagen)
+        except Image.DecompressionBombError:
+            return _respuesta(400, {"error": "La foto tiene demasiados píxeles para analizarla"})
+        del datos_imagen
 
-        resultado_ml = _inferir(imagen)
+        resultado_ml = _inferir(imagen, tiempos)
 
         id_medicion       = f"MED-{uuid.uuid4()}"
         # Layout S3 por empresa/bloque: los objetos quedan agrupados igual
@@ -558,6 +561,10 @@ def lambda_handler(event: dict, context) -> dict:
             )
             s3_thumb_escrito = True
 
+            # Tiempo de servidor desde que llego la solicitud hasta justo antes
+            # de guardar (el cliente suma su tiempo de subida aparte).
+            tiempo_procesamiento_ms = round((time.perf_counter() - t_inicio) * 1000)
+
             resultado_completo = {
                 "id_medicion":    id_medicion,
                 "id_punto":       bloque_id_body,
@@ -572,7 +579,12 @@ def lambda_handler(event: dict, context) -> dict:
                 "s3_key_thumbnail":  s3_key_thumbnail,
                 "s3_key_resultado":  s3_key_resultado,
                 "clima":            clima,
+                "tiempo_procesamiento_ms": tiempo_procesamiento_ms,
             }
+            if tiempo_subida_s is not None:
+                resultado_completo["tiempo_subida_s"] = tiempo_subida_s
+            if nombre:
+                resultado_completo["nombre"] = nombre
 
             s3.put_object(
                 Bucket=BUCKET_NAME,
@@ -602,7 +614,13 @@ def lambda_handler(event: dict, context) -> dict:
                 "inferencia_local": floats_to_decimal(inferencia_local or {}),
                 "detecciones":      floats_to_decimal(resultado_ml["detecciones"]),
                 "mascaras":         floats_to_decimal(resultado_ml["mascaras"]),
+                "modelo":           resultado_ml["modelo"],
+                "tiempo_procesamiento_ms": tiempo_procesamiento_ms,
             }
+            if tiempo_subida_s is not None:
+                item_db["tiempo_subida_s"] = Decimal(str(tiempo_subida_s))
+            if nombre:
+                item_db["nombre"] = nombre
             if tomado_por_id:
                 # Identidad del autor + atributo de GSI (usuario_id/timestamp).
                 # DynamoDB rechaza strings vacíos como clave de GSI, así que
@@ -649,6 +667,10 @@ def lambda_handler(event: dict, context) -> dict:
                 except Exception as rb:
                     logger.error("Rollback S3 (resultado) falló para %s: %s", s3_key_resultado, rb)
             raise
+
+        if not imagen_b64:
+            # La copia definitiva ya está en empresas/...: el temporal sobra.
+            _borrar_subida(imagen_key)
 
         logger.info(
             "Medición %s registrada: bloque=%s, nivel=%d, área=%.1f%%, detecciones=%d",

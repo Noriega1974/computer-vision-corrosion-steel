@@ -5,7 +5,8 @@ Mirrors the source system's routing exactly (Cognito User Pools authorizer,
 Lambda proxy integration — verified against the source account's
 `corria-api` REST API), minus the eliminated routes:
   - all of /reportes* (api-reportes is not ported — see README)
-  - /puntos/buscar (explicitly removed from api-puntos in this migration)
+  - /puntos* (no consumer after the punto->bloque merge; removed 2026-10)
+  - /alertas (alerts are not used; removed 2026-10)
 
 CORS is handled via API Gateway's default preflight support rather than
 manually replicating each `/resource OPTIONS` method — every ported Lambda
@@ -31,7 +32,6 @@ class CorriaApiStack(Stack):
         api_usuarios_fn: _lambda.Function,
         api_puntos_fn: _lambda.Function,
         api_mediciones_fn: _lambda.Function,
-        api_alertas_fn: _lambda.Function,
         inference_fn: _lambda.Function,
         **kwargs,
     ) -> None:
@@ -59,7 +59,6 @@ class CorriaApiStack(Stack):
         usuarios_integration = apigateway.LambdaIntegration(api_usuarios_fn)
         puntos_integration = apigateway.LambdaIntegration(api_puntos_fn)
         mediciones_integration = apigateway.LambdaIntegration(api_mediciones_fn)
-        alertas_integration = apigateway.LambdaIntegration(api_alertas_fn)
         inference_integration = apigateway.LambdaIntegration(inference_fn)
 
         # ── /usuarios ────────────────────────────────────────────────────
@@ -91,16 +90,13 @@ class CorriaApiStack(Stack):
         empresas_id = empresas.add_resource("{id_empresa}")
         empresas_id.add_method("PUT", usuarios_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
 
-        # ── /puntos ──────────────────────────────────────────────────────
-        puntos = self.api.root.add_resource("puntos")
-        puntos.add_method("GET", puntos_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
-        puntos.add_method("POST", puntos_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
-
-        puntos_id = puntos.add_resource("{id_punto}")
-        puntos_id.add_method("GET", puntos_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
-        puntos_id.add_method("PUT", puntos_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
-        puntos_id.add_method("DELETE", puntos_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
-        # Note: /puntos/buscar intentionally NOT recreated (eliminated).
+        # Logo de la empresa: POST prefirmado de S3 (upload-url), luego PUT fija
+        # la clave y DELETE la quita. RBAC en el handler (super_admin cualquier
+        # empresa; admin y tecnico la suya; cliente 403).
+        empresas_logo = empresas_id.add_resource("logo")
+        for metodo in ("PUT", "DELETE"):
+            empresas_logo.add_method(metodo, usuarios_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
+        empresas_logo.add_resource("upload-url").add_method("POST", usuarios_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
 
         # ── /bloques — carpetas dentro de una empresa (misma Lambda
         # api-puntos; RBAC por rol/empresa en el handler) ─────────────────
@@ -112,20 +108,34 @@ class CorriaApiStack(Stack):
         bloques_id.add_method("PUT", puntos_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
         bloques_id.add_method("DELETE", puntos_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
 
+        # Foto de portada del punto: mismo flujo que el logo (upload-url, PUT, DELETE).
+        bloques_portada = bloques_id.add_resource("portada")
+        for metodo in ("PUT", "DELETE"):
+            bloques_portada.add_method(metodo, puntos_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
+        bloques_portada.add_resource("upload-url").add_method("POST", puntos_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
+
         # ── /mediciones ──────────────────────────────────────────────────
         mediciones = self.api.root.add_resource("mediciones")
 
         mediciones_recientes = mediciones.add_resource("recientes")
         mediciones_recientes.add_method("GET", mediciones_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
 
+        # Acciones en lote (máx. 100 por solicitud; RBAC en el handler).
+        mediciones_lote = mediciones.add_resource("lote")
+        for accion in ("eliminar", "mover"):
+            mediciones_lote.add_resource(accion).add_method("POST", mediciones_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
+
         mediciones_id = mediciones.add_resource("{id_punto}")
         mediciones_id.add_method("GET", mediciones_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
         mediciones_id.add_method("DELETE", mediciones_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
+        mediciones_id.add_method("PATCH", mediciones_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
 
         # ── /medicion (inference) ────────────────────────────────────────
         medicion = self.api.root.add_resource("medicion")
         medicion.add_method("POST", inference_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
 
-        # ── /alertas ─────────────────────────────────────────────────────
-        alertas = self.api.root.add_resource("alertas")
-        alertas.add_method("GET", alertas_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
+        # POST prefirmado de S3 para fotos grandes (la web sube la foto directo
+        # al bucket y luego llama POST /medicion con `imagen_key`): el límite de
+        # 6 MB de Lambda / 10 MB de API Gateway no aplica a esa subida.
+        medicion_upload_url = medicion.add_resource("upload-url")
+        medicion_upload_url.add_method("POST", inference_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)

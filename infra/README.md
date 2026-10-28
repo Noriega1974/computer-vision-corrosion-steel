@@ -14,7 +14,7 @@ requires.
 ```
 CorriaAuthStack     Cognito User Pool (email login, groups: admin/tecnico/cliente)
 CorriaStorageStack  DynamoDB tables + S3 images bucket
-CorriaComputeStack  5 Lambda functions + EventBridge cleanup rule
+CorriaComputeStack  4 Lambda functions + EventBridge cleanup rule
 CorriaApiStack      API Gateway REST API (Cognito authorizer) + routes
 ```
 
@@ -104,10 +104,20 @@ pip install -r requirements.txt -t python \
 This produces a `python/` subdirectory (~131MB) that CDK zips into the
 layer asset on the next `cdk synth`/`cdk deploy`.
 
-The ONNX model itself (`yolov8n-seg.onnx`, ~13MB) IS already packaged
-directly in the Lambda's own asset folder
-(`pf_corrosion_infra/lambda_src/inference/model/`) — not in S3, not in the
-layer — matching how the source system shipped it.
+**Do not modify or rebuild this folder once it has been deployed**: CDK
+hashes its contents (including any `__pycache__`), so any change makes
+`cdk diff` REPLACE the layer. It must stay identical to the deployed layer
+version.
+
+**Models (definitive setup):** no model is packaged in the Lambda. Both the
+U-Net (production) and YOLO (only to time it on the same infrastructure) are
+ONNX files in the models bucket `pf-corrosion-models-<account>` (`unet/` and
+`yolo/` prefixes), downloaded to `/tmp` once per cold start. The model is
+chosen by CDK context (`-c model_type=unet|yolo -c model_key=...`, default:
+U-Net `unet/unet_final_1024.onnx`) and the Lambda is 3008 MB for both. The
+area is computed over the full photo and levels follow ISO 10289
+(0 / <0.05 / <10 / <25 / >=25 %). See `docs/runbook_unet.md` (deploy, swap,
+timing study) and `scripts/` (ONNX export, local handler, parity check).
 
 **Gotcha found and fixed while building the layer**: the inference
 function's `Code.from_asset()` originally zipped its whole source
@@ -116,7 +126,7 @@ would have bundled the same ~131MB of wheels a second time into the
 function's own code. Function (144MB) + layer (131MB) combined would have
 exceeded Lambda's 250MB unzipped deployment-package limit. Fixed with
 `exclude=["layer", "__pycache__"]` on that asset in `compute_stack.py`;
-function code is now ~13MB (handler + model) as intended. If you ever
+function code is now a few hundred KB (handlers only) as intended. If you ever
 restructure this Lambda's source layout, re-verify combined unzipped size
 stays under 250MB.
 
@@ -126,6 +136,8 @@ stays under 250MB.
 app.py                                CDK app entry point, wires all 4 stacks
 pf_corrosion_infra/stacks/            one file per stack
 pf_corrosion_infra/lambda_src/        one directory per Lambda's handler.py
-  api_usuarios/  api_puntos/  api_mediciones/  api_alertas/  inference/
-tests/unit/                           (empty — no unit tests written yet)
+  api_usuarios/  api_puntos/  api_mediciones/  inference/
+docs/runbook_unet.md                  inference runbook (models bucket, YOLO -> U-Net swap, timing)
+scripts/                              ONNX exports, local handler runner, parity check vs offline evaluator
+tests/unit/                           handler, YOLO/U-Net, model store, polygons and CDK template tests
 ```

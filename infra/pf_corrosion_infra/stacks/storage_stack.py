@@ -41,6 +41,16 @@ Structural changes vs. the source system:
        Point records did not previously carry a `timestamp` attribute (only
        `fecha_creacion`); the ported Lambda code now also writes `timestamp`
        on point records so they participate in this GSI's sort key.
+
+5. `models_bucket` (NEW): private, versioned bucket for the ONNX models
+   (`unet/<file>.onnx`, plus `yolo/<file>.onnx` while YOLO is being timed).
+   The U-Net ONNX (~98 MB) does not fit in the Lambda: the dependency layer
+   already weighs ~131 MB of the 250 MB unzipped limit, so the inference
+   function downloads the model from here at cold start (see lambda_src/
+   inference/model_store.py and docs/runbook_unet.md). Separate from the images bucket
+   on purpose: different lifecycle (a handful of large immutable objects),
+   no CORS, no presigned URLs, and api-mediciones holds read access to the
+   whole images bucket, which must never include model weights.
 """
 from aws_cdk import (
     Stack,
@@ -107,8 +117,7 @@ class CorriaStorageStack(Stack):
             removal_policy=RemovalPolicy.RETAIN,
         )
         # Listar los bloques de una empresa sin escanear (GET /bloques para
-        # roles con alcance de empresa, y resolución de bloque_nombre en
-        # GET /puntos).
+        # roles con alcance de empresa).
         self.bloques_table.add_global_secondary_index(
             index_name="empresa_id-index",
             partition_key=dynamodb.Attribute(name="empresa_id", type=dynamodb.AttributeType.STRING),
@@ -173,6 +182,19 @@ class CorriaStorageStack(Stack):
             ),
             encryption=s3.BucketEncryption.S3_MANAGED,
             removal_policy=RemovalPolicy.RETAIN,
+            # Subidas directas de la web (POST prefirmado, prefijo `uploads/`):
+            # la inferencia las borra al terminar; si el usuario sube la foto y
+            # nunca llama a POST /medicion, esto evita que queden para siempre.
+            lifecycle_rules=[
+                s3.LifecycleRule(
+                    id="expirar-subidas-temporales",
+                    prefix="uploads/",
+                    expiration=Duration.days(1),
+                    abort_incomplete_multipart_upload_after=Duration.days(1),
+                )
+            ],
+            # POST ya estaba permitido desde estos mismos orígenes: es el que usa
+            # el navegador para el POST prefirmado de fotos grandes.
             cors=[
                 s3.CorsRule(
                     allowed_methods=[s3.HttpMethods.GET, s3.HttpMethods.PUT, s3.HttpMethods.POST],
@@ -190,4 +212,19 @@ class CorriaStorageStack(Stack):
                     max_age=3600,
                 )
             ],
+        )
+
+        # ── models bucket (U-Net ONNX) ───────────────────────────────────
+        # Versioned so an overwritten/deleted model can be recovered, and
+        # SSL-only. Nothing in the app writes here: the owner uploads the
+        # ONNX by hand (runbook) and the inference Lambda only reads it.
+        self.models_bucket = s3.Bucket(
+            self,
+            "ModelsBucket",
+            bucket_name=f"pf-corrosion-models-{Stack.of(self).account}",
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+            encryption=s3.BucketEncryption.S3_MANAGED,
+            enforce_ssl=True,
+            versioned=True,
+            removal_policy=RemovalPolicy.RETAIN,
         )

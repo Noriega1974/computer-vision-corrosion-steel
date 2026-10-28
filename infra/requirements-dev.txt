@@ -1,1 +1,15 @@
 pytest==8.4.2
+
+# Pruebas del handler de inferencia (tests/unit/test_handler.py y afines).
+# Para parecerse a la Lambda usa python 3.11 y las versiones de la capa:
+#   numpy==1.26.4  Pillow==10.4.0  onnxruntime==1.16.3
+# (con python 3.13 instala las versiones más nuevas disponibles).
+numpy
+Pillow
+onnxruntime
+onnx
+boto3
+
+# Solo REFERENCIA de equivalencia en tests/unit/test_mask_polygons.py (se omiten
+# esas pruebas si falta). NO va en la Lambda: no cabe en la capa (~136 MB).
+opencv-python-headless
