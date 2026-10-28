@@ -22,10 +22,10 @@ const btnStyle = {
 };
 
 // Dibujar el área de una empresa como uno o más polígonos. Cada zona es
-// {puntos: [{lat,lng}, ...]} -- clic en el mapa agrega vértices, "Confirmar
-// zona" cierra el polígono actual. Varias zonas separadas son posibles
-// (campus partido por calles).
-export default function ZonaMapPicker({ zonas = [], onChange, puntoReferencia = null }) {
+// {puntos: [{lat,lng}, ...]} -- clic en el mapa agrega vértices en modo dibujo,
+// o mueve el punto de referencia cuando no se está dibujando. Varias zonas
+// separadas son posibles (campus partido por calles).
+export default function ZonaMapPicker({ zonas = [], onChange, puntoReferencia = null, onReferenciaChange }) {
   const mapRef = useRef(null);
   const instanceRef = useRef(null);
   const poligonosRef = useRef([]);
@@ -37,8 +37,10 @@ export default function ZonaMapPicker({ zonas = [], onChange, puntoReferencia = 
   const [puntosActuales, setPuntosActuales] = useState([]);
   const dibujandoRef = useRef(dibujando);
   const puntosActualesRef = useRef(puntosActuales);
+  const onReferenciaChangeRef = useRef(onReferenciaChange);
   dibujandoRef.current = dibujando;
   puntosActualesRef.current = puntosActuales;
+  onReferenciaChangeRef.current = onReferenciaChange;
 
   // Mapa una sola vez.
   useEffect(() => {
@@ -53,30 +55,29 @@ export default function ZonaMapPicker({ zonas = [], onChange, puntoReferencia = 
       attribution: '© OpenStreetMap', maxZoom: 18,
     }).addTo(map);
 
-    // Solo agrega vértices en modo dibujo.
+    // En modo dibujo agrega vértices; fuera de modo dibujo mueve la referencia.
     map.on('click', e => {
-      if (!dibujandoRef.current) return;
       const { lat, lng } = e.latlng;
-      setPuntosActuales([...puntosActualesRef.current, { lat: parseFloat(lat.toFixed(6)), lng: parseFloat(lng.toFixed(6)) }]);
+      const punto = { lat: parseFloat(lat.toFixed(6)), lng: parseFloat(lng.toFixed(6)) };
+      if (!dibujandoRef.current) {
+        onReferenciaChangeRef.current?.(punto);
+        return;
+      }
+      setPuntosActuales([...puntosActualesRef.current, punto]);
     });
 
     instanceRef.current = map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leafletReady]);
 
-  // Marcador azul de referencia: antes se creaba una sola vez al montar el
-  // mapa (con el `puntoReferencia` de ese instante, normalmente la
-  // geolocalización del navegador) y quedaba fijo ahí para siempre -- si la
-  // persona después tipeaba coordenadas manuales ("Ser más específico con la
-  // ubicación"), el punto azul seguía mostrando la posición vieja aunque el
-  // valor que se iba a guardar ya fuera otro. Este efecto corre en cada
-  // cambio de `puntoReferencia` y mueve (o crea) el marcador para que
-  // siempre refleje la ubicación real que se va a enviar, nunca la
-  // geolocalización congelada del primer render.
+  // Marcador azul de referencia: se actualiza y centra cuando cambian las
+  // coordenadas ingresadas o cuando se solicita la ubicación actual.
+  const refLat = puntoReferencia?.lat;
+  const refLng = puntoReferencia?.lng;
   useEffect(() => {
     const L = window.L;
-    if (!L || !instanceRef.current || !puntoReferencia) return;
-    const centro = [puntoReferencia.lat, puntoReferencia.lng];
+    if (!L || !instanceRef.current || refLat == null || refLng == null) return;
+    const centro = [refLat, refLng];
     if (referenciaRef.current) {
       referenciaRef.current.setLatLng(centro);
     } else {
@@ -87,7 +88,8 @@ export default function ZonaMapPicker({ zonas = [], onChange, puntoReferencia = 
         }),
       }).addTo(instanceRef.current).bindTooltip('Ubicación de referencia', { sticky: true });
     }
-  }, [puntoReferencia]);
+    instanceRef.current.setView(centro, Math.max(instanceRef.current.getZoom(), 15));
+  }, [refLat, refLng]);
 
   // Redibuja las zonas ya confirmadas.
   useEffect(() => {
@@ -163,12 +165,22 @@ export default function ZonaMapPicker({ zonas = [], onChange, puntoReferencia = 
         )}
       </div>
 
-      <div ref={mapRef} style={{ height: 340, borderRadius: 8, border: '1px solid var(--border)', overflow: 'hidden' }} />
+      <div
+        ref={mapRef}
+        style={{
+          height: 240,
+          width: '84%',
+          margin: '0 auto',
+          borderRadius: 8,
+          border: '1px solid var(--border)',
+          overflow: 'hidden',
+        }}
+      />
 
       <div style={{ marginTop: 6, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>
         {dibujando
-          ? `Hacé clic para agregar puntos (${puntosActuales.length}${puntosActuales.length < MIN_PUNTOS ? `, mínimo ${MIN_PUNTOS}` : ''}).`
-          : 'Tocá "Dibujar zona" y marcá los puntos del área en el mapa.'}
+          ? `Haz clic para agregar puntos (${puntosActuales.length}${puntosActuales.length < MIN_PUNTOS ? `, mínimo ${MIN_PUNTOS}` : ''}).`
+          : 'Toca "Dibujar zona" y marca los puntos del área en el mapa.'}
       </div>
 
       {zonas.length > 0 && (

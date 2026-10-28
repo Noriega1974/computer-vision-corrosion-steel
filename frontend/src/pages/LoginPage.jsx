@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useNavigate, Navigate } from 'react-router-dom';
-import { useAuth } from '../auth/AuthContext';
+import { useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { useAuth, obtenerRutaInicial } from '../auth/AuthContext';
 import pixelrustLogo from '../assets/pixelrust-logo.png';
 
 // Valida requisitos mínimos de contraseña según política de Cognito
@@ -39,6 +39,8 @@ const labelStyle = {
 export default function LoginPage() {
   const { login, confirmNewPassword, isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const destinoGuardado = location.state?.from;
 
   // Paso 1: login inicial
   const [loginMode, setLoginMode] = useState('email'); // 'email' | 'username'
@@ -52,9 +54,10 @@ export default function LoginPage() {
   const [nuevaPw, setNuevaPw] = useState('');
   const [confirmarPw, setConfirmarPw] = useState('');
 
-  // Si ya hay sesión activa, ir directo al dashboard
-  if (!isLoading && isAuthenticated) {
-    return <Navigate to="/" replace />;
+  // Si ya hay sesión activa, volver a la ruta solicitada o a la raíz inicial
+  if (!isLoading && isAuthenticated && !submitting) {
+    const destino = (destinoGuardado && destinoGuardado !== '/') ? destinoGuardado : '/';
+    return <Navigate to={destino} replace />;
   }
 
   async function handleSubmit(e) {
@@ -70,7 +73,9 @@ export default function LoginPage() {
         // Cognito requiere cambio de contraseña en el primer ingreso
         setStep('nueva-contrasena');
       } else {
-        navigate('/', { replace: true });
+        const rutaPorDefecto = obtenerRutaInicial(result);
+        const destino = (destinoGuardado && destinoGuardado !== '/') ? destinoGuardado : rutaPorDefecto;
+        navigate(destino, { replace: true });
       }
     } catch (err) {
       setError(err.message);
@@ -89,8 +94,8 @@ export default function LoginPage() {
 
     setSubmitting(true);
     try {
-      await confirmNewPassword(nuevaPw);
-      navigate('/', { replace: true });
+      const userData = await confirmNewPassword(nuevaPw);
+      navigate(obtenerRutaInicial(userData, true), { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {

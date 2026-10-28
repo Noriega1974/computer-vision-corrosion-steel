@@ -4,6 +4,7 @@ import {
   nivelColor, nivelBg, nivelLabel,
 } from '../lib/statusUtils';
 import { formatFecha } from '../utils/dateFormat';
+import { formatoPct } from '../lib/textUtils';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Thermometer, Droplets, CloudRain, Wind, Camera } from 'lucide-react';
 
@@ -109,8 +110,8 @@ export default function PlantDetail({ punto }) {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
                   <Icon size={16} strokeWidth={2} style={{ color: 'var(--accent-amber)', flexShrink: 0 }} />
                   <span style={{
-                    fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 15,
-                    color: 'var(--text-primary)', lineHeight: 1.1,
+                    fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 15,
+                    color: 'var(--text-primary)', lineHeight: 1.1, letterSpacing: '-0.02em',
                     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                   }}>
                     {v}
@@ -128,14 +129,14 @@ export default function PlantDetail({ punto }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <div>
             <div style={{
-              fontFamily: 'var(--font-data)', fontWeight: 800, fontSize: 16,
-              color: 'var(--text-primary)', lineHeight: 1.1,
+              fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 16,
+              color: 'var(--text-primary)', lineHeight: 1.1, letterSpacing: '-0.02em',
             }}>
               {mediciones.length} {mediciones.length === 1 ? 'medición' : 'mediciones'}
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1, fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums' }}>
               {ultimaMedicion?.area_corroida_pct != null
-                ? `Última área: ${ultimaMedicion.area_corroida_pct.toFixed(1)}%`
+                ? `Última área corroída: ${formatoPct(ultimaMedicion.area_corroida_pct)}`
                 : 'Sin lecturas registradas'}
             </div>
           </div>
@@ -280,7 +281,7 @@ function MedicionRow({ medicion }) {
           }} />
         </div>
         <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 2, display: 'flex', justifyContent: 'space-between' }}>
-          <span>Área: {(medicion.area_corroida_pct ?? 0).toFixed(1)}%</span>
+          <span>Área corroída: {formatoPct(medicion.area_corroida_pct)}</span>
           {medicion.notas && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 100 }}>{medicion.notas}</span>}
         </div>
       </div>

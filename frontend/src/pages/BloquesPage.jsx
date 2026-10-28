@@ -5,6 +5,8 @@ import { useEmpresas } from '../hooks/useEmpresas';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
 import SearchableSelect from '../components/SearchableSelect';
+import ImagenUploader from '../components/ImagenUploader';
+import { aplicarCambioImagen } from '../lib/imagenesApi';
 import colombiaData from '../data/colombia-divipola.json';
 
 const DEPARTAMENTOS = colombiaData.departamentos.map(d => d.nombre);
@@ -147,6 +149,7 @@ const labelStyle = {
 // ZonasPage), no de cada punto individual.
 function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, esSuperAdmin, empresasDisponibles, perfil }) {
   const [showOptional, setShowOptional] = useState(() => Boolean(initial.tipo_estructura || initial.grosor_mm || initial.descripcion));
+  const [portada, setPortada] = useState({ archivo: null, quitar: false });
   const [form, setForm] = useState({
     nombre: initial.nombre ?? '',
     descripcion: initial.descripcion ?? '',
@@ -171,20 +174,23 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, esSuperAdmi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [perfil, esSuperAdmin, isEdit]);
 
-  // Ubicación -- detección automática al abrir el formulario, con toggle
-  // "Ser más específico" para tipear lat/lng a mano. Mismo patrón para
-  // super_admin y para admin/tecnico: el nombre y la ubicación son "lo único
-  // que cambiarían con seguridad" según lo pedido.
+  // Ubicación -- campos de latitud y longitud visibles desde el inicio (sin
+  // geolocalización automática al abrir). Solo se solicita la ubicación al
+  // navegador cuando se pulsa "Usar ubicación actual".
   const [latitud, setLatitud] = useState(initial.coordenadas?.lat ?? '');
   const [longitud, setLongitud] = useState(initial.coordenadas?.lng ?? '');
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoError, setGeoError] = useState(null);
-  const [showManual, setShowManual] = useState(false);
-  const hayCoordenadas = latitud !== '' && longitud !== '';
+  // Coordenadas válidas: numéricas y dentro de rango (lat ±90, lng ±180).
+  const hayCoordenadas = latitud !== '' && longitud !== ''
+    && Math.abs(Number(latitud)) <= 90 && Math.abs(Number(longitud)) <= 180;
 
-  useEffect(() => {
-    const yaHayCoordenadas = initial.coordenadas?.lat;
-    if (yaHayCoordenadas || !navigator.geolocation) return;
+  const usarUbicacionActual = () => {
+    if (!navigator.geolocation) {
+      setGeoError('Tu navegador no permite obtener la ubicación.');
+      return;
+    }
+    setGeoError(null);
     setGeoLoading(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -193,13 +199,12 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, esSuperAdmi
         setGeoLoading(false);
       },
       () => {
-        setGeoError('No se pudo detectar la ubicación automáticamente.');
+        setGeoError('No se pudo obtener la ubicación actual.');
         setGeoLoading(false);
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  };
 
   const [validationError, setValidationError] = useState(null);
 
@@ -224,11 +229,11 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, esSuperAdmi
       return;
     }
     if (!esSuperAdmin && (!form.departamento || !form.ciudad)) {
-      setValidationError('Tu afiliación todavía no tiene departamento/ciudad. Pedile a un super_admin que la complete en Zonas.');
+      setValidationError('Tu afiliación todavía no tiene departamento/ciudad. Solicita a un super_admin que la complete en Zonas.');
       return;
     }
     if (!hayCoordenadas) {
-      setValidationError('Marca la ubicación (detectala o ingresá las coordenadas a mano).');
+      setValidationError('Ingresa coordenadas válidas (latitud entre -90 y 90, longitud entre -180 y 180) o usa tu ubicación actual.');
       return;
     }
 
@@ -245,7 +250,7 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, esSuperAdmi
     };
     if (esSuperAdmin) payload.empresa_id = form.empresa_id;
 
-    onSubmit(payload);
+    onSubmit(payload, portada);
   };
 
   return (
@@ -258,6 +263,14 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, esSuperAdmi
           id="punto-nombre" name="nombre" autoComplete="off"
           required value={form.nombre} onChange={set('nombre')}
           placeholder="ej: Nave A" style={inputStyle}
+        />
+      </div>
+
+      <div style={{ marginBottom: 'var(--space-3-5)' }}>
+        <ImagenUploader
+          id="punto-portada" etiqueta="Foto del punto (opcional)" forma="foto"
+          url={initial.portada_url} valor={portada} onChange={setPortada} disabled={saving}
+          ayuda="Es la portada de la carpeta del punto en la galería. JPEG, PNG o WebP, máximo 5 MB."
         />
       </div>
 
@@ -326,58 +339,52 @@ function BloqueForm({ initial = {}, isEdit, onSubmit, saving, error, esSuperAdmi
         </div>
       )}
 
-      {/* Ubicación -- detección automática + toggle manual, igual para
-          todos los roles. No es <label>: encabeza el bloque entero. */}
+      {/* Ubicación -- ingreso manual visible desde el inicio + botón explícito
+          para usar la ubicación actual. */}
       <div style={{ marginBottom: 'var(--space-3-5)' }}>
-        <span style={{ ...labelStyle, display: 'block' }}>Ubicación *</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-2)', marginBottom: 6 }}>
+          <span style={{ ...labelStyle, marginBottom: 0 }}>Ubicación *</span>
+          <button
+            type="button"
+            onClick={usarUbicacionActual}
+            disabled={geoLoading}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              background: 'none', border: 'none', padding: 0,
+              fontSize: 'var(--text-2xs)', color: 'var(--accent-amber)',
+              cursor: geoLoading ? 'wait' : 'pointer',
+              fontFamily: 'var(--font-data)', fontWeight: 600, letterSpacing: '0.04em',
+              textDecoration: 'underline', textUnderlineOffset: 3,
+              opacity: geoLoading ? 0.65 : 1,
+            }}
+          >
+            <MapPin size={12} aria-hidden="true" />
+            {geoLoading ? 'Detectando ubicación…' : 'Usar ubicación actual'}
+          </button>
+        </div>
 
-        {geoLoading && (
-          <div style={{ padding: '8px 12px', background: 'rgba(156,54,16,0.05)', border: '1px solid rgba(156,54,16,0.15)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>
-            Detectando ubicación…
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
+          <div>
+            <label htmlFor="punto-latitud" style={labelStyle}>Latitud</label>
+            <input
+              id="punto-latitud" name="latitud" type="number" inputMode="decimal" step="any"
+              value={latitud} onChange={e => setLatitud(e.target.value === '' ? '' : Number(e.target.value))}
+              style={inputStyle} placeholder="Ej: 4.710989"
+            />
           </div>
-        )}
-        {!geoLoading && hayCoordenadas && (
-          <div style={{ padding: '8px 12px', background: 'rgba(156,54,16,0.05)', border: '1px solid rgba(156,54,16,0.15)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-data)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <MapPin size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
-            <span>{latitud}, {longitud}</span>
+          <div>
+            <label htmlFor="punto-longitud" style={labelStyle}>Longitud</label>
+            <input
+              id="punto-longitud" name="longitud" type="number" inputMode="decimal" step="any"
+              value={longitud} onChange={e => setLongitud(e.target.value === '' ? '' : Number(e.target.value))}
+              style={inputStyle} placeholder="Ej: -74.072092"
+            />
           </div>
-        )}
+        </div>
+
         {geoError && (
-          <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.05)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: '#dc2626', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <div style={{ marginTop: 'var(--space-2)', padding: '8px 12px', background: 'rgba(220,38,38,0.05)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: '#dc2626', display: 'flex', alignItems: 'center', gap: 5 }}>
             <AlertCircle size={12} /> {geoError}
-          </div>
-        )}
-
-        <button
-          type="button" onClick={() => setShowManual(v => !v)}
-          style={{
-            marginTop: 'var(--space-2)', background: 'none', border: 'none', padding: 0,
-            fontSize: 'var(--text-2xs)', color: 'var(--accent-amber)', cursor: 'pointer',
-            fontFamily: 'var(--font-data)', fontWeight: 600, letterSpacing: '0.04em',
-            textDecoration: 'underline', textUnderlineOffset: 3,
-          }}
-        >
-          {showManual ? 'Ocultar coordenadas' : 'Ser más específico con la ubicación'}
-        </button>
-
-        {showManual && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)', marginTop: 'var(--space-2-5)' }}>
-            <div>
-              <label htmlFor="punto-latitud" style={labelStyle}>Latitud</label>
-              <input
-                id="punto-latitud" name="latitud" type="number" inputMode="decimal" step="any"
-                value={latitud} onChange={e => setLatitud(e.target.value === '' ? '' : Number(e.target.value))}
-                style={inputStyle} placeholder="Ej: 4.710989"
-              />
-            </div>
-            <div>
-              <label htmlFor="punto-longitud" style={labelStyle}>Longitud</label>
-              <input
-                id="punto-longitud" name="longitud" type="number" inputMode="decimal" step="any"
-                value={longitud} onChange={e => setLongitud(e.target.value === '' ? '' : Number(e.target.value))}
-                style={inputStyle} placeholder="Ej: -74.072092"
-              />
-            </div>
           </div>
         )}
       </div>
@@ -487,7 +494,7 @@ export default function BloquesPage() {
   // desde acá (GET /usuarios/me), nunca los elige la persona.
   const { perfil } = useUsuarioPerfil();
 
-  const { bloques, loading, mutating, mutError, crearBloque, editarBloque, eliminarBloque } = useGestionBloques();
+  const { bloques, loading, mutating, mutError, crearBloque, editarBloque, eliminarBloque, refetch } = useGestionBloques();
   // `enabled=esSuperAdmin`: evita el fetch (y el 403) de /empresas para
   // admin -- solo hace falta la lista completa para el selector y la
   // columna "Afiliación" de super_admin.
@@ -504,23 +511,38 @@ export default function BloquesPage() {
   const [formError, setFormError] = useState(null);
   const [toast, setToast] = useState(null);
 
-  const handleCrear = async (payload) => {
+  // La foto se aplica después de guardar el punto (la clave lleva su id). Si
+  // falla, el punto ya quedó guardado: se avisa en el aviso final.
+  const guardarPortada = async (idBloque, portada) => {
+    if (!portada.archivo && !portada.quitar) return null;
+    try {
+      await aplicarCambioImagen(`/bloques/${idBloque}/portada`, 'portada_key', portada);
+      refetch();
+      return null;
+    } catch (err) {
+      return err.message;
+    }
+  };
+
+  const handleCrear = async (payload, portada) => {
     setFormError(null);
     try {
-      await crearBloque(payload);
+      const creado = await crearBloque(payload);
+      const falloFoto = await guardarPortada(creado.id_bloque, portada);
       setShowCreate(false);
-      setToast('Punto creado correctamente.');
+      setToast(falloFoto ? `Punto creado, pero no se pudo guardar la foto: ${falloFoto}` : 'Punto creado correctamente.');
     } catch (err) {
       setFormError(err.message);
     }
   };
 
-  const handleEditar = async (payload) => {
+  const handleEditar = async (payload, portada) => {
     setFormError(null);
     try {
       await editarBloque(editBloque.id_bloque, payload);
+      const falloFoto = await guardarPortada(editBloque.id_bloque, portada);
       setEditBloque(null);
-      setToast('Punto actualizado correctamente.');
+      setToast(falloFoto ? `Punto actualizado, pero no se pudo guardar la foto: ${falloFoto}` : 'Punto actualizado correctamente.');
     } catch (err) {
       setFormError(err.message);
     }

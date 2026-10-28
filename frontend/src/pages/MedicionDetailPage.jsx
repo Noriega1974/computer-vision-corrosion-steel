@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Download, Share2, Trash2, MapPin, AlertCircle, Thermometer, Droplets, Wind, ChevronDown, ChevronUp, Settings } from 'lucide-react';
 import { useMedicion } from '../hooks/useMedicion';
 import { useBloques } from '../hooks/useBloques';
@@ -11,6 +11,8 @@ import { formatFecha } from '../utils/dateFormat';
 import { apiDelete, apiPatch } from '../lib/apiClient';
 import { useRefreshKey } from '../hooks/RefreshKeyContext';
 import SegmentationOverlay from '../components/SegmentationOverlay';
+import NivelIcon from '../components/NivelIcon';
+import { formatoPct } from '../lib/textUtils';
 
 // ─── Helper tiempo relativo ───────────────────────────────────────────────────
 function tiempoRelativo(timestamp) {
@@ -160,7 +162,9 @@ export default function MedicionDetailPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  const { medicion, loading, error } = useMedicion(idMedicion);
+  // `?punto=` lo ponen los enlaces de la galería para hallar fotos antiguas.
+  const [searchParams] = useSearchParams();
+  const { medicion, loading, error } = useMedicion(idMedicion, searchParams.get('punto'));
   // El "Punto" viejo (GET /puntos/{id}) fue absorbido por "Bloque" -- no hay
   // endpoint por-id, así que se trae la lista completa y se filtra
   // client-side por bloque_id (mismo patrón que el filtro de bloque en
@@ -178,6 +182,8 @@ export default function MedicionDetailPage() {
   const isAdmin =
     user?.groups?.includes('super_admin') ||
     user?.groups?.includes('admin');
+  // Eliminar también lo puede tecnico (renombrar sigue siendo de admins).
+  const puedeEliminar = isAdmin || user?.groups?.includes('tecnico');
   const esSuperAdmin = user?.groups?.includes('super_admin');
   // Zona: nombre de la afiliación dueña de la medición. Un no-super_admin
   // solo ve mediciones de su propia empresa (scopeado por el backend), así
@@ -185,10 +191,11 @@ export default function MedicionDetailPage() {
   const { perfil } = useUsuarioPerfil();
   const { empresas } = useEmpresas(esSuperAdmin);
 
-  // Volver a galería preservando filtros si vienen del state de navegación
+  // Volver a la carpeta (o búsqueda) de la galería de la que se vino,
+  // preservando filtros si vienen del state de navegación
   function handleBack() {
     const prevFilters = location.state?.filters;
-    navigate('/galeria', prevFilters ? { state: prevFilters } : undefined);
+    navigate(location.state?.volver ?? '/galeria', prevFilters ? { state: prevFilters } : undefined);
   }
 
   async function handleEliminar() {
@@ -510,29 +517,37 @@ export default function MedicionDetailPage() {
             gap: 10,
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ width: 9, height: 9, borderRadius: '50%', background: color, flexShrink: 0 }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, color }}>
+                <NivelIcon nivel={nivel} size={30} />
                 <span style={{
-                  fontFamily: 'var(--font-ui)', fontWeight: 700,
-                  fontSize: 17, color,
+                  fontFamily: 'var(--font-ui)', fontWeight: 800,
+                  fontSize: 26, color, letterSpacing: '-0.01em', lineHeight: 1.1,
                   animation: nivel === 3 ? 'blink 1.2s ease-in-out infinite' : 'none',
                 }}>
                   {nivelLabel(nivel)}
                 </span>
               </div>
-              <span style={{
-                fontFamily: 'var(--font-data)', fontWeight: 800,
-                fontSize: 20, color, letterSpacing: '-0.02em',
-              }}>
-                {(medicion.area_corroida_pct ?? 0).toFixed(1)}%
-              </span>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{
+                  fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800,
+                  fontSize: 30, color, letterSpacing: '-0.02em', lineHeight: 1.05,
+                }}>
+                  {formatoPct(medicion.area_corroida_pct)}
+                </div>
+                <div style={{
+                  fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 12,
+                  color: 'var(--text-muted)', marginTop: 2,
+                }}>
+                  Área corroída
+                </div>
+              </div>
             </div>
             <BarraPorcentaje valor={medicion.area_corroida_pct ?? 0} color={color} />
 
             {/* Metadatos secundarios compactos dentro de la caja central */}
             <div style={{
-              display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 14px',
-              paddingTop: 10, marginTop: 2, borderTop: `1px solid ${color}25`,
+              display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
+              paddingTop: 12, marginTop: 2, borderTop: `1px solid ${color}25`,
             }}>
               <MetaItem label="Zona" value={zonaNombre} />
               <MetaItem label="Ciudad" value={punto.ciudad ?? '—'} />
@@ -569,8 +584,8 @@ export default function MedicionDetailPage() {
                     display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8,
                     marginTop: 8,
                   }}>
-                    {clima.temperatura_c != null && <ClimaItem icon={<Thermometer size={13} />} label="Temperatura" value={`${clima.temperatura_c} °C`} />}
-                    {clima.humedad_pct != null && <ClimaItem icon={<Droplets size={13} />} label="Humedad" value={`${clima.humedad_pct} %`} />}
+                    {clima.temperatura_c != null && <ClimaItem icon={<Thermometer size={13} />} label="Temperatura" value={`${clima.temperatura_c}°C`} />}
+                    {clima.humedad_pct != null && <ClimaItem icon={<Droplets size={13} />} label="Humedad" value={`${clima.humedad_pct}%`} />}
                     {vientoKmh != null && <ClimaItem icon={<Wind size={13} />} label="Viento" value={`${vientoKmh} km/h`} />}
                     {clima.precipitacion_mm != null && <ClimaItem icon={<Droplets size={13} />} label="Precipitación" value={`${clima.precipitacion_mm} mm`} />}
                   </div>
@@ -688,10 +703,10 @@ export default function MedicionDetailPage() {
               {tiempoAnalisis && (
                 <div>
                   <SectionTitle>Tiempo de análisis</SectionTitle>
-                  <div style={{ fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 'var(--text-lg)', color: 'var(--text-primary)' }}>
+                  <div style={{ fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 'var(--text-lg)', color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
                     ≈ {tiempoAnalisis.total} s
                   </div>
-                  <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', marginTop: 2 }}>
+                  <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
                     subida {tiempoAnalisis.subida} s · procesamiento {tiempoAnalisis.procesamiento} s
                   </div>
                 </div>
@@ -732,7 +747,7 @@ export default function MedicionDetailPage() {
                           {n.label}
                         </div>
                         <div style={{
-                          fontFamily: 'var(--font-data)', fontSize: 10,
+                          fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontSize: 11,
                           color: 'var(--text-muted)', lineHeight: 1.2,
                         }}>
                           {n.range}
@@ -747,7 +762,7 @@ export default function MedicionDetailPage() {
               <div>
                 <SectionTitle>Gestión del espécimen</SectionTitle>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-                  {/* Renombrar la foto: mismos roles que eliminar (el backend lo exige). */}
+                  {/* Renombrar la foto: solo admins (el backend lo exige). */}
                   {isAdmin && (
                     <NombreFoto
                       idMedicion={idMedicion}
@@ -769,8 +784,8 @@ export default function MedicionDetailPage() {
                     Ver punto en dashboard
                   </ActionButton>
 
-                  {/* Eliminar: solo admins */}
-                  {isAdmin && (
+                  {/* Eliminar: super_admin, admin y tecnico */}
+                  {puedeEliminar && (
                     <>
                       <ActionButton
                         icon={<Trash2 size={15} />}
@@ -861,15 +876,12 @@ function MetaLabel({ children }) {
   );
 }
 
-function MetaItem({ label, value, wrap }) {
+function MetaItem({ label, value }) {
   return (
-    <div style={{ background: 'var(--bg-inset)', borderRadius: 6, padding: '8px 10px' }}>
-      <div style={{ fontSize: 9, color: 'var(--text-faint)', marginBottom: 2, fontFamily: 'var(--font-data)', letterSpacing: '0.08em' }}>{label}</div>
-      <div style={wrap ? {
-        fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 'var(--text-2xs)',
-        color: 'var(--text-primary)', wordBreak: 'break-all', lineHeight: 1.4,
-      } : {
-        fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 'var(--text-xs)',
+    <div style={{ background: 'var(--bg-inset)', borderRadius: 8, padding: '10px 12px', minWidth: 0 }}>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 3, fontFamily: 'var(--font-ui)', fontWeight: 500 }}>{label}</div>
+      <div style={{
+        fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 16, lineHeight: 1.25,
         color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>{value}</div>
     </div>
@@ -980,7 +992,7 @@ function ClimaItem({ icon, label, value }) {
         {icon}
         {label.toUpperCase()}
       </div>
-      <div style={{ fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
+      <div style={{ fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
         {value}
       </div>
     </div>

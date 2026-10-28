@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import { apiGet } from '../lib/apiClient';
 
@@ -32,6 +32,7 @@ function PantallaCentrada({ children }) {
 // página interna lo mostraría por su cuenta.
 export default function ProtectedRoute({ children }) {
   const { isAuthenticated, isLoading, user, logout } = useAuth();
+  const location = useLocation();
   // null = verificando, { ok: true } = pasa, { ok: false, mensaje } = bloqueado
   const [registro, setRegistro] = useState(null);
 
@@ -83,7 +84,8 @@ export default function ProtectedRoute({ children }) {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    const from = location.pathname !== '/' ? `${location.pathname}${location.search}` : undefined;
+    return <Navigate to="/login" state={from ? { from } : undefined} replace />;
   }
 
   if (!registro.ok) {

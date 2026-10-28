@@ -4,6 +4,7 @@ import { Menu, Sun, Moon } from 'lucide-react';
 
 // Mapa de rutas a títulos de página para el breadcrumb
 const ROUTE_TITLES = {
+  '/que-es-pixelrust': '¿Qué es PixelRust?',
   '/dashboard':    'Dashboard',
   '/upload':       'Nueva Medición',
   '/galeria':      'Galería',
@@ -15,6 +16,8 @@ const ROUTE_TITLES = {
 };
 
 function buildBreadcrumb(pathname) {
+  // Carpetas de la galería (empresa / punto): el nombre va en la propia página.
+  if (pathname.startsWith('/galeria/zona/')) return { title: 'Galería', sub: null };
   if (pathname.startsWith('/galeria/')) {
     const id = pathname.replace('/galeria/', '');
     return { title: 'Galería', sub: `Medición ${id.substring(0, 12)}…` };

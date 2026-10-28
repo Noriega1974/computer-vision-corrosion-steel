@@ -50,6 +50,9 @@ function escalaParaZoom(zoom) {
   return Math.min(MAX_ESCALA, Math.max(MIN_ESCALA, cruda));
 }
 
+// Centro y zoom con los que abre el mapa (Universidad del Norte, Barranquilla).
+const VISTA_INICIAL = { centro: [11.0190, -74.8503], zoom: 17 };
+
 export default function ColombiaMap({
   selectedPunto,
   onSelectPunto,
@@ -84,12 +87,10 @@ export default function ColombiaMap({
   const mapInstanceRef = useRef(null);
   const markersRef = useRef([]);
   const zonasRef = useRef([]);
-  // El encuadre automático a todos los puntos se hace una sola vez.
-  const encuadreInicialRef = useRef(false);
 
   // Nivel de zoom actual -- se usa para recalcular el tamaño de los pines
   // "a tamaño fijo en el mundo" (ver escalaParaZoom más arriba).
-  const [zoom, setZoom] = useState(6);
+  const [zoom, setZoom] = useState(VISTA_INICIAL.zoom);
 
   // Inicializar mapa Leaflet una sola vez
   useEffect(() => {
@@ -99,8 +100,10 @@ export default function ColombiaMap({
     if (!L) return;
 
     const map = L.map(mapRef.current, {
-      center: [10.9685, -74.7813], // Centrado de bienvenida en Barranquilla
-      zoom: 12,
+      // Vista de bienvenida: campus de la Universidad del Norte, donde están
+      // los puntos del proyecto.
+      center: VISTA_INICIAL.centro,
+      zoom: VISTA_INICIAL.zoom,
       zoomControl: true,
       attributionControl: true,
       scrollWheelZoom: true,
@@ -138,7 +141,6 @@ export default function ColombiaMap({
       mapInstanceRef.current = null;
       markersRef.current = [];
       zonasRef.current = [];
-      encuadreInicialRef.current = false;
     };
   }, []);
 
@@ -154,7 +156,6 @@ export default function ColombiaMap({
     if (puntos.length === 0) return;
 
     const nivelMap = buildNivelMap(mediciones);
-    const coordsValidas = [];
 
     puntos.forEach((punto, index) => {
       const lat = punto.coordenadas?.lat;
@@ -162,7 +163,6 @@ export default function ColombiaMap({
 
       if (lat == null || lng == null) return;
       if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) return;
-      coordsValidas.push([Number(lat), Number(lng)]);
 
       const nivel = nivelMap[punto.id_bloque] ?? -1;
 
@@ -306,19 +306,6 @@ export default function ColombiaMap({
       markersRef.current.push(marker);
     });
 
-    // Primera carga: encuadrar todos los puntos existentes. Si no hay ninguno
-    // se queda la vista por defecto (Barranquilla). Si ya viene un punto
-    // seleccionado, el flyTo de abajo manda.
-    if (!encuadreInicialRef.current && coordsValidas.length > 0) {
-      encuadreInicialRef.current = true;
-      if (!selectedPunto) {
-        mapInstanceRef.current.fitBounds(coordsValidas, {
-          padding: [40, 40],
-          maxZoom: 13,
-          animate: false,
-        });
-      }
-    }
   }, [
     puntos,
     mediciones,
@@ -370,7 +357,7 @@ export default function ColombiaMap({
 
     mapInstanceRef.current.flyTo(
       [lat, lng],
-      13,
+      Math.max(mapInstanceRef.current.getZoom(), 17),
       { duration: 0.8 }
     );
   }, [selectedPunto]);

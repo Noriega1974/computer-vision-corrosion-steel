@@ -9,3 +9,8 @@ export function normalizar(s) {
     .trim()
     .toLowerCase();
 }
+
+// Porcentaje con coma decimal sin espacio antes del signo: 1.5 -> "1,5%".
+export function formatoPct(n) {
+  return `${Number(n ?? 0).toFixed(1).replace('.', ',')}%`;
+}

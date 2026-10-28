@@ -12,6 +12,7 @@ import {
   ChevronRight,
   X,
   Upload,
+  Info,
 } from 'lucide-react';
 
 import { useAuth } from '../auth/AuthContext';
@@ -37,6 +38,12 @@ function claveDeUsuario(base, email) {
 // ─────────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
+  {
+    path: '/que-es-pixelrust',
+    icon: Info,
+    label: '¿Qué es PixelRust?',
+  },
+
   {
     path: '/dashboard',
     icon: LayoutDashboard,
