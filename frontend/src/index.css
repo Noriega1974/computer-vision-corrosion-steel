@@ -738,69 +738,6 @@ body {
 
 
 /* ================================================================
-   KPI
-   ================================================================ */
-
-.kpi-grid {
-  position: relative;
-}
-
-.kpi-card {
-  position: relative;
-
-  overflow: hidden;
-
-  min-height: 112px;
-}
-
-.kpi-card::after {
-  content: "";
-
-  position: absolute;
-
-  width: 125px;
-  height: 125px;
-
-  right: -50px;
-  bottom: -60px;
-
-  border-radius: 50%;
-
-  background: var(--kpi-color);
-
-  opacity: 0.085;
-
-  filter: blur(22px);
-
-  pointer-events: none;
-}
-
-.kpi-card:hover {
-  transform: translateY(-2px);
-
-  border-color: color-mix(
-    in srgb,
-    var(--kpi-color) 28%,
-    var(--border)
-  );
-
-  box-shadow:
-    0 12px 28px rgba(31,56,85,0.10),
-    0 0 0 1px rgba(255,255,255,0.12);
-}
-
-[data-theme="dark"] .kpi-card:hover {
-  box-shadow:
-    0 12px 32px rgba(0,0,0,0.32),
-    0 0 18px color-mix(
-      in srgb,
-      var(--kpi-color) 9%,
-      transparent
-    );
-}
-
-
-/* ================================================================
    BUTTON — NEW MEASUREMENT
    ================================================================ */
 
@@ -1170,9 +1107,6 @@ body {
 
   .main-grid > .section-detail {
     height: 400px !important;
-
-    border-top:
-      1px solid var(--border);
   }
 }
 
@@ -1187,36 +1121,16 @@ body {
 
   .main-grid > .section-map {
     height: 400px !important;
-
-    border-right: none !important;
   }
 
   .main-grid > .section-detail {
     height: 400px !important;
-
-    border-top:
-      1px solid var(--border);
-  }
-
-  .kpi-grid {
-    grid-template-columns:
-      repeat(2, 1fr) !important;
-  }
-
-  .charts-grid {
-    grid-template-columns:
-      1fr !important;
   }
 
 }
 
 
 @media (max-width: 480px) {
-
-  .kpi-grid {
-    grid-template-columns:
-      1fr !important;
-  }
 
   .dashboard-section {
     border-radius: 14px;
