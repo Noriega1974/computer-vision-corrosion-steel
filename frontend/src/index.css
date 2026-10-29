@@ -241,44 +241,6 @@
 
 
   /* ─────────────────────────────────────────────────────────────
-     SECTION TINTS
-     ───────────────────────────────────────────────────────────── */
-
-  /* 2026-08-17: recalentadas de azul frio a la familia del naranja de
-     marca -- antes rgba(239,247,253,...) y variantes, el mismo tono
-     heredado del celeste CorpoAcero que la identidad de marca ya habia
-     dejado atras en --accent-amber. Diferencia sutil entre las 4 a
-     proposito, igual de sutil que el azul que reemplazan. */
-  --section-kpi:
-    linear-gradient(
-      135deg,
-      rgba(255,255,255,0.78),
-      rgba(255,244,235,0.60)
-    );
-
-  --section-map:
-    linear-gradient(
-      135deg,
-      rgba(255,247,240,0.70),
-      rgba(255,251,246,0.50)
-    );
-
-  --section-detail:
-    linear-gradient(
-      135deg,
-      rgba(255,245,238,0.70),
-      rgba(255,250,245,0.50)
-    );
-
-  --section-charts:
-    linear-gradient(
-      135deg,
-      rgba(255,248,242,0.68),
-      rgba(255,251,248,0.52)
-    );
-
-
-  /* ─────────────────────────────────────────────────────────────
      NAVIGATION
      ───────────────────────────────────────────────────────────── */
 
@@ -391,37 +353,6 @@
   --text-secondary: #D9C3B0;
   --text-muted: #B89A82;
   --text-faint: #9C8068;
-
-
-  /* Sections */
-
-  --section-kpi:
-    linear-gradient(
-      135deg,
-      rgba(36, 50, 68, 0.82),
-      rgba(27, 39, 54, 0.68)
-    );
-
-  --section-map:
-    linear-gradient(
-      135deg,
-      rgba(34, 49, 67, 0.84),
-      rgba(27, 39, 54, 0.68)
-    );
-
-  --section-detail:
-    linear-gradient(
-      135deg,
-      rgba(35, 50, 66, 0.82),
-      rgba(27, 39, 54, 0.68)
-    );
-
-  --section-charts:
-    linear-gradient(
-      135deg,
-      rgba(34, 49, 66, 0.80),
-      rgba(27, 39, 54, 0.66)
-    );
 
 
   /* Navigation */
@@ -748,81 +679,29 @@ body {
   border: none;
 }
 
-/* 2026-08-17: estos 4 tokens --section-* estaban definidos (claro y
-   oscuro) pero ningun selector los consumia -- las 4 secciones del
-   dashboard se veian identicas mas alla de su contenido. Se conectan aca,
-   recalentados hacia el naranja de marca en vez del azul frio que tenian
-   (ver --section-kpi/--section-map/--section-detail/--section-charts en la
-   seccion ACCENTS de :root). .section-plants queda sin tinte propio: nunca
-   tuvo un token --section-plants definido, agregar uno ahora es una
-   decision de color nueva que no se pidio. */
-.section-kpi    { background: var(--section-kpi); }
-.section-map    { background: var(--section-map); }
-.section-detail { background: var(--section-detail); }
-.section-charts { background: var(--section-charts); }
-.section-plants { background: transparent; }
-
 
 /* ================================================================
-   SECTION GLASS WRAPPERS
+   SECTION WRAPPERS
+
+   2026-10-29: planas segun el rediseno (docs/rediseno/REDISENO_DASHBOARD.md)
+   -- antes cada seccion tenia un tinte de color propio (--section-kpi/map/
+   detail/charts) mas vidrio/blur/destello; la spec pide la misma superficie
+   solida (--bg-card) en las 5, borde de 1px, sin sombras fuertes. Los 8
+   tokens --section-* (claro + oscuro) se quitaron de :root con este cambio
+   al quedar sin consumidores.
    ================================================================ */
 
 .dashboard-section {
   position: relative;
 
-  background:
-    linear-gradient(
-      135deg,
-      var(--glass-bg-strong),
-      rgba(240,247,253,0.40)
-    );
+  background: var(--bg-card);
 
-  border: 1px solid var(--glass-border);
+  border: 1px solid var(--border);
 
-  border-radius: 18px;
-
-  box-shadow:
-    var(--shadow-glass);
-
-  backdrop-filter: blur(18px) saturate(115%);
-  -webkit-backdrop-filter: blur(18px) saturate(115%);
+  border-radius: 16px;
 
   overflow: hidden;
 }
-
-[data-theme="dark"] .dashboard-section {
-  background:
-    linear-gradient(
-      135deg,
-      rgba(36, 50, 68, 0.84),
-      rgba(27, 39, 54, 0.68)
-    );
-}
-
-/* Mismo destello reflejo que .glass-panel::before -- el dashboard tenia el
-   blur/gradiente de vidrio pero no este detalle, asi que las secciones se
-   sentian mas planas que el resto de la UI que ya lo usa. */
-.dashboard-section::before {
-  content: "";
-
-  position: absolute;
-  inset: 0;
-
-  pointer-events: none;
-
-  background:
-    linear-gradient(
-      120deg,
-      rgba(255,255,255,0.14),
-      transparent 28%,
-      transparent 70%,
-      rgba(255,255,255,0.03)
-    );
-
-  opacity: 0.8;
-}
-
-
 
 
 /* ================================================================
@@ -835,35 +714,16 @@ body {
 
   gap: 9px;
 
-  font-family: var(--font-data);
+  font-family: var(--font-ui);
 
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
 
-  letter-spacing: 0.12em;
+  letter-spacing: 0.16em;
 
   text-transform: uppercase;
 
-  color: var(--text-muted);
-}
-
-.dashboard-section-title::before {
-  content: "";
-
-  width: 3px;
-  height: 17px;
-
-  border-radius: 4px;
-
-  background:
-    linear-gradient(
-      180deg,
-      var(--accent-cyan),
-      var(--accent-amber)
-    );
-
-  box-shadow:
-    0 0 10px rgba(255, 181, 138, 0.28);
+  color: var(--accent-blue);
 }
 
 
@@ -936,6 +796,9 @@ body {
    BUTTON — NEW MEASUREMENT
    ================================================================ */
 
+/* 2026-10-29: boton plano del rediseno -- antes tenia gradiente +
+   sombra marcada ("glassmorphism"); la spec pide tarjetas/botones planos,
+   "sin sombras fuertes" (ver docs/rediseno/REDISENO_DASHBOARD.md). */
 .dashboard-action {
   position: relative;
 
@@ -943,20 +806,16 @@ body {
   align-items: center;
   justify-content: center;
 
-  gap: 7px;
+  gap: 8px;
 
-  padding: 9px 17px;
+  min-height: 48px;
+  padding: 0 22px;
 
-  background:
-    linear-gradient(
-      135deg,
-      var(--accent-amber),
-      #D64A17
-    );
+  background: var(--accent-amber);
 
-  border: 1px solid rgba(255,255,255,0.18);
+  border: none;
 
-  border-radius: 10px;
+  border-radius: 12px;
 
   color: white;
 
@@ -964,11 +823,11 @@ body {
 
   font-family: var(--font-ui);
 
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
 
   box-shadow:
-    0 6px 18px rgba(156,54,16,0.22);
+    0 4px 12px rgba(180,86,31,0.25);
 
   transition:
     transform var(--dur-base) var(--ease-out),
@@ -977,16 +836,11 @@ body {
 }
 
 .dashboard-action:hover {
-  transform: translateY(-1px);
-
   filter: brightness(1.06);
-
-  box-shadow:
-    0 9px 24px rgba(156,54,16,0.30);
 }
 
 .dashboard-action:active {
-  transform: translateY(0);
+  transform: translateY(1px);
 }
 
 /* Botón flotante "Subir medición" en la galería */

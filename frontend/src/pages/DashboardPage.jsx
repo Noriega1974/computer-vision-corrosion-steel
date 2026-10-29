@@ -11,6 +11,7 @@ import Skeleton from '../components/Skeleton';
 
 import { useBloques } from '../hooks/useBloques';
 import { useEmpresas } from '../hooks/useEmpresas';
+import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
 
 
@@ -64,6 +65,14 @@ export default function DashboardPage() {
   // /upload es solo para super_admin, admin y tecnico (RoleRoute): el cliente no ve el acceso.
   const puedeSubir = ['super_admin', 'admin', 'tecnico'].some(r => user?.groups?.includes(r));
 
+  // Etiqueta de afiliación del encabezado ("Universidad del Norte ·
+  // Barranquilla"). super_admin no tiene empresa propia -- en ese caso no
+  // se muestra la etiqueta (ver uso de `afiliacion` más abajo).
+  const { perfil } = useUsuarioPerfil();
+  const afiliacion = [perfil?.empresa_nombre, perfil?.empresa_ciudad]
+    .filter(Boolean)
+    .join(' · ');
+
   // "puntos" aquí son bloques (el "Punto" viejo fue absorbido por "Bloque",
   // ver hooks/useBloques.js) -- se mantiene el nombre de variable para no
   // tocar el resto del layout de este componente.
@@ -88,10 +97,11 @@ export default function DashboardPage() {
   return (
 
     <div
-      className="dashboard-shell"
       style={{
         minHeight: '100%',
-        padding: '22px',
+        maxWidth: 1400,
+        margin: '0 auto',
+        padding: '28px 32px 32px',
       }}
     >
 
@@ -103,11 +113,62 @@ export default function DashboardPage() {
         style={{
           display: 'flex',
           flexDirection: 'column',
-          gap: 18,
+          gap: 20,
           width: '100%',
         }}
       >
 
+        {/* ========================================================
+            ENCABEZADO DE PÁGINA
+            Reemplaza al <h1> genérico de PageHeader (oculto en esta
+            ruta, ver AppLayout.jsx/PageHeader.jsx) con la etiqueta de
+            afiliación + título + botón principal del rediseño.
+            ======================================================== */}
+
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-end',
+            gap: 12,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {afiliacion && (
+              <span
+                style={{
+                  fontFamily: 'var(--font-ui)',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: '0.16em',
+                  textTransform: 'uppercase',
+                  color: 'var(--accent-blue)',
+                }}
+              >
+                {afiliacion}
+              </span>
+            )}
+            <h1
+              style={{
+                margin: 0,
+                fontFamily: 'var(--font-ui)',
+                fontSize: 30,
+                fontWeight: 800,
+                color: 'var(--text-primary)',
+              }}
+            >
+              Monitoreo de corrosión
+            </h1>
+          </div>
+
+          {puedeSubir && (
+            <Link to="/upload" className="dashboard-action">
+              <IconoSubir size={18} />
+              Nueva medición
+            </Link>
+          )}
+        </div>
 
         {/* ========================================================
             KPI SECTION
@@ -119,58 +180,6 @@ export default function DashboardPage() {
             padding: '18px 20px 20px',
           }}
         >
-
-          {/* Header */}
-
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 'var(--space-4)',
-              marginBottom: 'var(--space-4)',
-            }}
-          >
-
-            <div>
-
-              <div
-                className="dashboard-section-title"
-              >
-                Indicadores globales
-              </div>
-
-              <div
-                style={{
-                  marginTop: 5,
-                  fontSize: 'var(--text-2xs)',
-                  color: 'var(--text-faint)',
-                }}
-              >
-                Estado general del sistema de monitoreo
-              </div>
-
-            </div>
-
-
-            {/* Nueva medición */}
-
-            {puedeSubir && (
-            <Link
-              to="/upload"
-              className="dashboard-action"
-            >
-
-              <IconoSubir size={14} />
-
-              Nueva medición
-
-            </Link>
-            )}
-
-          </div>
-
-
           {/* KPI cards */}
 
           <KPIBar />
