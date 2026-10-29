@@ -113,14 +113,17 @@ export default function PlantDetail({ punto }) {
             {stats.map(({ Icon, label, v }) => (
               <div key={label} style={{ textAlign: 'center', minWidth: 0 }}>
                 <Icon size={18} strokeWidth={2} style={{ color: 'var(--accent-blue)' }} />
+                {/* 12px en vez de 15px -- a tamaños mayores "11 km/h" se
+                    recortaba en esta columna (la más angosta de las 3 del
+                    dashboard). */}
                 <div style={{
-                  fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 15,
+                  fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 12,
                   color: 'var(--text-primary)', lineHeight: 1.1, marginTop: 4,
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}>
                   {v}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2, whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2, whiteSpace: 'nowrap' }}>
                   {label}
                 </div>
               </div>
