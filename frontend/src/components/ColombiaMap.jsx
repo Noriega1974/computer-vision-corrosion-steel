@@ -4,11 +4,8 @@ import { useMediciones, LIMITE_DASHBOARD } from '../hooks/useMediciones';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
-import Skeleton from './Skeleton';
 import { ultimaMedicionPorPunto } from '../lib/mediciones';
-import NivelInfo from './NivelInfo';
 import {
-  NIVELES,
   nivelColor,
   nivelLabel,
 } from '../lib/statusUtils';
@@ -389,121 +386,22 @@ export default function ColombiaMap({
   // tampoco hay ninguna zona que mostrar.
   const hayZonas = empresas.some(e => (e.zonas ?? []).length > 0);
 
+  // El título, el conteo de puntos y la leyenda de niveles viven en el
+  // encabezado de esta sección dentro de DashboardPage.jsx (comparte
+  // header con el resto de las tarjetas del dashboard) -- acá solo va el
+  // lienzo del mapa en sí.
   return (
-    <div
-      style={{
-        background: 'var(--bg-card)',
-        border: '1px solid var(--border)',
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-      }}
-    >
+    <div style={{ position: 'relative', height: '100%' }}>
 
-      {/* Header */}
       <div
+        ref={mapRef}
         style={{
-          padding: '12px 16px',
-          borderBottom: '1px solid var(--border)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexShrink: 0,
+          width: '100%',
+          height: '100%'
         }}
-      >
+      />
 
-        <div>
-
-          <div
-            style={{
-              fontFamily: 'var(--font-ui)',
-              fontWeight: 700,
-              fontSize: 'var(--text-sm)',
-              letterSpacing: '0.1em',
-              color: 'var(--text-primary)',
-            }}
-          >
-            MAPA DE UBICACIONES
-          </div>
-
-          <div
-            style={{
-              fontSize: 'var(--text-3xs)',
-              color: 'var(--text-muted)',
-              letterSpacing: '0.1em',
-              marginTop: 2
-            }}
-          >
-            {loadingPuntos
-              ? <Skeleton width={110} height="1em" radius={3} />
-              : `${puntosCount} ${puntosCount === 1 ? 'PUNTO REGISTRADO' : 'PUNTOS REGISTRADOS'}`
-            }
-          </div>
-
-        </div>
-
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 'var(--space-2)'
-          }}
-        >
-
-          {NIVELES.map((_, n) => ({ color: nivelColor(n), label: nivelLabel(n) })).map(({ color, label }) => ( 
-
-            <div
-              key={label}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--space-1)',
-                fontSize: 11,
-                color,
-                letterSpacing: '0.1em'
-              }}
-            >
-
-              <div
-                style={{
-                  width: 7,
-                  height: 7,
-                  borderRadius: '50%',
-                  background: color,
-                  flexShrink: 0
-                }}
-              />
-
-              {label.toUpperCase()}
-
-            </div>
-
-          ))}
-
-          <NivelInfo />
-
-        </div>
-
-      </div>
-
-      {/* Mapa */}
-      <div
-        style={{
-          flex: 1,
-          minHeight: 0,
-          position: 'relative'
-        }}
-      >
-
-        <div
-          ref={mapRef}
-          style={{
-            width: '100%',
-            height: '100%'
-          }}
-        />
-
-        {!loadingPuntos && puntosCount === 0 && !hayZonas && (
+      {!loadingPuntos && puntosCount === 0 && !hayZonas && (
           <div
             style={{
               position: 'absolute',
@@ -548,8 +446,6 @@ export default function ColombiaMap({
 
           </div>
         )}
-
-      </div>
 
     </div>
   );

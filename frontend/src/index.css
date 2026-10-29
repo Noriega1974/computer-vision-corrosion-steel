@@ -131,6 +131,11 @@
      --accent-amber (boton principal), mas saturado/calido. */
   --accent-vivid: #EB651C;
 
+  /* "Fondo resaltado" de la spec: punto seleccionado en Zonas y puntos,
+     cabecera del Detalle de ubicacion en el dashboard. */
+  --bg-highlight: #FBEADB;
+  --border-highlight: #D9A27A;
+
   /* Gradiente de marca "PixelRust", tal cual lo da el logo:
      linear-135deg, centro #FFB44D, borde #FF8C00, profundidad #D92D20.
      Para superficies decorativas grandes (franja del login, avatar/logo del
@@ -341,6 +346,9 @@
   --accent-cyan: #F0B183;
 
   --accent-vivid: #F0803D;
+
+  --bg-highlight: rgba(227, 118, 60, 0.16);
+  --border-highlight: rgba(227, 118, 60, 0.42);
 
   --accent-green: #9BAE7C;
   --accent-red: #EF4444;

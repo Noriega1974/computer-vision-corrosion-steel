@@ -9,11 +9,13 @@ import PlantDetail from '../components/PlantDetail';
 import PlantsTable from '../components/PlantsTable';
 import ChartsRow from '../components/ChartsRow';
 import Skeleton from '../components/Skeleton';
+import NivelInfo from '../components/NivelInfo';
 
 import { useBloques } from '../hooks/useBloques';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
+import { NIVELES, nivelColor, nivelBg, nivelPillText, nivelLabel } from '../lib/statusUtils';
 
 
 // ================================================================
@@ -220,7 +222,7 @@ export default function DashboardPage() {
           <section
             className="dashboard-section section-plants"
             style={{
-              padding: '16px',
+              padding: '20px',
               display: 'flex',
               flexDirection: 'column',
               gap: 'var(--space-2)',
@@ -250,7 +252,7 @@ export default function DashboardPage() {
           <section
             className="dashboard-section section-map"
             style={{
-              padding: '16px',
+              padding: '20px',
               display: 'flex',
               flexDirection: 'column',
               gap: 'var(--space-2-5)',
@@ -262,25 +264,39 @@ export default function DashboardPage() {
             <div
               style={{
                 display: 'flex',
-                alignItems: 'center',
                 justifyContent: 'space-between',
+                alignItems: 'flex-start',
                 gap: 'var(--space-2-5)',
+                flexWrap: 'wrap',
                 flexShrink: 0,
               }}
             >
-              <div className="dashboard-section-title">
-                Mapa de ubicaciones
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div className="dashboard-section-title">
+                  Mapa de ubicaciones
+                </div>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                  {puntos?.length ?? 0} {puntos?.length === 1 ? 'punto registrado' : 'puntos registrados'}
+                </span>
               </div>
-              <div
-                style={{
-                  fontFamily: 'var(--font-data)',
-                  fontSize: 11,
-                  letterSpacing: '0.04em',
-                  color: 'var(--text-faint)',
-                  textTransform: 'uppercase',
-                }}
-              >
-                {puntos?.length ?? 0} ubicaciones
+
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                {NIVELES.map((_, n) => (
+                  <span
+                    key={n}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      padding: '4px 10px', borderRadius: 999,
+                      background: nivelBg(n), color: nivelPillText(n),
+                      fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 700,
+                      letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <span style={{ width: 7, height: 7, borderRadius: 999, background: nivelColor(n), flexShrink: 0 }} />
+                    {nivelLabel(n)}
+                  </span>
+                ))}
+                <NivelInfo />
               </div>
             </div>
 
@@ -314,7 +330,7 @@ export default function DashboardPage() {
           <section
             className="dashboard-section section-detail"
             style={{
-              padding: '16px',
+              padding: '20px',
               display: 'flex',
               flexDirection: 'column',
               gap: 'var(--space-2-5)',
