@@ -1,190 +1,57 @@
 import React from 'react';
 import { useMediciones, LIMITE_DASHBOARD } from '../hooks/useMediciones';
+import { useBloques } from '../hooks/useBloques';
 import { SkeletonLinea } from './Skeleton';
 import { ultimaMedicionPorPunto } from '../lib/mediciones';
-
+import { nivelLabel } from '../lib/statusUtils';
+import { formatoPct } from '../lib/textUtils';
 
 // ================================================================
-// KPI CARD
+// MÉTRICA
 // ================================================================
 
-// El circulo con el glifo (⬡ ◎ ▲ ✓ ~ !) se quito a proposito: no aportaba
-// informacion que el numero y su etiqueta no dieran ya, y ademas parpadeaba de
-// forma infinita en las tarjetas criticas. La severidad se lee por el color y
-// por la franja superior, sin movimiento permanente en pantalla.
-function KPICard({
-  label,
-  value,
-  sub,
-  color,
-  loading,
-}) {
-
+function Metrica({ label, value, sub, color, loading, primera }) {
   return (
-
     <div
-      className="card kpi-card"
-      aria-busy={loading || undefined}
       style={{
-        '--kpi-color': color,
-
-        padding: '15px 17px',
-
-        position: 'relative',
-
-        overflow: 'hidden',
-
-        borderRadius: 12,
-
-        borderTop:
-          `2px solid ${color}`,
+        flex: '1 1 130px',
+        minWidth: 130,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+        padding: '4px 20px',
+        borderLeft: primera ? 'none' : '1px solid var(--border)',
       }}
     >
+      <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)' }}>
+        {label}
+      </span>
 
-      {/* ========================================================
-          HEADER
-          ======================================================== */}
-
-      <div
+      <span
         style={{
-          display: 'flex',
-
-          justifyContent:
-            'space-between',
-
-          alignItems:
-            'flex-start',
-
-          gap: 'var(--space-3)',
-
-          marginBottom: 'var(--space-3)',
-        }}
-      >
-
-        <span
-          style={{
-            fontSize: 'var(--text-xs)',
-
-            color:
-              'var(--text-muted)',
-
-            fontFamily:
-              'var(--font-ui)',
-
-            fontWeight: 500,
-
-            lineHeight: 1.35,
-          }}
-        >
-          {label}
-        </span>
-
-
-      </div>
-
-
-      {/* ========================================================
-          VALUE
-          ======================================================== */}
-
-      <div
-        style={{
-          fontFamily:
-            'var(--font-data)',
-
-          fontSize: 'var(--text-2xl)',
-
-          fontWeight: 600,
-
+          fontFamily: 'var(--font-ui)',
+          fontSize: 34,
+          fontWeight: 800,
           color,
-
           lineHeight: 1,
-
-          letterSpacing:
-            '-0.035em',
+          fontVariantNumeric: 'tabular-nums',
         }}
       >
+        {loading ? <SkeletonLinea width="3ch" /> : value}
+      </span>
 
-        {loading ? (
-
-          <SkeletonLinea width="3ch" />
-
-        ) : (
-
-          value
-
-        )}
-
-      </div>
-
-
-      {/* ========================================================
-          SUBTITLE
-          ======================================================== */}
-
-      <div
-        style={{
-          marginTop: 'var(--space-2)',
-
-          fontSize: 'var(--text-2xs)',
-
-          color:
-            'var(--text-faint)',
-
-          fontFamily:
-            'var(--font-ui)',
-
-          textTransform:
-            'uppercase',
-
-          letterSpacing:
-            '0.075em',
-        }}
-      >
-
+      <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)' }}>
         {sub}
-
-      </div>
-
-
-      {/* ========================================================
-          BOTTOM ACCENT
-          ======================================================== */}
-
-      <div
-        style={{
-          position: 'absolute',
-
-          left: 17,
-          right: 17,
-
-          bottom: 0,
-
-          height: 1,
-
-          background:
-            `linear-gradient(
-              90deg,
-              transparent,
-              ${color},
-              transparent
-            )`,
-
-          opacity: 0.20,
-        }}
-      />
-
+      </span>
     </div>
   );
 }
 
-
 // ================================================================
-// KPI BAR
+// INDICADORES
 // ================================================================
 
 export default function KPIBar() {
-
   const {
     mediciones,
     loading,
@@ -192,73 +59,76 @@ export default function KPIBar() {
     refetch,
   } = useMediciones(LIMITE_DASHBOARD, { resumen: true });
 
+  // Nombre del punto para "Última área corroída" (ver debajo) -- mismo
+  // patrón que ChartsRow.jsx para resolver bloque_id -> datos del bloque.
+  const { bloques } = useBloques(true);
+  const bloquePorId = React.useMemo(
+    () => Object.fromEntries(bloques.map(b => [b.id_bloque, b])),
+    [bloques]
+  );
+
   // With cached data a failed refresh keeps showing it; only an empty failure
   // is an error state (never show 0 as if it were real data).
   const sinDatos = Boolean(error) && mediciones.length === 0;
-
 
   // ==============================================================
   // DATA
   // ==============================================================
 
-  // Measurements without an assigned point are not a monitored point.
-  const puntosMedidos =
-    new Set(
-      mediciones
-        .map(m => m.bloque_id)
-        .filter(Boolean)
-    ).size;
+  const puntosMedidos = new Set(
+    mediciones.map(m => m.bloque_id).filter(Boolean)
+  ).size;
 
-  const totalMediciones =
-    mediciones.length;
+  const totalMediciones = mediciones.length;
+  const alcanzoLimite = totalMediciones >= LIMITE_DASHBOARD;
 
-  const alcanzoLimite =
-    totalMediciones >= LIMITE_DASHBOARD;
-
-  // Latest measurement per point (shared helper); a null level counts in neither card.
   let puntosSeveros = 0;
-  let puntosSinCorrosion = 0;
   for (const { nivel_corrosion: nivel } of ultimaMedicionPorPunto(mediciones).values()) {
     if (nivel === 3) puntosSeveros++;
-    else if (nivel === 0) puntosSinCorrosion++;
   }
 
+  // Medición más reciente de todas (independiente del orden del API, igual
+  // que ultimaMedicionPorPunto) -- para "Última área corroída".
+  let ultima = null;
+  let ultimaT = -Infinity;
+  for (const m of mediciones) {
+    const t = new Date(m.timestamp).getTime() || 0;
+    if (t > ultimaT) { ultimaT = t; ultima = m; }
+  }
+  const bloqueUltima = ultima ? bloquePorId[ultima.bloque_id] : null;
 
-  // ==============================================================
-  // KPI CONFIG
-  // ==============================================================
-
-  const kpis = [
-    {
-      label: 'Puntos medidos',
-      value: puntosMedidos,
-      sub: 'con al menos una medición',
-      color: 'var(--accent-blue)',
-    },
+  const metricas = [
     {
       label: 'Mediciones',
       value: alcanzoLimite ? `${totalMediciones}+` : totalMediciones,
-      sub: alcanzoLimite ? `se cuentan las ${LIMITE_DASHBOARD} más recientes` : 'en total',
-      color: 'var(--accent-green)',
+      sub: alcanzoLimite ? `las ${LIMITE_DASHBOARD} más recientes` : 'en todos los puntos',
+      color: 'var(--text-primary)',
     },
     {
-      label: 'En estado severo',
+      label: 'Puntos activos',
+      value: puntosMedidos,
+      sub: 'con mediciones registradas',
+      color: 'var(--text-primary)',
+    },
+    {
+      label: 'Última área corroída',
+      value: ultima?.area_corroida_pct != null ? formatoPct(ultima.area_corroida_pct) : '—',
+      sub: ultima
+        ? [bloqueUltima?.nombre, nivelLabel(ultima.nivel_corrosion)].filter(Boolean).join(' · ')
+        : 'sin mediciones aún',
+      color: 'var(--accent-amber)',
+    },
+    {
+      label: 'Severas',
       value: puntosSeveros,
-      sub: 'puntos, según su última medición',
-      color: puntosSeveros > 0 ? 'var(--accent-red)' : 'var(--accent-green)',
-    },
-    {
-      label: 'Sin corrosión',
-      value: puntosSinCorrosion,
-      sub: 'puntos, según su última medición',
-      color: 'var(--accent-green)',
+      sub: 'requieren revisión',
+      color: puntosSeveros > 0 ? 'var(--accent-red)' : 'var(--text-primary)',
     },
   ];
 
-  const kpisMostrados = sinDatos
-    ? kpis.map(k => ({ ...k, value: '—', sub: 'No se pudo cargar', color: 'var(--text-faint)' }))
-    : kpis;
-
+  const metricasMostradas = sinDatos
+    ? metricas.map(k => ({ ...k, value: '—', sub: 'No se pudo cargar', color: 'var(--text-faint)' }))
+    : metricas;
 
   // ==============================================================
   // RENDER
@@ -266,16 +136,13 @@ export default function KPIBar() {
 
   return (
     <div>
-      <div
-        className="kpi-grid"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-          gap: 'var(--space-3)',
-        }}
-      >
-        {kpisMostrados.map((kpi, i) => (
-          <KPICard key={i} {...kpi} loading={loading} />
+      <div className="dashboard-section-title" style={{ marginBottom: 'var(--space-3)' }}>
+        Indicadores
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', rowGap: 16, alignItems: 'center' }}>
+        {metricasMostradas.map((m, i) => (
+          <Metrica key={i} {...m} loading={loading} primera={i === 0} />
         ))}
       </div>
 
@@ -284,8 +151,8 @@ export default function KPIBar() {
           role="alert"
           style={{
             display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
-            marginTop: 'var(--space-2)',
-            fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)', color: 'var(--text-muted)',
+            marginTop: 'var(--space-3)',
+            fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)',
           }}
         >
           <span>No se pudieron cargar las mediciones. Revisa tu conexión.</span>

@@ -3,15 +3,19 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { IconoFlechaAbajo, IconoFlechaArriba, IconoGrafico, IconoSubir } from '../components/Iconos';
 
 import KPIBar from '../components/KPIBar';
+import MedicionesPorNivel from '../components/MedicionesPorNivel';
 import ColombiaMap from '../components/ColombiaMap';
 import PlantDetail from '../components/PlantDetail';
 import PlantsTable from '../components/PlantsTable';
 import ChartsRow from '../components/ChartsRow';
 import Skeleton from '../components/Skeleton';
+import NivelInfo from '../components/NivelInfo';
 
 import { useBloques } from '../hooks/useBloques';
 import { useEmpresas } from '../hooks/useEmpresas';
+import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
+import { NIVELES, nivelColor, nivelBg, nivelPillText, nivelLabel } from '../lib/statusUtils';
 
 
 // ================================================================
@@ -64,6 +68,14 @@ export default function DashboardPage() {
   // /upload es solo para super_admin, admin y tecnico (RoleRoute): el cliente no ve el acceso.
   const puedeSubir = ['super_admin', 'admin', 'tecnico'].some(r => user?.groups?.includes(r));
 
+  // Etiqueta de afiliación del encabezado ("Universidad del Norte ·
+  // Barranquilla"). super_admin no tiene empresa propia -- en ese caso no
+  // se muestra la etiqueta (ver uso de `afiliacion` más abajo).
+  const { perfil } = useUsuarioPerfil();
+  const afiliacion = [perfil?.empresa_nombre, perfil?.empresa_ciudad]
+    .filter(Boolean)
+    .join(' · ');
+
   // "puntos" aquí son bloques (el "Punto" viejo fue absorbido por "Bloque",
   // ver hooks/useBloques.js) -- se mantiene el nombre de variable para no
   // tocar el resto del layout de este componente.
@@ -88,10 +100,11 @@ export default function DashboardPage() {
   return (
 
     <div
-      className="dashboard-shell"
       style={{
         minHeight: '100%',
-        padding: '22px',
+        maxWidth: 1400,
+        margin: '0 auto',
+        padding: '28px 32px 32px',
       }}
     >
 
@@ -103,79 +116,88 @@ export default function DashboardPage() {
         style={{
           display: 'flex',
           flexDirection: 'column',
-          gap: 18,
+          gap: 20,
           width: '100%',
         }}
       >
 
-
         {/* ========================================================
-            KPI SECTION
+            ENCABEZADO DE PÁGINA
+            Reemplaza al <h1> genérico de PageHeader (oculto en esta
+            ruta, ver AppLayout.jsx/PageHeader.jsx) con la etiqueta de
+            afiliación + título + botón principal del rediseño.
             ======================================================== */}
 
-        <section
-          className="dashboard-section section-kpi"
+        <div
           style={{
-            padding: '18px 20px 20px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-end',
+            gap: 12,
+            flexWrap: 'wrap',
           }}
         >
-
-          {/* Header */}
-
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 'var(--space-4)',
-              marginBottom: 'var(--space-4)',
-            }}
-          >
-
-            <div>
-
-              <div
-                className="dashboard-section-title"
-              >
-                Indicadores globales
-              </div>
-
-              <div
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {afiliacion && (
+              <span
                 style={{
-                  marginTop: 5,
-                  fontSize: 'var(--text-2xs)',
-                  color: 'var(--text-faint)',
+                  fontFamily: 'var(--font-ui)',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: '0.16em',
+                  textTransform: 'uppercase',
+                  color: 'var(--accent-blue)',
                 }}
               >
-                Estado general del sistema de monitoreo
-              </div>
-
-            </div>
-
-
-            {/* Nueva medición */}
-
-            {puedeSubir && (
-            <Link
-              to="/upload"
-              className="dashboard-action"
-            >
-
-              <IconoSubir size={14} />
-
-              Nueva medición
-
-            </Link>
+                {afiliacion}
+              </span>
             )}
-
+            <h1
+              style={{
+                margin: 0,
+                fontFamily: 'var(--font-ui)',
+                fontSize: 30,
+                fontWeight: 800,
+                color: 'var(--text-primary)',
+              }}
+            >
+              Monitoreo de corrosión
+            </h1>
           </div>
 
+          {puedeSubir && (
+            <Link to="/upload" className="dashboard-action">
+              <IconoSubir size={18} />
+              Nueva medición
+            </Link>
+          )}
+        </div>
 
-          {/* KPI cards */}
+        {/* ========================================================
+            FILA SUPERIOR: INDICADORES + MEDICIONES POR NIVEL
+            ======================================================== */}
 
-          <KPIBar />
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))',
+            gap: 20,
+          }}
+        >
+          <section
+            className="dashboard-section section-kpi"
+            style={{ padding: 20 }}
+          >
+            <KPIBar />
+          </section>
 
-        </section>
+          <section
+            className="dashboard-section section-kpi"
+            style={{ padding: 20 }}
+          >
+            <MedicionesPorNivel />
+          </section>
+        </div>
 
 
 
@@ -200,7 +222,7 @@ export default function DashboardPage() {
           <section
             className="dashboard-section section-plants"
             style={{
-              padding: '16px',
+              padding: '20px',
               display: 'flex',
               flexDirection: 'column',
               gap: 'var(--space-2)',
@@ -230,7 +252,7 @@ export default function DashboardPage() {
           <section
             className="dashboard-section section-map"
             style={{
-              padding: '16px',
+              padding: '20px',
               display: 'flex',
               flexDirection: 'column',
               gap: 'var(--space-2-5)',
@@ -242,25 +264,39 @@ export default function DashboardPage() {
             <div
               style={{
                 display: 'flex',
-                alignItems: 'center',
                 justifyContent: 'space-between',
+                alignItems: 'flex-start',
                 gap: 'var(--space-2-5)',
+                flexWrap: 'wrap',
                 flexShrink: 0,
               }}
             >
-              <div className="dashboard-section-title">
-                Mapa de ubicaciones
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div className="dashboard-section-title">
+                  Mapa de ubicaciones
+                </div>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                  {puntos?.length ?? 0} {puntos?.length === 1 ? 'punto registrado' : 'puntos registrados'}
+                </span>
               </div>
-              <div
-                style={{
-                  fontFamily: 'var(--font-data)',
-                  fontSize: 11,
-                  letterSpacing: '0.04em',
-                  color: 'var(--text-faint)',
-                  textTransform: 'uppercase',
-                }}
-              >
-                {puntos?.length ?? 0} ubicaciones
+
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                {NIVELES.map((_, n) => (
+                  <span
+                    key={n}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      padding: '4px 10px', borderRadius: 999,
+                      background: nivelBg(n), color: nivelPillText(n),
+                      fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 700,
+                      letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <span style={{ width: 7, height: 7, borderRadius: 999, background: nivelColor(n), flexShrink: 0 }} />
+                    {nivelLabel(n)}
+                  </span>
+                ))}
+                <NivelInfo />
               </div>
             </div>
 
@@ -294,7 +330,7 @@ export default function DashboardPage() {
           <section
             className="dashboard-section section-detail"
             style={{
-              padding: '16px',
+              padding: '20px',
               display: 'flex',
               flexDirection: 'column',
               gap: 'var(--space-2-5)',
@@ -330,18 +366,19 @@ export default function DashboardPage() {
           style={{
             padding: 0,
             overflow: 'hidden',
-            borderRadius: 12,
           }}
         >
           <button
             type="button"
             onClick={() => setShowAnalisis(s => !s)}
+            aria-expanded={showAnalisis}
             style={{
               width: '100%',
-              padding: '16px 20px',
+              minHeight: 64,
+              padding: '0 20px',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
+              gap: 12,
               background: showAnalisis ? 'var(--bg-inset)' : 'transparent',
               border: 'none',
               cursor: 'pointer',
@@ -350,24 +387,15 @@ export default function DashboardPage() {
               transition: 'background-color var(--dur-fast) var(--ease-out)',
             }}
           >
-            <div>
-              <div
-                className="dashboard-section-title"
-                style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-              >
-                <IconoGrafico size={16} /> Análisis y métricas avanzadas (en desarrollo)
-              </div>
-              <div
-                style={{
-                  marginTop: 4,
-                  fontSize: 'var(--text-2xs)',
-                  color: 'var(--text-faint)',
-                }}
-              >
-                Comportamiento y distribución de la corrosión por ciudad y severidad
-              </div>
+            <div
+              className="dashboard-section-title"
+              style={{ gap: 10 }}
+            >
+              <IconoGrafico size={18} /> Análisis y métricas avanzadas (en desarrollo)
             </div>
-            {showAnalisis ? <IconoFlechaArriba size={18} /> : <IconoFlechaAbajo size={18} />}
+            <span style={{ marginLeft: 'auto', display: 'flex', color: 'var(--text-secondary)' }}>
+              {showAnalisis ? <IconoFlechaArriba size={20} /> : <IconoFlechaAbajo size={20} />}
+            </span>
           </button>
 
           {showAnalisis && (

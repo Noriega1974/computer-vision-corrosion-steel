@@ -58,36 +58,33 @@ export default function PlantsTable({
 
   return (
     <div style={{
-      background: 'var(--bg-card)', border: '1px solid var(--border)',
-      borderRadius: 8, display: 'flex', flexDirection: 'column',
-      height: '100%', minHeight: 0, overflow: 'hidden',
+      display: 'flex', flexDirection: 'column',
+      height: '100%', minHeight: 0, overflow: 'hidden', gap: 'var(--space-3)',
     }}>
-      {/* Header */}
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-        <div style={{
-          fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 'var(--text-sm)',
-          letterSpacing: '0.04em', color: 'var(--text-primary)',
-        }}>
-          ZONAS Y PUNTOS
+      {/* Header -- la tarjeta (fondo/borde) ya la da .dashboard-section en
+          DashboardPage.jsx, acá solo va el texto. */}
+      <div style={{ flexShrink: 0 }}>
+        <div className="dashboard-section-title">
+          Zonas y puntos
         </div>
-        <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)', marginTop: 2 }}>
-          {loading ? <SkeletonLinea width={90} /> : `${tieneEmpresas ? `${empresas.length} ZONAS · ` : ''}${puntos.length} PUNTOS`}
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
+          {loading ? <SkeletonLinea width={90} /> : `${tieneEmpresas ? `${empresas.length} zonas · ` : ''}${puntos.length} puntos`}
         </div>
       </div>
 
       {/* Lista con scroll interno */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-2)' }}>
+      <div style={{ flex: 1, overflowY: 'auto' }}>
         {loading && (
           <div aria-busy="true" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {Array.from({ length: filasSkeleton }, (_, i) => (
               <div
                 key={i}
-                style={{ border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}
+                style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}
               >
                 {/* Misma cabecera que el boton de zona: padding, icono 13, texto xs y pildora */}
                 <div style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '8px 10px', background: 'var(--bg-inset)',
+                  minHeight: 44, padding: '0 12px', background: 'var(--bg-inset)',
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
                     <Skeleton width={13} height={13} radius="50%" />
@@ -130,10 +127,10 @@ export default function PlantsTable({
                 <div
                   key={empresa.id_empresa}
                   style={{
-                    border: `1px solid ${isZonaSelected ? 'var(--accent-blue)' : 'var(--border)'}`,
-                    borderRadius: 6,
+                    border: `1px solid ${isZonaSelected ? 'var(--border-highlight)' : 'var(--border)'}`,
+                    borderRadius: 12,
                     overflow: 'hidden',
-                    background: 'var(--bg-page)',
+                    background: 'var(--bg-card-solid)',
                   }}
                 >
                   {/* Cabecera de la Zona */}
@@ -145,8 +142,9 @@ export default function PlantsTable({
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       width: '100%',
-                      padding: '8px 10px',
-                      background: isZonaSelected ? 'rgba(0,185,255,0.08)' : 'var(--bg-inset)',
+                      minHeight: 44,
+                      padding: '0 12px',
+                      background: isZonaSelected ? 'var(--bg-highlight)' : 'var(--bg-inset)',
                       border: 'none',
                       font: 'inherit',
                       textAlign: 'left',
@@ -209,9 +207,9 @@ export default function PlantsTable({
               <div
                 style={{
                   border: '1px solid var(--border)',
-                  borderRadius: 6,
+                  borderRadius: 12,
                   overflow: 'hidden',
-                  background: 'var(--bg-page)',
+                  background: 'var(--bg-card-solid)',
                 }}
               >
                 <button
@@ -222,7 +220,8 @@ export default function PlantsTable({
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     width: '100%',
-                    padding: '8px 10px',
+                    minHeight: 44,
+                    padding: '0 12px',
                     background: 'var(--bg-inset)',
                     border: 'none',
                     font: 'inherit',
@@ -271,16 +270,16 @@ export default function PlantsTable({
                 onClick={centrarEnMiZona}
                 aria-pressed={miZonaSeleccionada}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: 'var(--space-2)', width: '100%',
-                  padding: '8px 10px', font: 'inherit', textAlign: 'left',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-2)', width: '100%',
+                  minHeight: 44, padding: '0 14px', font: 'inherit', textAlign: 'left',
                   cursor: loadingPerfil ? 'not-allowed' : 'pointer',
-                  background: miZonaSeleccionada ? SELECCION_FONDO : 'var(--bg-page)',
+                  background: miZonaSeleccionada ? SELECCION_FONDO : 'var(--bg-inset)',
                   border: `1px solid ${miZonaSeleccionada ? SELECCION_BORDE : 'var(--border)'}`,
-                  borderRadius: 4, opacity: loadingPerfil ? 0.6 : 1,
+                  borderRadius: 12, opacity: loadingPerfil ? 0.6 : 1,
                 }}
               >
-                <IconoUbicacion size={13} color="var(--text-muted)" />
-                <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-primary)' }}>
+                <IconoUbicacion size={16} color="var(--accent-blue)" />
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-blue)' }}>
                   {loadingPerfil ? 'Cargando…' : 'Centrar en mi zona'}
                 </span>
               </button>
@@ -301,9 +300,10 @@ export default function PlantsTable({
   );
 }
 
-// Selected state without a side-tab: soft tint plus a full 1px border.
-const SELECCION_FONDO = 'color-mix(in srgb, var(--accent-blue) 10%, var(--bg-page))';
-const SELECCION_BORDE = 'color-mix(in srgb, var(--accent-blue) 85%, transparent)';
+// "Fondo resaltado" de la spec para el punto seleccionado (ver --bg-highlight
+// / --border-highlight en index.css).
+const SELECCION_FONDO = 'var(--bg-highlight)';
+const SELECCION_BORDE = 'var(--border-highlight)';
 
 function PlantRow({ punto, index, selected, onClick }) {
   const nombre = punto.nombre ?? 'Punto sin nombre';
@@ -316,13 +316,17 @@ function PlantRow({ punto, index, selected, onClick }) {
       // (.planta-row) can override it; inline `background` would always win.
       className={selected ? 'planta-row is-selected' : 'planta-row'}
       style={{
-        '--fila-fondo': selected ? SELECCION_FONDO : 'var(--bg-page)',
-        display: 'block',
+        '--fila-fondo': selected ? SELECCION_FONDO : 'var(--bg-card-solid)',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        gap: 3,
         width: '100%',
+        minHeight: 56,
         textAlign: 'left',
-        padding: '8px 10px',
+        padding: '12px 14px',
         border: `1px solid ${selected ? SELECCION_BORDE : 'var(--border)'}`,
-        borderRadius: 4,
+        borderRadius: 12,
         cursor: 'pointer',
         font: 'inherit',
       }}
@@ -330,7 +334,7 @@ function PlantRow({ punto, index, selected, onClick }) {
       <div
         title={nombre}
         style={{
-          fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2,
+          fontSize: 14, fontWeight: 700, color: 'var(--text-primary)',
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}
       >
@@ -339,7 +343,7 @@ function PlantRow({ punto, index, selected, onClick }) {
       <div
         title={`${punto.ciudad ?? '—'}${punto.departamento ? ` · ${punto.departamento}` : ''}`}
         style={{
-          fontSize: 'var(--text-3xs)', color: 'var(--text-muted)',
+          fontSize: 12, color: 'var(--text-secondary)',
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}
       >
