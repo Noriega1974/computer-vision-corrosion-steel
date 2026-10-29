@@ -18,19 +18,19 @@ function Metrica({ label, value, sub, color, loading, primera }) {
         minWidth: 130,
         display: 'flex',
         flexDirection: 'column',
-        gap: 6,
-        padding: '4px 20px',
+        gap: 3,
+        padding: '2px 16px',
         borderLeft: primera ? 'none' : '1px solid var(--border)',
       }}
     >
-      <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)' }}>
+      <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)' }}>
         {label}
       </span>
 
       <span
         style={{
           fontFamily: 'var(--font-ui)',
-          fontSize: 34,
+          fontSize: 26,
           fontWeight: 800,
           color,
           lineHeight: 1,
@@ -40,7 +40,7 @@ function Metrica({ label, value, sub, color, loading, primera }) {
         {loading ? <SkeletonLinea width="3ch" /> : value}
       </span>
 
-      <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)' }}>
+      <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)' }}>
         {sub}
       </span>
     </div>
@@ -136,11 +136,11 @@ export default function KPIBar() {
 
   return (
     <div>
-      <div className="dashboard-section-title" style={{ marginBottom: 'var(--space-3)' }}>
+      <div className="dashboard-section-title" style={{ marginBottom: 'var(--space-2)' }}>
         Indicadores
       </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', rowGap: 16, alignItems: 'center' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', rowGap: 10, alignItems: 'center' }}>
         {metricasMostradas.map((m, i) => (
           <Metrica key={i} {...m} loading={loading} primera={i === 0} />
         ))}

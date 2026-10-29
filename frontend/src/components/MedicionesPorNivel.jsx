@@ -21,16 +21,16 @@ export default function MedicionesPorNivel() {
 
   return (
     <div>
-      <div className="dashboard-section-title" style={{ marginBottom: 'var(--space-3)' }}>
+      <div className="dashboard-section-title" style={{ marginBottom: 'var(--space-2)' }}>
         Mediciones por nivel
       </div>
 
       {loading ? (
         <div aria-busy="true" style={{ display: 'flex', gap: 10 }}>
           {conteos.map(c => (
-            <div key={c.nivel} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+            <div key={c.nivel} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
               <SkeletonLinea width={18} />
-              <Skeleton width="100%" height={120} radius={8} />
+              <Skeleton width="100%" height={72} radius={8} />
               <SkeletonLinea width={48} />
             </div>
           ))}
@@ -38,15 +38,15 @@ export default function MedicionesPorNivel() {
       ) : (
         <div style={{ display: 'flex', gap: 10 }}>
           {conteos.map(c => (
-            <div key={c.nivel} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+            <div key={c.nivel} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
               <span style={{
-                fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 700,
+                fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 700,
                 color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums',
               }}>
                 {c.valor}
               </span>
               <div style={{
-                width: '100%', height: 120, display: 'flex', alignItems: 'flex-end',
+                width: '100%', height: 72, display: 'flex', alignItems: 'flex-end',
                 background: 'var(--bg-inset)', borderRadius: 8,
               }}>
                 <div style={{

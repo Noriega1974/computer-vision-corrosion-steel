@@ -101,23 +101,33 @@ export default function DashboardPage() {
 
     <div
       style={{
-        minHeight: '100%',
+        height: '100%',
         maxWidth: 1400,
         margin: '0 auto',
-        padding: '28px 32px 32px',
+        padding: '16px 28px 18px',
+        display: 'flex',
+        flexDirection: 'column',
       }}
     >
 
       {/* ==========================================================
           DASHBOARD CONTENT
+          Todo el bloque (encabezado + indicadores + fila principal)
+          se dimensiona para entrar en una sola pantalla sin scroll en
+          la mayoría de resoluciones: la fila principal usa flex:1 (todo
+          el alto que sobra) en vez de una altura fija, y el encabezado/
+          las tarjetas de arriba se achicaron -- antes ocupaban tanto que
+          ni siquiera el mapa se alcanzaba a ver sin bajar.
           ========================================================== */}
 
       <div
         style={{
           display: 'flex',
           flexDirection: 'column',
-          gap: 20,
+          gap: 14,
           width: '100%',
+          flex: 1,
+          minHeight: 0,
         }}
       >
 
@@ -132,17 +142,18 @@ export default function DashboardPage() {
           style={{
             display: 'flex',
             justifyContent: 'space-between',
-            alignItems: 'flex-end',
+            alignItems: 'center',
             gap: 12,
             flexWrap: 'wrap',
+            flexShrink: 0,
           }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {afiliacion && (
               <span
                 style={{
                   fontFamily: 'var(--font-ui)',
-                  fontSize: 11,
+                  fontSize: 10,
                   fontWeight: 700,
                   letterSpacing: '0.16em',
                   textTransform: 'uppercase',
@@ -156,7 +167,7 @@ export default function DashboardPage() {
               style={{
                 margin: 0,
                 fontFamily: 'var(--font-ui)',
-                fontSize: 30,
+                fontSize: 22,
                 fontWeight: 800,
                 color: 'var(--text-primary)',
               }}
@@ -166,8 +177,12 @@ export default function DashboardPage() {
           </div>
 
           {puedeSubir && (
-            <Link to="/upload" className="dashboard-action">
-              <IconoSubir size={18} />
+            <Link
+              to="/upload"
+              className="dashboard-action"
+              style={{ minHeight: 40, padding: '0 18px', fontSize: 14 }}
+            >
+              <IconoSubir size={16} />
               Nueva medición
             </Link>
           )}
@@ -181,30 +196,31 @@ export default function DashboardPage() {
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))',
-            gap: 20,
+            gap: 14,
+            flexShrink: 0,
           }}
         >
           <section
             className="dashboard-section section-kpi"
-            style={{ padding: 20 }}
+            style={{ padding: 14 }}
           >
             <KPIBar />
           </section>
 
           <section
             className="dashboard-section section-kpi"
-            style={{ padding: 20 }}
+            style={{ padding: 14 }}
           >
             <MedicionesPorNivel />
           </section>
         </div>
 
-
-
         {/* ========================================================
             ZONAS/PUNTOS + MAPA + DETALLE
-            Con 3 columnas tienen la misma altura exacta (480px); por debajo de 1280px ver index.css
-            con scroll interno independiente.
+            flex:1 -- ocupa el alto que sobra de las secciones de arriba,
+            con un piso (minHeight) para no aplastarse en pantallas muy
+            bajas. Por debajo de 1280px ver index.css para el apilado con
+            scroll interno independiente.
             ======================================================== */}
 
         <div
@@ -212,8 +228,9 @@ export default function DashboardPage() {
           style={{
             display: 'grid',
             gridTemplateColumns: 'minmax(250px, 0.85fr) minmax(0, 2.1fr) minmax(320px, 1.05fr)',
-            gap: 18,
-            height: 'clamp(480px, 56vh, 720px)',
+            gap: 14,
+            flex: 1,
+            minHeight: 360,
           }}
         >
           {/* ======================================================
@@ -222,7 +239,7 @@ export default function DashboardPage() {
           <section
             className="dashboard-section section-plants"
             style={{
-              padding: '20px',
+              padding: '16px',
               display: 'flex',
               flexDirection: 'column',
               gap: 'var(--space-2)',
@@ -252,7 +269,7 @@ export default function DashboardPage() {
           <section
             className="dashboard-section section-map"
             style={{
-              padding: '20px',
+              padding: '16px',
               display: 'flex',
               flexDirection: 'column',
               gap: 'var(--space-2-5)',
@@ -330,7 +347,7 @@ export default function DashboardPage() {
           <section
             className="dashboard-section section-detail"
             style={{
-              padding: '20px',
+              padding: '16px',
               display: 'flex',
               flexDirection: 'column',
               gap: 'var(--space-2-5)',
@@ -366,6 +383,7 @@ export default function DashboardPage() {
           style={{
             padding: 0,
             overflow: 'hidden',
+            flexShrink: 0,
           }}
         >
           <button
@@ -374,7 +392,7 @@ export default function DashboardPage() {
             aria-expanded={showAnalisis}
             style={{
               width: '100%',
-              minHeight: 64,
+              minHeight: 52,
               padding: '0 20px',
               display: 'flex',
               alignItems: 'center',
@@ -419,11 +437,12 @@ export default function DashboardPage() {
             justifyContent: 'space-between',
 
             flexWrap: 'wrap',
+            flexShrink: 0,
 
             gap: 'var(--space-2)',
 
             padding:
-              '12px 6px 4px',
+              '6px 6px 0',
 
             fontSize: 'var(--text-3xs)',
 
