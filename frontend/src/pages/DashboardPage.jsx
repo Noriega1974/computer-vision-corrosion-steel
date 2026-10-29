@@ -366,18 +366,19 @@ export default function DashboardPage() {
           style={{
             padding: 0,
             overflow: 'hidden',
-            borderRadius: 12,
           }}
         >
           <button
             type="button"
             onClick={() => setShowAnalisis(s => !s)}
+            aria-expanded={showAnalisis}
             style={{
               width: '100%',
-              padding: '16px 20px',
+              minHeight: 64,
+              padding: '0 20px',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
+              gap: 12,
               background: showAnalisis ? 'var(--bg-inset)' : 'transparent',
               border: 'none',
               cursor: 'pointer',
@@ -386,24 +387,15 @@ export default function DashboardPage() {
               transition: 'background-color var(--dur-fast) var(--ease-out)',
             }}
           >
-            <div>
-              <div
-                className="dashboard-section-title"
-                style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-              >
-                <IconoGrafico size={16} /> Análisis y métricas avanzadas (en desarrollo)
-              </div>
-              <div
-                style={{
-                  marginTop: 4,
-                  fontSize: 'var(--text-2xs)',
-                  color: 'var(--text-faint)',
-                }}
-              >
-                Mediciones por ciudad
-              </div>
+            <div
+              className="dashboard-section-title"
+              style={{ gap: 10 }}
+            >
+              <IconoGrafico size={18} /> Análisis y métricas avanzadas (en desarrollo)
             </div>
-            {showAnalisis ? <IconoFlechaArriba size={18} /> : <IconoFlechaAbajo size={18} />}
+            <span style={{ marginLeft: 'auto', display: 'flex', color: 'var(--text-secondary)' }}>
+              {showAnalisis ? <IconoFlechaArriba size={20} /> : <IconoFlechaAbajo size={20} />}
+            </span>
           </button>
 
           {showAnalisis && (
