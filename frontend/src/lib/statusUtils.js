@@ -19,22 +19,42 @@ export function nivelToStatus(nivel) {
   return ['OK', 'EARLY', 'MODERATE', 'CRITICAL'][nivel] ?? 'OK';
 }
 
+// Escala de niveles del rediseño (docs/rediseno/REDISENO_DASHBOARD.md):
+// la spec define 5 filas (incluye "Crítica"), pero el backend solo calcula
+// 4 niveles (0-3, ver NIVELES arriba) -- se usan las primeras 4 filas de la
+// tabla y se descarta "Crítica", que no tiene ningún nivel real que la
+// produzca.
 export function getStatusColor(status) {
   return {
-    OK:       '#16a34a',
-    EARLY:    '#d97706',
-    MODERATE: '#ea580c',
-    CRITICAL: '#dc2626',
+    OK:       '#6F7F55',
+    EARLY:    '#E3A24F',
+    MODERATE: '#D06E2A',
+    CRITICAL: '#9C3A1A',
   }[status] ?? '#64748b';
 }
 
+// Fondo de píldora/etiqueta (columna "Fondo de etiqueta" de la spec) --
+// antes era una versión translúcida de getStatusColor; ahora son los
+// tonos pastel planos que da la spec, independientes del color del marcador.
 export function getStatusBg(status) {
   return {
-    OK:       'rgba(22,163,74,0.08)',
-    EARLY:    'rgba(217,119,6,0.08)',
-    MODERATE: 'rgba(234,88,12,0.10)',
-    CRITICAL: 'rgba(220,38,38,0.10)',
+    OK:       '#E5E7D6',
+    EARLY:    '#F8E3C4',
+    MODERATE: '#F6D5BC',
+    CRITICAL: '#F0D2C7',
   }[status] ?? 'transparent';
+}
+
+// Texto sobre el fondo de píldora (columna "Texto de etiqueta" de la spec)
+// -- deliberadamente más oscuro/saturado que getStatusColor para mantener
+// contraste AA sobre el fondo pastel de arriba.
+export function getStatusPillText(status) {
+  return {
+    OK:       '#3D452D',
+    EARLY:    '#7A4A12',
+    MODERATE: '#7A3510',
+    CRITICAL: '#7A2A12',
+  }[status] ?? 'var(--text-primary)';
 }
 
 export function getStatusLabel(status) {
@@ -53,4 +73,9 @@ export function nivelLabel(nivel) {
 
 export function nivelBg(nivel) {
   return getStatusBg(nivelToStatus(nivel));
+}
+
+// Color de texto sobre nivelBg(nivel) -- ver getStatusPillText.
+export function nivelPillText(nivel) {
+  return getStatusPillText(nivelToStatus(nivel));
 }
