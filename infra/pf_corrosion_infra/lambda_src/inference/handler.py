@@ -6,8 +6,10 @@ El modelo se elige por configuracion: MODEL_TYPE ("yolo" | "unet") y MODEL_KEY
 (clave S3 del ONNX en el bucket de modelos, MODEL_BUCKET). Ningun modelo va
 empaquetado en la Lambda: model_store.py lo baja a /tmp una vez por arranque en
 frio (ver yolo_model.py, unet_model.py y docs/runbook_unet.md). Ambos devuelven
-el mismo contrato de respuesta, con el area calculada sobre la foto completa y
-los niveles ISO 10289 de _calcular_nivel.
+el mismo contrato de respuesta y los niveles ISO 10289 de _calcular_nivel. El
+area es la de la foto completa, salvo en la U-Net con el separador de placa
+habilitado (PLATE_MODEL_KEY, ver placa_model.py): entonces es el % sobre la
+placa, con la foto completa como respaldo (campo `area_base`).
 
 Recibe una imagen -- en base64 (`imagen_base64`, app movil) o ya subida a S3
 (`imagen_key`, web, ver abajo) -- + el `bloque_id` de un bloque YA EXISTENTE
@@ -72,6 +74,7 @@ from botocore.exceptions import ClientError
 from PIL import Image, ImageOps
 
 import model_store
+import placa_model
 import unet_model
 import yolo_model
 
@@ -211,8 +214,9 @@ def _abrir_imagen(datos: bytes) -> Image.Image:
 
 
 def _calcular_nivel(area_pct: float) -> int:
-    """Niveles ISO 10289 sobre el % de la foto completa: 0 = sin corrosion
-    (< 0.05 %), 1 = leve (< 10 %), 2 = moderada (< 25 %), 3 = severa (>= 25 %)."""
+    """Niveles ISO 10289 sobre el `area_corroida_pct` (de la placa o, de respaldo,
+    de la foto completa): 0 = sin corrosion (< 0.05 %), 1 = leve (< 10 %),
+    2 = moderada (< 25 %), 3 = severa (>= 25 %)."""
     if area_pct < 0.05:
         return 0
     elif area_pct < 10:
@@ -220,6 +224,42 @@ def _calcular_nivel(area_pct: float) -> int:
     elif area_pct < 25:
         return 2
     return 3
+
+
+def _separar_placa(imagen: Image.Image) -> dict:
+    """Corre el separador de placa. NUNCA lanza: cualquier fallo (descarga,
+    sesion, onnx, postproceso) deja `mascara` en None y la solicitud sigue con
+    el % sobre la foto completa. Devuelve:
+
+      mascara    bool (h, w) de la placa, o None si no se usa (fallo o placa
+                 < MIN_PLACA_PCT_FOTO de la foto: mascara claramente mala)
+      pct_foto   % de la foto que cubre la placa, o None si fallo
+      contorno   {"puntos": [{x,y}]} normalizado, o None
+      error      True si el separador fallo
+      descarga_ms, carga_ms, onnx_ms, total_ms
+    """
+    t0 = time.perf_counter()
+    info = {"mascara": None, "pct_foto": None, "contorno": None, "error": False,
+            "descarga_ms": 0, "carga_ms": 0, "onnx_ms": 0}
+    try:
+        sesion, t_placa = model_store.obtener_sesion_placa(s3, placa_model.SIZE)
+        info.update(t_placa)
+        mascara, info["onnx_ms"] = placa_model.separar(imagen, sesion)
+        info["pct_foto"] = round(float(mascara.sum()) / mascara.size * 100.0, 2)
+        if info["pct_foto"] >= placa_model.MIN_PLACA_PCT_FOTO:
+            info["mascara"] = mascara
+            try:
+                info["contorno"] = placa_model.contorno(mascara)
+            except Exception as exc:  # el contorno es decorativo: no invalida la placa
+                logger.warning("No se pudo calcular el contorno de la placa: %s", exc)
+        else:
+            logger.warning("Placa descartada: cubre %.2f %% de la foto (< %.1f %%); se usa la foto completa",
+                           info["pct_foto"], placa_model.MIN_PLACA_PCT_FOTO)
+    except Exception as exc:
+        info["error"] = True
+        logger.warning("Separador de placa fallo, se usa la foto completa: %s", exc, exc_info=True)
+    info["total_ms"] = round((time.perf_counter() - t0) * 1000)
+    return info
 
 
 def _inferir(imagen: Image.Image, tiempos: dict | None = None) -> dict:
@@ -230,6 +270,19 @@ def _inferir(imagen: Image.Image, tiempos: dict | None = None) -> dict:
       detecciones [{x,y,w,h,confianza,clase}], mascaras [{puntos:[{x,y}]}],
       modelo (aditivo: "yolo:<archivo>" o "unet:<archivo>")
 
+    Solo con la U-Net y el separador de placa habilitado (PLATE_MODEL_KEY o
+    PLATE_MODEL_LOCAL_PATH) se agregan, ADITIVOS, los campos de la base:
+
+      area_base ("placa" | "foto"), area_corroida_pct_foto (el % de siempre,
+      sobre la foto completa), placa_pct_foto (% de la foto que cubre la placa
+      o None), contorno_placa ({puntos:[{x,y}]} normalizado o None),
+      modelo_placa ("placa:<archivo>" o None si el separador fallo)
+
+    `area_corroida_pct` (y por tanto `nivel_corrosion`) es el % sobre la placa
+    si hay una placa valida; si el separador falla o la placa cubre menos del
+    3 % de la foto, es el % sobre la foto completa (`area_base` = "foto").
+    YOLO y la U-Net sin separador: contrato y valores de siempre.
+
     Llena `tiempos` (si se pasa) con los campos de TIEMPOS_INFERENCIA que se
     conocen aqui; lambda_handler agrega el total y escribe la linea.
     """
@@ -239,9 +292,25 @@ def _inferir(imagen: Image.Image, tiempos: dict | None = None) -> dict:
     t0 = time.perf_counter()
 
     sesion, t_modelo = model_store.obtener_sesion(s3, IMGSZ)
-    t1 = time.perf_counter()
-    modulo = unet_model if tipo == "unet" else yolo_model
-    resultado, onnx_ms = modulo.inferir(imagen, sesion)
+    placa = _separar_placa(imagen) if tipo == "unet" and model_store.placa_habilitada() else None
+    t1 = time.perf_counter()  # la inferencia del modelo principal no incluye el separador
+    if tipo == "unet":
+        if placa is not None and placa["mascara"] is not None:
+            resultado, onnx_ms = unet_model.inferir(imagen, sesion, placa["mascara"])
+        else:
+            resultado, onnx_ms = unet_model.inferir(imagen, sesion)
+    else:
+        resultado, onnx_ms = yolo_model.inferir(imagen, sesion)
+    if placa is not None:
+        usa_placa = placa["mascara"] is not None
+        if not usa_placa:
+            resultado["area_corroida_pct_foto"] = resultado["area_corroida_pct"]
+        resultado.update({
+            "area_base": "placa" if usa_placa else "foto",
+            "placa_pct_foto": placa["pct_foto"],
+            "contorno_placa": placa["contorno"] if usa_placa else None,
+            "modelo_placa": None if placa["error"] else model_store.etiqueta_placa(),
+        })
     resultado["nivel_corrosion"] = _calcular_nivel(resultado["area_corroida_pct"])
     resultado["modelo"] = model_store.etiqueta_modelo(tipo)
 
@@ -257,6 +326,14 @@ def _inferir(imagen: Image.Image, tiempos: dict | None = None) -> dict:
             "modelo_total_ms": round((time.perf_counter() - t0) * 1000),
             "foto_px": list(imagen.size),
         })
+        if placa is not None:
+            tiempos.update({
+                "area_base": resultado["area_base"],
+                "placa_descarga_ms": placa["descarga_ms"],
+                "placa_carga_ms": placa["carga_ms"],
+                "placa_onnx_ms": placa["onnx_ms"],
+                "placa_total_ms": placa["total_ms"],
+            })
     return resultado
 
 
@@ -617,6 +694,9 @@ def _procesar_solicitud(event: dict, tiempos: dict) -> dict:
                 "modelo":           resultado_ml["modelo"],
                 "tiempo_procesamiento_ms": tiempo_procesamiento_ms,
             }
+            for campo in ("area_base", "area_corroida_pct_foto", "placa_pct_foto", "contorno_placa", "modelo_placa"):
+                if campo in resultado_ml:  # solo con el separador de placa habilitado
+                    item_db[campo] = floats_to_decimal(resultado_ml[campo])
             if tiempo_subida_s is not None:
                 item_db["tiempo_subida_s"] = Decimal(str(tiempo_subida_s))
             if nombre:

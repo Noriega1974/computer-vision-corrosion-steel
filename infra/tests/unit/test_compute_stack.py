@@ -139,3 +139,45 @@ def test_logo_y_portada_leen_y_borran_solo_bajo_su_prefijo():
         assert len(borrado) == 1 and patron in str(borrado[0]["Resource"])
         # ninguna sentencia da lectura/borrado sobre todo el bucket
         assert not [s for s in lectura + borrado if "'/*'" in str(s["Resource"])]
+
+
+# ── Separador de placa ───────────────────────────────────────────────────────
+
+SHA_PLACA = "a09b08692ae1ae0e3f3b722ecb40b290b8647356f6d1eeb1d50e83d31d4dadc3"
+
+
+def test_separador_de_placa_activo_por_defecto():
+    env = _inferencia(_plantilla())["Environment"]["Variables"]
+    assert env["PLATE_MODEL_KEY"] == "placa/separador_placa_v1_512.onnx"
+    assert env["PLATE_MODEL_SHA256"] == SHA_PLACA
+
+
+def test_separador_de_placa_clave_y_sha_por_contexto():
+    env = _inferencia(_plantilla(plate_model_key="placa/v2.onnx", plate_model_sha256="cd" * 32))["Environment"]["Variables"]
+    assert env["PLATE_MODEL_KEY"] == "placa/v2.onnx" and env["PLATE_MODEL_SHA256"] == "cd" * 32
+    env = _inferencia(_plantilla(plate_model_sha256="none"))["Environment"]["Variables"]
+    assert "PLATE_MODEL_SHA256" not in env and "PLATE_MODEL_KEY" in env
+
+
+@pytest.mark.parametrize("valor", ["none", "NONE", "off"])
+def test_separador_de_placa_se_desactiva(valor):
+    p = _inferencia(_plantilla(plate_model_key=valor))
+    env = p["Environment"]["Variables"]
+    assert not {"PLATE_MODEL_KEY", "PLATE_MODEL_SHA256"} & set(env)
+    assert env["MODEL_KEY"] == "unet/unet_final_1024.onnx"  # el resto no cambia
+    assert p["MemorySize"] == 3008 and p["Timeout"] == 30
+
+
+def test_clave_del_separador_debe_colgar_de_placa():
+    with pytest.raises(ValueError, match="placa/"):
+        _plantilla(plate_model_key="unet/separador.onnx")
+    with pytest.raises(ValueError, match="placa/"):
+        _plantilla(plate_model_key="separador.onnx")
+
+
+def test_permiso_de_lectura_del_modelo_incluye_placa():
+    t = _plantilla()
+    sentencias = [s for pol in t.find_resources("AWS::IAM::Policy").values()
+                  for s in pol["Properties"]["PolicyDocument"]["Statement"]]
+    modelos = [s for s in sentencias if s["Action"] == "s3:GetObject" and "placa/*" in str(s["Resource"])]
+    assert len(modelos) == 1 and "unet/*" in str(modelos[0]["Resource"]) and "yolo/*" in str(modelos[0]["Resource"])

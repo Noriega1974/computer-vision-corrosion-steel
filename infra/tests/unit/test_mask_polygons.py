@@ -160,3 +160,41 @@ def test_equivale_a_opencv_en_manchas_organicas(semilla):
     mios = {frozenset(map(tuple, c.tolist())) for c in conts}
     refs = {frozenset(map(tuple, c.reshape(-1, 2).tolist())) for c in cs_cv}
     assert refs <= mios
+
+
+# ── componente_mayor (separador de placa) ────────────────────────────────────
+
+def test_componente_mayor_mascara_vacia():
+    r = mp.componente_mayor(np.zeros((10, 12), bool))
+    assert r.shape == (10, 12) and not r.any()
+
+
+def test_componente_mayor_se_queda_con_la_mas_grande_y_une_diagonales():
+    m = np.zeros((40, 50), bool)
+    m[2:6, 2:6] = True            # 16 px
+    m[10:30, 10:30] = True        # 400 px
+    m[30, 30] = True              # toca el grande en diagonal (8-conectividad)
+    m[35:39, 40:49] = True        # 36 px
+    r = mp.componente_mayor(m)
+    esperado = np.zeros_like(m)
+    esperado[10:30, 10:30] = True
+    esperado[30, 30] = True
+    assert (r == esperado).all()
+
+
+def test_componente_mayor_conserva_huecos_y_formas_en_u():
+    m = np.zeros((30, 30), bool)
+    m[5:25, 5:25] = True
+    m[10:20, 10:20] = False       # hueco
+    m[5:25, 12:14] = True         # puente que no cierra el hueco por completo
+    r = mp.componente_mayor(m)
+    assert (r == m).all()
+
+
+@necesita_cv2
+def test_componente_mayor_coincide_con_opencv():
+    rng = np.random.default_rng(7)
+    m = rng.random((120, 160)) > 0.55
+    n, lab, st, _ = cv2.connectedComponentsWithStats(m.astype(np.uint8), connectivity=8)
+    ref = lab == 1 + int(np.argmax(st[1:, cv2.CC_STAT_AREA]))
+    assert (mp.componente_mayor(m) == ref).all()
