@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { IconoFlechaAbajo, IconoFlechaArriba, IconoGrafico, IconoSubir } from '../components/Iconos';
 
 import KPIBar from '../components/KPIBar';
+import MedicionesPorNivel from '../components/MedicionesPorNivel';
 import ColombiaMap from '../components/ColombiaMap';
 import PlantDetail from '../components/PlantDetail';
 import PlantsTable from '../components/PlantsTable';
@@ -171,20 +172,30 @@ export default function DashboardPage() {
         </div>
 
         {/* ========================================================
-            KPI SECTION
+            FILA SUPERIOR: INDICADORES + MEDICIONES POR NIVEL
             ======================================================== */}
 
-        <section
-          className="dashboard-section section-kpi"
+        <div
           style={{
-            padding: '18px 20px 20px',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))',
+            gap: 20,
           }}
         >
-          {/* KPI cards */}
+          <section
+            className="dashboard-section section-kpi"
+            style={{ padding: 20 }}
+          >
+            <KPIBar />
+          </section>
 
-          <KPIBar />
-
-        </section>
+          <section
+            className="dashboard-section section-kpi"
+            style={{ padding: 20 }}
+          >
+            <MedicionesPorNivel />
+          </section>
+        </div>
 
 
 
@@ -373,7 +384,7 @@ export default function DashboardPage() {
                   color: 'var(--text-faint)',
                 }}
               >
-                Comportamiento y distribución de la corrosión por ciudad y severidad
+                Mediciones por ciudad
               </div>
             </div>
             {showAnalisis ? <IconoFlechaArriba size={18} /> : <IconoFlechaAbajo size={18} />}

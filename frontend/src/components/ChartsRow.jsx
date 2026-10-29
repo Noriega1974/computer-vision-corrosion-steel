@@ -6,18 +6,15 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
-  PieChart,
-  Pie,
   BarChart,
   Bar,
 } from 'recharts';
 
 import { useMediciones, LIMITE_DASHBOARD } from '../hooks/useMediciones';
 import { useBloques } from '../hooks/useBloques';
-import Skeleton, { SkeletonLinea } from './Skeleton';
+import Skeleton from './Skeleton';
 import {
   nivelColor,
-  nivelLabel,
 } from '../lib/statusUtils';
 
 const CustomTooltip = ({ active, payload, label }) => {
@@ -74,38 +71,7 @@ const CustomTooltip = ({ active, payload, label }) => {
   );
 };
 
-// Skeletons con el mismo alto que los graficos reales (160 + leyenda / 150).
-function PieSkeleton() {
-  return (
-    <div aria-busy="true">
-      <div
-        style={{
-          height: 160,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Skeleton width={130} height={130} radius="50%" />
-      </div>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'center',
-          gap: '6px 12px',
-          padding: '0 8px 4px',
-        }}
-      >
-        {[0, 1, 2].map(i => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', fontSize: 12 }}>
-            <SkeletonLinea width={56} />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
+// Skeleton con el mismo alto que el grafico real (150).
 function BarsSkeleton() {
   const alturas = [70, 100, 55, 85, 40];
   return (
@@ -174,22 +140,10 @@ export default function ChartsRow() {
     [bloques]
   );
 
-  // --------------------------------------------------
-  // DISTRIBUCIÓN POR NIVEL DE CORROSIÓN
-  // --------------------------------------------------
-
-  const nivelCounts = [0, 1, 2, 3]
-    .map(n => ({
-      name: nivelLabel(n),
-      value: mediciones.filter(
-        m => m.nivel_corrosion === n
-      ).length,
-      fill: nivelColor(n),
-      nivel: n,
-    }))
-    .filter(d => d.value > 0);
-
-  // Bar: mediciones por ciudad (top 6)
+  // Bar: mediciones por ciudad (top 6). La distribución por nivel se mudó
+  // a MedicionesPorNivel.jsx (tarjeta "Mediciones por nivel" junto a
+  // Indicadores, ver DashboardPage.jsx) -- este componente ahora solo
+  // vive dentro de "Análisis y métricas avanzadas".
   const byCity = {};
   mediciones.forEach(m => {
     const ciudad = ciudadPorBloqueId[m.bloque_id] ?? '—';
@@ -209,102 +163,7 @@ export default function ChartsRow() {
     }));
 
   return (
-    <div
-      className="charts-grid"
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '240px 1fr',
-        gap: 'var(--space-4)',
-      }}
-    >
-
-      {/* -------------------------------------------
-          DISTRIBUCIÓN POR NIVEL
-      ------------------------------------------- */}
-
-      <ChartCard
-        title="DISTRIBUCIÓN"
-        subtitle="POR NIVEL DE CORROSIÓN"
-      >
-        {loading ? (
-          <PieSkeleton />
-        ) : nivelCounts.length === 0 ? (
-          <EmptyChart message="Sin mediciones" />
-        ) : (
-          <>
-            <ResponsiveContainer
-              width="100%"
-              height={160}
-            >
-              <PieChart>
-                <Pie
-                  data={nivelCounts}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={45}
-                  outerRadius={65}
-                  paddingAngle={3}
-                  dataKey="value"
-                >
-                  {nivelCounts.map(
-                    (entry, i) => (
-                      <Cell
-                        key={i}
-                        fill={entry.fill}
-                        stroke="var(--bg-void)"
-                        strokeWidth={2}
-                      />
-                    )
-                  )}
-                </Pie>
-
-                <Tooltip
-                  content={<CustomTooltip />}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                justifyContent: 'center',
-                gap: '6px 12px',
-                padding: '0 8px 4px',
-              }}
-            >
-              {nivelCounts.map(d => (
-                <div
-                  key={d.name}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 'var(--space-1)',
-                    fontSize: 12,
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: '50%',
-                      background: d.fill,
-                    }}
-                  />
-
-                  <span
-                    style={{
-                      color: 'var(--text-muted)',
-                    }}
-                  >
-                    {d.name} ({d.value})
-                  </span>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </ChartCard>
+    <div className="charts-grid">
 
       {/* -------------------------------------------
           MEDICIONES POR CIUDAD
