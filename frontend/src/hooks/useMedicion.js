@@ -50,5 +50,8 @@ export function useMedicion(idMedicion, idPunto) {
   }, [idMedicion, idPunto, globalKey, localKey]);
 
   const refetch = useCallback(() => setLocalKey(k => k + 1), []);
-  return { ...estado, refetch };
+  // Reemplaza la medición mostrada por una ya traída (p. ej. tras reanalizar),
+  // sin otra consulta.
+  const reemplazar = useCallback(m => setEstado(e => ({ ...e, medicion: m })), []);
+  return { ...estado, refetch, reemplazar };
 }

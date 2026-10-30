@@ -1,7 +1,7 @@
 import ErrorEstado from '../components/ErrorEstado';
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
-import { IconoAjustes, IconoCompartir, IconoDescargar, IconoEliminar, IconoError, IconoFlechaAbajo, IconoFlechaArriba, IconoHumedad, IconoTemperatura, IconoUbicacion, IconoViento, IconoVolver } from '../components/Iconos';
+import { IconoActualizar, IconoAjustes, IconoCompartir, IconoDescargar, IconoEliminar, IconoError, IconoFlechaAbajo, IconoFlechaArriba, IconoHumedad, IconoTemperatura, IconoUbicacion, IconoViento, IconoVolver } from '../components/Iconos';
 import { useMedicion } from '../hooks/useMedicion';
 import { useBloques } from '../hooks/useBloques';
 import { useEmpresas } from '../hooks/useEmpresas';
@@ -9,10 +9,11 @@ import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
 import { NIVELES, nivelColor, nivelBg, nivelLabel } from '../lib/statusUtils';
 import { formatFecha } from '../utils/dateFormat';
-import { apiDelete, apiPatch } from '../lib/apiClient';
+import { apiDelete, apiPatch, apiPost } from '../lib/apiClient';
 import { useRefreshKey } from '../hooks/RefreshKeyContext';
 import SegmentationOverlay from '../components/SegmentationOverlay';
 import { baseArea, formatoPct } from '../lib/textUtils';
+import { comparacionAnalisis } from '../lib/analisisAnterior';
 import { tiempoRelativo } from '../lib/tiempoRelativo';
 import NivelIcon from '../components/NivelIcon';
 import NivelInfo from '../components/NivelInfo';
@@ -267,7 +268,7 @@ export default function MedicionDetailPage() {
   const { user } = useAuth();
   // `?punto=` lo ponen los enlaces de la galería para hallar fotos antiguas.
   const [searchParams] = useSearchParams();
-  const { medicion, loading, error, noEncontrada, refetch } = useMedicion(idMedicion, searchParams.get('punto'));
+  const { medicion, loading, error, noEncontrada, refetch, reemplazar } = useMedicion(idMedicion, searchParams.get('punto'));
   // El "Punto" viejo (GET /puntos/{id}) fue absorbido por "Bloque" -- no hay
   // endpoint por-id, así que se trae la lista completa y se filtra
   // client-side por bloque_id (mismo patrón que el filtro de bloque en
@@ -280,6 +281,10 @@ export default function MedicionDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [eliminando, setEliminando] = useState(false);
   const [errorEliminar, setErrorEliminar] = useState('');
+  const [showReanalizar, setShowReanalizar] = useState(false);
+  const [reanalizando, setReanalizando] = useState(false);
+  const [errorReanalizar, setErrorReanalizar] = useState('');
+  const [avisoReanalizar, setAvisoReanalizar] = useState('');
   const { invalidate } = useRefreshKey();
 
   const isAdmin =
@@ -315,6 +320,27 @@ export default function MedicionDetailPage() {
     } catch (err) {
       setErrorEliminar(err.message || 'No se pudo eliminar la medición.');
       setEliminando(false);
+    }
+  }
+
+  // Herramienta temporal (super_admin): vuelve a analizar la foto guardada con
+  // el modelo actual. El backend responde con la medición ya actualizada.
+  async function handleReanalizar() {
+    setReanalizando(true);
+    setErrorReanalizar('');
+    try {
+      const resp = await apiPost(
+        `/mediciones/${encodeURIComponent(medicion.bloque_id)}/reanalizar?id_medicion=${encodeURIComponent(idMedicion)}`
+      );
+      if (resp?.medicion) reemplazar(resp.medicion); else refetch();
+      invalidate();
+      setShowReanalizar(false);
+      setAvisoReanalizar('Análisis actualizado.');
+      setTimeout(() => setAvisoReanalizar(''), 4000);
+    } catch (err) {
+      setErrorReanalizar(err.message || 'No se pudo reintentar el análisis.');
+    } finally {
+      setReanalizando(false);
     }
   }
 
@@ -507,6 +533,8 @@ export default function MedicionDetailPage() {
   const zonaNombre = esSuperAdmin
     ? (empresas.find(e => e.id_empresa === medicion.empresa_id)?.nombre ?? '—')
     : (perfil?.empresa_nombre ?? '—');
+
+  const comparacion = comparacionAnalisis(medicion);
 
   const TABS = [
     { key: 'original', label: 'Original' },
@@ -846,6 +874,18 @@ export default function MedicionDetailPage() {
                   </div>
                 </div>
               )}
+              {/* Comparación con el análisis original (solo si se reanalizó) */}
+              {comparacion && (
+                <div>
+                  <SectionTitle>Reanálisis</SectionTitle>
+                  <div style={{ fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', lineHeight: 1.6, fontVariantNumeric: 'tabular-nums' }}>
+                    <div>Análisis anterior: {comparacion.anterior} → actual: {comparacion.actual}</div>
+                    {medicion.reanalizado_en && (
+                      <div style={{ color: 'var(--text-muted)' }}>Reanalizado el {formatFecha(medicion.reanalizado_en, { conHora: true })}</div>
+                    )}
+                  </div>
+                </div>
+              )}
               {/* Referencia técnica ISO 10289: tarjetas estructuradas con barra de color */}
               <div>
                 <SectionTitle>Escala de referencia (ISO 10289)</SectionTitle>
@@ -909,6 +949,42 @@ export default function MedicionDetailPage() {
                   <ActionButton icon={<IconoCompartir size={15} />} onClick={handleCompartir}>
                     {shareMsg || 'Copiar enlace'}
                   </ActionButton>
+
+                  {/* Reintentar análisis: herramienta temporal, solo super_admin. */}
+                  {esSuperAdmin && (
+                    <>
+                      <ActionButton
+                        icon={<IconoActualizar size={15} />}
+                        onClick={() => { setErrorReanalizar(''); setShowReanalizar(true); }}
+                        disabled={reanalizando || !medicion.url_imagen}
+                      >
+                        {reanalizando ? 'Analizando…' : 'Reintentar análisis'}
+                      </ActionButton>
+                      {avisoReanalizar && (
+                        <div role="status" style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>{avisoReanalizar}</div>
+                      )}
+                      {showReanalizar && (
+                        <ConfirmDialog
+                          title="¿Reintentar el análisis?"
+                          message="Se volverá a analizar la foto guardada con el modelo actual. El resultado anterior quedará registrado para comparar."
+                          confirmLabel="Reintentar"
+                          loadingLabel="Analizando…"
+                          onConfirm={handleReanalizar}
+                          onCancel={() => { setShowReanalizar(false); setErrorReanalizar(''); }}
+                          loading={reanalizando}
+                        >
+                          {reanalizando && (
+                            <div role="status" style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)', marginTop: 'var(--space-3)' }}>
+                              Esto toma unos segundos.
+                            </div>
+                          )}
+                          {errorReanalizar && (
+                            <div role="alert" style={{ color: 'var(--accent-red)', fontSize: 'var(--text-xs)', marginTop: 'var(--space-3)' }}>{errorReanalizar}</div>
+                          )}
+                        </ConfirmDialog>
+                      )}
+                    </>
+                  )}
 
                   {/* Eliminar: super_admin, admin y tecnico */}
                   {puedeEliminar && (
