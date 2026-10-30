@@ -203,6 +203,7 @@ CAMPOS_LIVIANOS = (
     "bloque_id", "bloque_nombre", "empresa_id", "usuario_id", "tomado_por_id",
     "creado_por_nombre", "latitud_real", "longitud_real", "tiempo_procesamiento_ms",
     "tiempo_subida_s", "s3_key_imagen", "s3_key_thumbnail", "s3_key_resultado",
+    "reanalizado_en", "analisis_anterior",
 )
 
 

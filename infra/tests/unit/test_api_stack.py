@@ -34,9 +34,9 @@ def test_ruta_upload_url_post_con_cognito():
     api, _ = _stacks()
     api.has_resource_properties("AWS::ApiGateway::Resource", {"PathPart": "upload-url"})
     metodos = api.find_resources("AWS::ApiGateway::Method", {"Properties": {"HttpMethod": "POST", "AuthorizationType": "COGNITO_USER_POOLS"}})
-    # /medicion y /medicion/upload-url apuntan a la Lambda de inferencia
+    # /medicion, /medicion/upload-url y /mediciones/{id_punto}/reanalizar apuntan a la Lambda de inferencia
     inferencia = [m for m in metodos.values() if "Inference" in str(m["Properties"]["Integration"]["Uri"])]
-    assert len(inferencia) == 2
+    assert len(inferencia) == 3
 
 
 def test_bucket_cors_post_y_expiracion_de_subidas():
@@ -79,3 +79,21 @@ def test_rutas_de_logo_y_portada_con_cognito_y_su_lambda():
     # logo: PUT + DELETE de empresas; portada: PUT + DELETE de bloques (ademas de los existentes)
     assert len(_de("Usuarios", "DELETE")) == 3 and len(_de("Puntos", "DELETE")) == 2
     assert len(_de("Usuarios", "POST")) >= 4 and len(_de("Puntos", "POST")) == 2
+
+
+def test_ruta_reanalizar_post_con_cognito_en_la_lambda_de_inferencia():
+    api, _ = _stacks()
+    recursos = api.find_resources("AWS::ApiGateway::Resource", {"Properties": {"PathPart": "reanalizar"}})
+    assert len(recursos) == 1
+    id_recurso = next(iter(recursos))
+    metodos = api.find_resources("AWS::ApiGateway::Method", {"Properties": {"HttpMethod": "POST", "AuthorizationType": "COGNITO_USER_POOLS"}})
+    de_la_ruta = [m for m in metodos.values() if m["Properties"]["ResourceId"] == {"Ref": id_recurso}]
+    assert len(de_la_ruta) == 1
+    assert "Inference" in str(de_la_ruta[0]["Properties"]["Integration"]["Uri"])
+    # el recurso cuelga de /mediciones/{id_punto}
+    padre = next(iter(recursos.values()))["Properties"]["ParentId"]["Ref"]
+    nodo = api.find_resources("AWS::ApiGateway::Resource", {})[padre]["Properties"]
+    assert nodo["PathPart"] == "{id_punto}"
+    permisos = api.find_resources("AWS::Lambda::Permission", {})
+    assert any("POST" in str(p["Properties"]["SourceArn"]) and "reanalizar" in str(p["Properties"]["SourceArn"])
+               for p in permisos.values())

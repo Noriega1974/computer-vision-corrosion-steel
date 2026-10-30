@@ -181,3 +181,15 @@ def test_permiso_de_lectura_del_modelo_incluye_placa():
                   for s in pol["Properties"]["PolicyDocument"]["Statement"]]
     modelos = [s for s in sentencias if s["Action"] == "s3:GetObject" and "placa/*" in str(s["Resource"])]
     assert len(modelos) == 1 and "unet/*" in str(modelos[0]["Resource"]) and "yolo/*" in str(modelos[0]["Resource"])
+
+
+def test_inferencia_puede_leer_empresas_y_actualizar_la_tabla_para_reanalizar():
+    # El reanalisis lee la foto guardada (empresas/*), reescribe el JSON de
+    # resultado y hace UpdateItem sobre la tabla de mediciones: lo cubren los
+    # grants que la Lambda ya tenia, sin ampliar nada.
+    t = _plantilla()
+    sentencias = [s for pol in t.find_resources("AWS::IAM::Policy").values()
+                  for s in pol["Properties"]["PolicyDocument"]["Statement"]]
+    sobre_empresas = [s for s in sentencias if "/empresas/*" in str(s.get("Resource")) and "Images" in str(s.get("Resource"))]
+    assert any("s3:GetObject*" in str(s["Action"]) and "s3:PutObject" in str(s["Action"]) for s in sobre_empresas)
+    assert any("dynamodb:UpdateItem" in str(s["Action"]) and "PuntosMediciones" in str(s["Resource"]) for s in sentencias)

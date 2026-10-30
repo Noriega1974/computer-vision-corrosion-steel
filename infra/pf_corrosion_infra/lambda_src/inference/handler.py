@@ -68,7 +68,7 @@ from decimal import Decimal
 from datetime import datetime, timezone
 
 import boto3
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Attr, Key
 from botocore.config import Config
 from botocore.exceptions import ClientError
 from PIL import Image, ImageOps
@@ -464,6 +464,188 @@ def _borrar_subida(imagen_key: str) -> None:
         logger.warning("No se pudo borrar la subida temporal %s: %s", imagen_key, exc)
 
 
+# ── Reanalisis de una medicion guardada (herramienta temporal) ───────────────
+
+CAMPOS_PLACA = ("area_base", "area_corroida_pct_foto", "placa_pct_foto", "contorno_placa", "modelo_placa")
+_CAMPOS_BUSQUEDA = ("id_punto", "sk", "id_medicion", "timestamp", "fuente", "notas", "s3_key_imagen",
+                    "s3_key_thumbnail", "s3_key_resultado", "area_corroida_pct", "nivel_corrosion",
+                    "modelo", "area_base", "analisis_anterior")
+
+
+def _buscar_medicion(id_punto: str, id_medicion: str) -> dict | None:
+    """Ítem de la medicion (solo los campos que usa el reanalisis: sin mascaras
+    ni detecciones, que pesan). None si no existe."""
+    nombres = {f"#c{i}": c for i, c in enumerate(_CAMPOS_BUSQUEDA)}
+    kwargs = {
+        "KeyConditionExpression": Key("id_punto").eq(id_punto) & Key("sk").begins_with("MED#"),
+        "FilterExpression": Attr("id_medicion").eq(id_medicion),
+        "ProjectionExpression": ", ".join(nombres),
+        "ExpressionAttributeNames": nombres,
+    }
+    while True:
+        resp = tabla_mediciones.query(**kwargs)
+        for item in resp.get("Items", []):
+            if item.get("id_medicion") == id_medicion:
+                return item
+        ultima = resp.get("LastEvaluatedKey")
+        if not ultima:
+            return None
+        kwargs["ExclusiveStartKey"] = ultima
+
+
+def _numero(valor):
+    """El % se guarda como string en DynamoDB; en `analisis_anterior` va numerico."""
+    try:
+        return Decimal(str(valor))
+    except Exception:
+        return valor
+
+
+def _analisis_previo(item: dict) -> dict:
+    """Foto del analisis que se va a reemplazar: % (area_base indica sobre que
+    se calculo), nivel, modelo y la fecha de la medicion."""
+    previo = {
+        "area_corroida_pct": _numero(item.get("area_corroida_pct")),
+        "nivel_corrosion": item.get("nivel_corrosion"),
+        "modelo": item.get("modelo"),
+        "area_base": item.get("area_base"),
+        "fecha": item.get("timestamp"),
+    }
+    return {k: v for k, v in previo.items() if v is not None}
+
+
+def _reescribir_resultado(item: dict, resultado_ml: dict, extra: dict) -> None:
+    """Rehace el JSON de resultado en S3 (es una foto del analisis). Mejor
+    esfuerzo: DynamoDB es la fuente de verdad, asi que un fallo aqui solo se
+    registra y no invalida el reanalisis."""
+    clave = item.get("s3_key_resultado")
+    if not clave:
+        return
+    try:
+        try:
+            datos = json.loads(s3.get_object(Bucket=BUCKET_NAME, Key=clave)["Body"].read())
+        except Exception:
+            datos = {}
+        if not isinstance(datos, dict):
+            datos = {}
+        for campo in CAMPOS_PLACA:
+            datos.pop(campo, None)
+        datos.update({
+            "id_medicion": item.get("id_medicion"), "id_punto": item.get("id_punto"),
+            "timestamp": item.get("timestamp"), "fuente": item.get("fuente"),
+            "s3_key_imagen": item.get("s3_key_imagen"), "s3_key_thumbnail": item.get("s3_key_thumbnail"),
+            "s3_key_resultado": clave,
+            **resultado_ml, **extra,
+        })
+        s3.put_object(Bucket=BUCKET_NAME, Key=clave, ContentType="application/json",
+                      Body=json.dumps(datos, ensure_ascii=False, cls=DecimalEncoder))
+    except Exception as exc:
+        logger.error("No se pudo reescribir el resultado %s: %s", clave, exc)
+
+
+def _reanalizar_medicion(event: dict, tiempos: dict) -> dict:
+    """POST /mediciones/{id_punto}/reanalizar?id_medicion=MED-... (solo super_admin).
+
+    Vuelve a correr `_inferir` (el modelo actual y el separador de placa) sobre
+    la foto ya guardada en S3 y reemplaza los campos del analisis del MISMO
+    ítem, como los dejaria una subida nueva (los de placa se quitan si el
+    resultado nuevo no los trae). Foto, miniatura, nombre, notas, ubicacion,
+    fechas y autor no se tocan. `analisis_anterior` guarda el analisis ORIGINAL
+    y solo se escribe la primera vez (if_not_exists): reintentar de nuevo no lo
+    pierde. `reanalizado_en` es la fecha UTC del ultimo reanalisis."""
+    t_inicio = time.perf_counter()
+    usuario = _usuario_actual(event)
+    if not usuario or usuario.get("rol") != "super_admin":
+        return _respuesta(403, {"error": "No tienes permiso para reintentar el análisis. Pide ayuda a un administrador"})
+
+    id_punto = (event.get("pathParameters") or {}).get("id_punto")
+    id_medicion = (event.get("queryStringParameters") or {}).get("id_medicion")
+    if not id_punto or not id_medicion:
+        return _respuesta(400, {"error": "No se indicó qué medición usar. Recarga la página e inténtalo de nuevo"})
+
+    item = _buscar_medicion(id_punto, id_medicion)
+    if not item:
+        return _respuesta(404, {"error": "No se encontró la medición. Actualiza la lista e inténtalo de nuevo"})
+    if not item.get("s3_key_imagen"):
+        return _respuesta(422, {"error": "Esta medición no tiene foto guardada, así que no se puede analizar de nuevo"})
+
+    try:
+        datos = s3.get_object(Bucket=BUCKET_NAME, Key=item["s3_key_imagen"])["Body"].read()
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
+            return _respuesta(404, {"error": "No se encontró la foto guardada de esta medición"})
+        raise
+    try:
+        imagen = _abrir_imagen(datos)
+    except Image.DecompressionBombError:
+        return _respuesta(400, {"error": "La foto es demasiado grande para analizarla. Usa una imagen de menor resolución"})
+    del datos
+
+    resultado_ml = _inferir(imagen, tiempos)
+    ahora = datetime.now(timezone.utc).isoformat()
+    tiempo_ms = round((time.perf_counter() - t_inicio) * 1000)
+
+    asignaciones = {
+        "nivel_corrosion": resultado_ml["nivel_corrosion"],
+        "area_corroida_pct": str(resultado_ml["area_corroida_pct"]),
+        "confianza_promedio": str(resultado_ml["confianza_promedio"]),
+        "detecciones": floats_to_decimal(resultado_ml["detecciones"]),
+        "mascaras": floats_to_decimal(resultado_ml["mascaras"]),
+        "modelo": resultado_ml["modelo"],
+        "tiempo_procesamiento_ms": tiempo_ms,
+        "reanalizado_en": ahora,
+    }
+    quitar = []
+    for campo in CAMPOS_PLACA:
+        if campo in resultado_ml:  # solo con el separador de placa habilitado
+            asignaciones[campo] = floats_to_decimal(resultado_ml[campo])
+        else:
+            quitar.append(campo)
+
+    nombres, valores, sets = {}, {}, []
+    for i, (campo, valor) in enumerate(asignaciones.items()):
+        nombres[f"#a{i}"], valores[f":a{i}"] = campo, valor
+        sets.append(f"#a{i} = :a{i}")
+    nombres["#ant"], valores[":ant"] = "analisis_anterior", _analisis_previo(item)
+    sets.append("#ant = if_not_exists(#ant, :ant)")
+    expr = "SET " + ", ".join(sets)
+    if quitar:
+        for j, campo in enumerate(quitar):
+            nombres[f"#q{j}"] = campo
+        expr += " REMOVE " + ", ".join(f"#q{j}" for j in range(len(quitar)))
+    nombres["#id"], valores[":id"] = "id_medicion", id_medicion
+
+    try:
+        nuevo = tabla_mediciones.update_item(
+            Key={"id_punto": id_punto, "sk": item["sk"]},
+            UpdateExpression=expr,
+            ConditionExpression="#id = :id",
+            ExpressionAttributeNames=nombres,
+            ExpressionAttributeValues=valores,
+            ReturnValues="ALL_NEW",
+        )["Attributes"]
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            return _respuesta(404, {"error": "No se encontró la medición. Actualiza la lista e inténtalo de nuevo"})
+        raise
+
+    extra = {"tiempo_procesamiento_ms": tiempo_ms, "reanalizado_en": ahora}
+    if nuevo.get("analisis_anterior"):
+        extra["analisis_anterior"] = nuevo["analisis_anterior"]
+    _reescribir_resultado(item, resultado_ml, extra)
+
+    for campo_url, campo_key in (("url_imagen", "s3_key_imagen"), ("url_thumbnail", "s3_key_thumbnail")):
+        if nuevo.get(campo_key):
+            nuevo[campo_url] = s3.generate_presigned_url(
+                "get_object", Params={"Bucket": BUCKET_NAME, "Key": nuevo[campo_key]}, ExpiresIn=3600)
+    if "url_thumbnail" not in nuevo:
+        nuevo["url_thumbnail"] = nuevo.get("url_imagen")
+
+    logger.info("Medición %s reanalizada: nivel=%d, área=%.1f%%", id_medicion,
+                resultado_ml["nivel_corrosion"], resultado_ml["area_corroida_pct"])
+    return _respuesta(200, {"ok": True, "medicion": nuevo})
+
+
 # ── Handler principal ────────────────────────────────────────────────────────
 
 def lambda_handler(event: dict, context) -> dict:
@@ -474,6 +656,19 @@ def lambda_handler(event: dict, context) -> dict:
     t0 = time.perf_counter()
     tiempos: dict = {}
     ruta = event.get("resource") or event.get("path") or ""
+    if ruta.endswith("/reanalizar"):
+        # Herramienta temporal (super_admin): re-analiza una medicion guardada.
+        try:
+            resp = _reanalizar_medicion(event, tiempos)
+        except Exception as e:
+            logger.exception("Error reanalizando la medicion: %s", e)
+            return _respuesta(500, {"error": "Ocurrió un error inesperado. Inténtalo de nuevo; si persiste, contacta a un administrador"})
+        if tiempos:
+            tiempos["total_ms"] = round((time.perf_counter() - t0) * 1000)
+            tiempos["status"] = resp["statusCode"]
+            tiempos["accion"] = "reanalizar"
+            logger.info("TIEMPOS_INFERENCIA %s", json.dumps(tiempos))
+        return resp
     if ruta.endswith("/upload-url"):
         try:
             return _generar_url_subida(event)
