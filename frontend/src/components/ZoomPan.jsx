@@ -87,7 +87,8 @@ export default function ZoomPan({ vista, onVista, style, children }) {
     if (punteros.current.size >= 2) {
       const [a, b] = [...punteros.current.values()];
       const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
-      const factor = dist / gesto.current;
+      // Sin referencia (p. ej. tras soltar un tercer dedo) solo se toma la base.
+      const factor = gesto.current ? dist / gesto.current : 1;
       gesto.current = dist;
       const cx = (a.x + b.x) / 2 - r.left, cy = (a.y + b.y) / 2 - r.top;
       aplicar(s => zoomEnPunto(s, factor, cx, cy, tam.W, tam.H));
@@ -98,7 +99,11 @@ export default function ZoomPan({ vista, onVista, style, children }) {
 
   const soltar = (e) => {
     punteros.current.delete(e.pointerId);
-    gesto.current = null;
+    // Si siguen dos o más dedos, la distancia de referencia se toma de ellos.
+    const quedan = [...punteros.current.values()];
+    gesto.current = quedan.length >= 2
+      ? Math.hypot(quedan[0].x - quedan[1].x, quedan[0].y - quedan[1].y) || 1
+      : null;
     if (punteros.current.size === 0) setArrastrando(false);
   };
 
