@@ -10,14 +10,20 @@ import React, { useEffect, useRef } from 'react';
  *                               donde x/y están en rango [0, 1] relativo a la imagen
  *   @param {Object} contorno  - (opcional) contorno de la placa: { puntos: [{x, y}] } en [0, 1];
  *                               se dibuja en verde, solo línea, sobre los polígonos
+ *   @param {number} zoom     - (opcional) zoom CSS que el padre aplica a toda la caja (ZoomPan);
+ *                               el lienzo se dibuja a mayor resolución y con trazos de grosor
+ *                               constante en pantalla, sin perder la alineación con la foto
  *
  * TODO: el backend actualmente no devuelve datos de segmentación por píxel/polígono.
  *       Solo expone nivel_corrosion, area_corroida_pct y confianza_promedio.
  *       Cuando el backend devuelva los polígonos, conectar aquí sin cambiar la interfaz.
  */
-export default function SegmentationOverlay({ imagenUrl, mascaras = [], contorno = null, boxStyle, imgStyle }) {
+export default function SegmentationOverlay({ imagenUrl, mascaras = [], contorno = null, boxStyle, imgStyle, zoom = 1 }) {
   const canvasRef = useRef(null);
   const imgRef = useRef(null);
+  const zoomRef = useRef(zoom);
+  const dibujarRef = useRef(null);
+  zoomRef.current = zoom;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -39,10 +45,19 @@ export default function SegmentationOverlay({ imagenUrl, mascaras = [], contorno
       const offX = (boxW - w) / 2;
       const offY = (boxH - h) / 2;
 
-      canvas.width = boxW;
-      canvas.height = boxH;
+      // Resolución del lienzo: sube con el zoom (escalones de 1x, 2x, 4x, 8x
+      // para no redimensionarlo en cada giro de rueda), con tope de 4096 px.
+      const z = zoomRef.current;
+      const escalon = z <= 1 ? 1 : z <= 2 ? 2 : z <= 4 ? 4 : 8;
+      const k = Math.max(1, Math.min(escalon * (window.devicePixelRatio || 1), 4096 / Math.max(boxW, boxH)));
+      const anchoPx = Math.round(boxW * k), altoPx = Math.round(boxH * k);
+      if (canvas.width !== anchoPx || canvas.height !== altoPx) {
+        canvas.width = anchoPx;
+        canvas.height = altoPx;
+      }
       const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.setTransform(k, 0, 0, k, 0, 0);
+      ctx.clearRect(0, 0, boxW, boxH);
       mascaras.forEach(({ puntos = [], color = '#dc2626', opacidad = 0.45 }) => {
         if (puntos.length < 3) return;
         ctx.beginPath();
@@ -52,7 +67,7 @@ export default function SegmentationOverlay({ imagenUrl, mascaras = [], contorno
         ctx.fillStyle = color + Math.round(opacidad * 255).toString(16).padStart(2, '0');
         ctx.fill();
         ctx.strokeStyle = color;
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 1.5 / z;
         ctx.stroke();
       });
       if (puntosPlaca.length >= 3) {
@@ -61,21 +76,26 @@ export default function SegmentationOverlay({ imagenUrl, mascaras = [], contorno
         puntosPlaca.slice(1).forEach(p => ctx.lineTo(offX + p.x * w, offY + p.y * h));
         ctx.closePath();
         ctx.strokeStyle = '#16a34a';
-        ctx.lineWidth = 2.5;
+        ctx.lineWidth = 2.5 / z;
         ctx.stroke();
       }
     };
 
+    dibujarRef.current = draw;
     if (img.complete && img.naturalWidth > 0) draw();
     img.addEventListener('load', draw);
     // La caja es responsive: se redibuja cuando cambia su tamaño.
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(draw) : null;
     ro?.observe(img);
     return () => {
+      dibujarRef.current = null;
       img.removeEventListener('load', draw);
       ro?.disconnect();
     };
   }, [mascaras, contorno]);
+
+  // Redibuja al cambiar el zoom (resolución y grosor de los trazos).
+  useEffect(() => { dibujarRef.current?.(); }, [zoom]);
 
   if (!imagenUrl) return null;
 
@@ -85,6 +105,7 @@ export default function SegmentationOverlay({ imagenUrl, mascaras = [], contorno
         ref={imgRef}
         src={imagenUrl}
         alt="Segmentación"
+        draggable={false}
         style={imgStyle ?? { width: '100%', display: 'block', borderRadius: 8 }}
       />
       <canvas

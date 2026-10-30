@@ -12,6 +12,8 @@ import { formatFecha } from '../utils/dateFormat';
 import { apiDelete, apiPatch, apiPost } from '../lib/apiClient';
 import { useRefreshKey } from '../hooks/RefreshKeyContext';
 import SegmentationOverlay from '../components/SegmentationOverlay';
+import ZoomPan from '../components/ZoomPan';
+import { VISTA_INICIAL } from '../lib/zoomPan';
 import { baseArea, formatoPct } from '../lib/textUtils';
 import { comparacionAnalisis } from '../lib/analisisAnterior';
 import { tiempoRelativo } from '../lib/tiempoRelativo';
@@ -275,6 +277,10 @@ export default function MedicionDetailPage() {
   // GaleriaPage.jsx).
   const { bloques } = useBloques(true);
   const [activeTab, setActiveTab] = useState('original');
+  // Zoom/desplazamiento de la foto: compartido por las dos pestañas, así se
+  // conserva al cambiar entre Original y Segmentación (y se reinicia al cambiar de medición).
+  const [vistaFoto, setVistaFoto] = useState(VISTA_INICIAL);
+  useEffect(() => { setVistaFoto(VISTA_INICIAL); }, [idMedicion]);
   const [showClimaFlashcard, setShowClimaFlashcard] = useState(false);
   const [showMasOpciones, setShowMasOpciones] = useState(false);
   const [shareMsg, setShareMsg] = useState('');
@@ -599,13 +605,14 @@ export default function MedicionDetailPage() {
             <div style={{ padding: 20 }}>
               {activeTab === 'original' && (
                 medicion.url_imagen ? (
-                  <div style={IMAGEN_BOX_STYLE}>
+                  <ZoomPan vista={vistaFoto} onVista={setVistaFoto} style={IMAGEN_BOX_STYLE}>
                     <img
                       src={medicion.url_imagen}
                       alt="Imagen original de la medición"
+                      draggable={false}
                       style={IMAGEN_FIT_STYLE}
                     />
-                  </div>
+                  </ZoomPan>
                 ) : (
                   <PlaceholderImagen mensaje="Imagen no disponible para esta medición" />
                 )
@@ -613,13 +620,18 @@ export default function MedicionDetailPage() {
 
               {activeTab === 'segmentacion' && (
                 medicion.url_imagen ? (
-                  <SegmentationOverlay
-                    imagenUrl={medicion.url_imagen}
-                    mascaras={medicion.mascaras ?? []}
-                    contorno={medicion.contorno_placa}
-                    boxStyle={IMAGEN_BOX_STYLE}
-                    imgStyle={IMAGEN_FIT_STYLE}
-                  />
+                  <ZoomPan vista={vistaFoto} onVista={setVistaFoto} style={IMAGEN_BOX_STYLE}>
+                    {zoom => (
+                      <SegmentationOverlay
+                        imagenUrl={medicion.url_imagen}
+                        mascaras={medicion.mascaras ?? []}
+                        contorno={medicion.contorno_placa}
+                        boxStyle={{ position: 'absolute', inset: 0 }}
+                        imgStyle={IMAGEN_FIT_STYLE}
+                        zoom={zoom}
+                      />
+                    )}
+                  </ZoomPan>
                 ) : (
                   <PlaceholderImagen mensaje="Imagen no disponible para esta medición" />
                 )
