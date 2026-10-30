@@ -86,3 +86,147 @@ def test_ruta_local_para_desarrollo_y_etiqueta(monkeypatch, tmp_path):
 def test_etiqueta_usa_la_clave_s3(monkeypatch):
     monkeypatch.setenv("MODEL_KEY", "yolo/yolo_final_ep80_1024.onnx")
     assert ms.etiqueta_modelo("yolo") == "yolo:yolo_final_ep80_1024.onnx"
+
+
+# ── Separador de placa (segundo modelo, caché independiente) ─────────────────
+
+PLACA_ENV = ("PLATE_MODEL_KEY", "PLATE_MODEL_SHA256", "PLATE_MODEL_LOCAL_PATH")
+
+
+@pytest.fixture
+def _sin_placa(monkeypatch):
+    for k in PLACA_ENV:
+        monkeypatch.delenv(k, raising=False)
+
+
+def test_placa_habilitada_solo_con_clave_o_ruta_local(monkeypatch, _sin_placa):
+    assert ms.placa_habilitada() is False
+    monkeypatch.setenv("PLATE_MODEL_KEY", "  ")
+    assert ms.placa_habilitada() is False
+    monkeypatch.setenv("PLATE_MODEL_KEY", "placa/sep.onnx")
+    assert ms.placa_habilitada() is True
+    monkeypatch.delenv("PLATE_MODEL_KEY")
+    monkeypatch.setenv("PLATE_MODEL_LOCAL_PATH", "/x/sep.onnx")
+    assert ms.placa_habilitada() is True
+
+
+def test_placa_se_baja_con_su_propia_clave_y_sha(monkeypatch, tmp_path, modelo_falso, _sin_placa):
+    _env(monkeypatch, tmp_path, PLATE_MODEL_KEY="placa/sep.onnx")
+    s3 = FakeS3({("bucket-modelos", "placa/sep.onnx"): modelo_falso})
+    ruta, _ = ms._ruta("PLATE_MODEL", s3)
+    assert ruta.name == "sep.onnx" and ruta.read_bytes() == modelo_falso.read_bytes()
+    assert s3.descargas == [("bucket-modelos", "placa/sep.onnx")]  # no baja el modelo principal
+
+    ms.reiniciar_cache()
+    ruta.unlink()
+    monkeypatch.setenv("PLATE_MODEL_SHA256", "0" * 64)
+    with pytest.raises(RuntimeError, match="PLATE_MODEL_SHA256"):
+        ms._ruta("PLATE_MODEL", s3)
+    assert not list((tmp_path / "cache").glob("*"))
+    monkeypatch.setenv("PLATE_MODEL_SHA256", hashlib.sha256(modelo_falso.read_bytes()).hexdigest())
+    assert ms._ruta("PLATE_MODEL", s3)[0].exists()
+    # el SHA del modelo principal no afecta al separador y viceversa
+    monkeypatch.setenv("MODEL_SHA256", "f" * 64)
+    assert ms._ruta("PLATE_MODEL", s3)[1] == 0
+
+
+def test_placa_sin_clave_falla_claro_y_local_salta_s3(monkeypatch, tmp_path, _sin_placa):
+    _env(monkeypatch, tmp_path)
+    with pytest.raises(RuntimeError, match="PLATE_MODEL_KEY"):
+        ms._ruta("PLATE_MODEL", FakeS3())
+    monkeypatch.setenv("PLATE_MODEL_LOCAL_PATH", str(tmp_path / "s.onnx"))
+    assert ms._ruta("PLATE_MODEL", None) == (tmp_path / "s.onnx", 0)
+    assert ms.etiqueta_placa() == "placa:s.onnx"
+    monkeypatch.delenv("PLATE_MODEL_LOCAL_PATH")
+    monkeypatch.setenv("PLATE_MODEL_KEY", "placa/separador_placa_v1_512.onnx")
+    assert ms.etiqueta_placa() == "placa:separador_placa_v1_512.onnx"
+
+
+def test_sesiones_principal_y_placa_se_cachean_por_separado(monkeypatch, tmp_path, _sin_placa):
+    onnx = pytest.importorskip("onnx")  # noqa: F841
+    import modelo_falso_onnx
+    unet = modelo_falso_onnx.construir(tmp_path / "u.onnx")
+    placa = modelo_falso_onnx.construir_placa(tmp_path / "p.onnx")
+    monkeypatch.setenv("MODEL_LOCAL_PATH", str(unet))
+    monkeypatch.setenv("PLATE_MODEL_LOCAL_PATH", str(placa))
+    s1, t1 = ms.obtener_sesion(None, 1024)
+    p1, tp1 = ms.obtener_sesion_placa(None, 512)
+    assert s1 is not p1 and t1["carga_ms"] >= 0 and tp1["carga_ms"] >= 0
+    assert ms.obtener_sesion(None, 1024)[0] is s1            # caché del principal
+    assert ms.obtener_sesion_placa(None, 512)[0] is p1       # caché del separador
+    assert ms.obtener_sesion_placa(None, 512)[1]["carga_ms"] == 0
+    with pytest.raises(RuntimeError, match="expects input"):
+        ms.reiniciar_cache()
+        ms.obtener_sesion_placa(None, 1024)                  # el tamaño se valida por modelo
+
+
+def _placa_rota(monkeypatch, tmp_path):
+    monkeypatch.setenv("MODEL_BUCKET", "bucket-modelos")
+    monkeypatch.setenv("MODEL_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("PLATE_MODEL_KEY", "placa/no_existe.onnx")
+    return FakeS3()
+
+
+def _reloj(monkeypatch):
+    t = {"now": 1000.0}
+    monkeypatch.setattr(ms, "_ahora", lambda: t["now"])
+    return t
+
+
+def test_fallo_del_separador_se_recuerda_y_no_vuelve_a_tocar_s3(monkeypatch, tmp_path, _sin_placa):
+    s3 = _placa_rota(monkeypatch, tmp_path)
+    _reloj(monkeypatch)
+    with pytest.raises(FileNotFoundError):
+        ms.obtener_sesion_placa(s3, 512)
+    with pytest.raises(RuntimeError, match="recent failure"):
+        ms.obtener_sesion_placa(s3, 512)
+    assert s3.descargas == [("bucket-modelos", "placa/no_existe.onnx")]
+
+
+def test_fallo_del_separador_se_reintenta_pasada_la_ventana(monkeypatch, tmp_path, _sin_placa):
+    s3 = _placa_rota(monkeypatch, tmp_path)
+    reloj = _reloj(monkeypatch)
+    with pytest.raises(FileNotFoundError):
+        ms.obtener_sesion_placa(s3, 512)
+    reloj["now"] += ms.PLATE_FAILURE_TTL_S - 1
+    with pytest.raises(RuntimeError, match="recent failure"):
+        ms.obtener_sesion_placa(s3, 512)
+    assert len(s3.descargas) == 1
+    reloj["now"] += 2
+    with pytest.raises(FileNotFoundError):
+        ms.obtener_sesion_placa(s3, 512)
+    assert len(s3.descargas) == 2
+
+
+def test_separador_recupera_y_cachea_tras_el_reintento(monkeypatch, tmp_path, _sin_placa):
+    pytest.importorskip("onnx")
+    import modelo_falso_onnx
+    s3 = _placa_rota(monkeypatch, tmp_path)
+    reloj = _reloj(monkeypatch)
+    with pytest.raises(FileNotFoundError):
+        ms.obtener_sesion_placa(s3, 512)
+    s3.archivos_descargables[("bucket-modelos", "placa/no_existe.onnx")] = modelo_falso_onnx.construir_placa(tmp_path / "p.onnx")
+    reloj["now"] += ms.PLATE_FAILURE_TTL_S + 1
+    sesion, _ = ms.obtener_sesion_placa(s3, 512)
+    assert ms.obtener_sesion_placa(s3, 512)[0] is sesion
+    assert len(s3.descargas) == 2
+
+
+def test_reiniciar_cache_olvida_el_fallo_del_separador(monkeypatch, tmp_path, _sin_placa):
+    s3 = _placa_rota(monkeypatch, tmp_path)
+    _reloj(monkeypatch)
+    with pytest.raises(FileNotFoundError):
+        ms.obtener_sesion_placa(s3, 512)
+    ms.reiniciar_cache()
+    with pytest.raises(FileNotFoundError):
+        ms.obtener_sesion_placa(s3, 512)
+    assert len(s3.descargas) == 2
+
+
+def test_el_modelo_principal_no_usa_la_cache_negativa(monkeypatch, tmp_path):
+    _env(monkeypatch, tmp_path)
+    s3 = FakeS3()
+    for _ in range(2):
+        with pytest.raises(FileNotFoundError):
+            ms.obtener_sesion(s3, 1024)
+    assert len(s3.descargas) == 2

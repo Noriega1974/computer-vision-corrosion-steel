@@ -19,6 +19,7 @@ def _med(n, punto="BLQ-1", empresa="EMP-1"):
         "empresa_id": empresa, "bloque_id": punto, "bloque_nombre": "Viejo",
         "s3_key_imagen": f"{pref}.jpg", "s3_key_thumbnail": f"{pref}_thumb.jpg",
         "s3_key_resultado": f"{pref}.json", "mascaras": [1], "detecciones": [2],
+        "area_base": "placa", "contorno_placa": {"puntos": [{"x": 0.1, "y": 0.1}]},
     }
 
 
@@ -130,7 +131,19 @@ def test_recientes_max_1000_y_resumen_quita_campos_pesados(h):
           "requestContext": {"authorizer": {"claims": {"sub": "s"}}}}
     ms = _cuerpo(h.lambda_handler(ev, None))["mediciones"]
     assert len(ms) == 3 and all("mascaras" not in m and "detecciones" not in m for m in ms)
+    # el contorno pesa y se omite; area_base viaja para rotular el % en la galería
+    assert all("contorno_placa" not in m and m["area_base"] == "placa" for m in ms)
 
+
+
+def test_proyeccion_liviana_lleva_la_base_del_area_y_no_el_contorno(h):
+    # DynamoDB solo devuelve lo proyectado (el doble en memoria no proyecta):
+    # sin area_base la galería rotularía todo "sobre la foto".
+    kw = h._proyeccion_liviana({"ExpressionAttributeNames": {"#e": "empresa_id"}})
+    campos = set(kw["ExpressionAttributeNames"].values())
+    assert {"area_corroida_pct", "area_base", "area_corroida_pct_foto", "empresa_id"} <= campos
+    assert not campos & {"contorno_placa", "mascaras", "detecciones"}
+    assert len(kw["ProjectionExpression"].split(", ")) == len(h.CAMPOS_LIVIANOS)
 
 def test_punto_pagina_y_respeta_empresa(h):
     h.tabla.items = [_med(n, "BLQ-1", "EMP-2") for n in range(1, 6)] + [_med(n) for n in range(6, 9)]

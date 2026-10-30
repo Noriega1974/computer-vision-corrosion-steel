@@ -105,3 +105,44 @@ def test_postprocesar_respeta_tope_de_puntos_y_componentes():
     assert 0 < len(r["mascaras"]) <= 40
     assert sum(len(m["puntos"]) for m in r["mascaras"]) <= 300
     assert all(len(m["puntos"]) >= 3 for m in r["mascaras"])
+
+
+# ── % sobre la placa ─────────────────────────────────────────────────────────
+
+def _placa(x0, y0, x1, y1, w=1024, h=512):
+    m = np.zeros((h, w), bool)
+    m[y0:y1, x0:x1] = True
+    return m
+
+
+def test_postprocesar_sin_placa_no_agrega_campos():
+    r = um.postprocesar(_prob([(100, 50, 300, 150)]), 1024, 512)
+    assert "area_corroida_pct_foto" not in r
+
+
+def test_postprocesar_porcentaje_sobre_la_placa():
+    # corrosión 200x100 = 20000 px; placa 400x200 = 80000 px que la contiene
+    r = um.postprocesar(_prob([(100, 50, 300, 150)]), 1024, 512, placa=_placa(50, 20, 450, 220))
+    assert r["area_corroida_pct"] == pytest.approx(20000 / 80000 * 100, abs=0.01)
+    assert r["area_corroida_pct_foto"] == pytest.approx(20000 / (1024 * 512) * 100, abs=0.01)
+    assert len(r["detecciones"]) == 1  # detecciones/mascaras no cambian
+
+
+def test_postprocesar_solo_cuenta_la_corrosion_dentro_de_la_placa():
+    # mitad de la corrosión dentro de la placa, mitad fuera
+    r = um.postprocesar(_prob([(100, 50, 300, 150)]), 1024, 512, placa=_placa(200, 0, 400, 200))
+    assert r["area_corroida_pct"] == pytest.approx(10000 / 40000 * 100, abs=0.01)
+    # la lista de detecciones sigue siendo la máscara completa
+    assert r["detecciones"][0]["w"] == pytest.approx(200 / 1024, abs=1e-4)
+    assert r["area_corroida_pct_foto"] == pytest.approx(20000 / (1024 * 512) * 100, abs=0.01)
+
+
+def test_postprocesar_placa_en_otra_resolucion_se_remuestrea():
+    # misma placa a la mitad de resolución (512x256): mismo resultado
+    r = um.postprocesar(_prob([(100, 50, 300, 150)]), 1024, 512, placa=_placa(25, 10, 225, 110, 512, 256))
+    assert r["area_corroida_pct"] == pytest.approx(25.0, abs=0.1)
+
+
+def test_postprocesar_placa_vacia_lanza():
+    with pytest.raises(ValueError, match="plate mask"):
+        um.postprocesar(_prob([(100, 50, 300, 150)]), 1024, 512, placa=np.zeros((512, 1024), bool))

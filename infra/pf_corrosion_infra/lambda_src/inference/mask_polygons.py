@@ -44,19 +44,16 @@ def _raiz(padre: list[int], i: int) -> int:
     return i
 
 
-def analizar_componentes(mascara: np.ndarray, probabilidad: np.ndarray) -> list[dict]:
-    """Componentes conexas (8-conectividad) de `mascara` (bool HxW).
-
-    Por componente devuelve: area (px), x0,y0,x1,y1 (caja, fin exclusivo),
-    prob_media (media de `probabilidad` sobre sus píxeles) e `inicio`
-    (x, y) = píxel más arriba y a la izquierda (siempre es borde).
-    Ordenadas de mayor a menor área.
-    """
+def _etiquetar_corridas(mascara: np.ndarray):
+    """Une las corridas de `mascara` en componentes (8-conectividad).
+    Devuelve (ys, ini, fin, etiqueta, primera, ncomp): `etiqueta[k]` es la
+    componente de la corrida k y `primera[c]` el índice de la primera corrida
+    (arriba-izquierda) de la componente c. None si no hay píxeles."""
     alto, _ = mascara.shape
     ys, ini, fin = _corridas(mascara)
     n = len(ys)
     if n == 0:
-        return []
+        return None
 
     # Índice del primer run de cada fila (ys está ordenado).
     inicio_fila = np.searchsorted(ys, np.arange(alto + 1)).tolist()
@@ -82,8 +79,40 @@ def analizar_componentes(mascara: np.ndarray, probabilidad: np.ndarray) -> list[
     # np.unique devuelve (valores, primer_índice, inverso): el primer índice
     # de cada raíz es el primer run (arriba-izquierda) de su componente.
     _, primera, etiqueta = np.unique(raices, return_index=True, return_inverse=True)
-    etiqueta = etiqueta.ravel()
-    ncomp = len(primera)
+    return ys, ini, fin, etiqueta.ravel(), primera, len(primera)
+
+
+def componente_mayor(mascara: np.ndarray) -> np.ndarray:
+    """Máscara (bool HxW) con solo la componente conexa (8-conectividad) de
+    mayor área; vacía si `mascara` no tiene píxeles. En empate gana la que
+    aparece primero (arriba-izquierda)."""
+    res = _etiquetar_corridas(mascara)
+    if res is None:
+        return np.zeros_like(mascara, dtype=bool)
+    ys, ini, fin, etiqueta, _, ncomp = res
+    area = np.bincount(etiqueta, weights=(fin - ini).astype(np.float64), minlength=ncomp)
+    sel = etiqueta == int(np.argmax(area))
+    alto, ancho = mascara.shape
+    # Diferencias por fila: +1 donde empieza una corrida, -1 donde termina.
+    d = np.zeros((alto, ancho + 1), dtype=np.int8)
+    d[ys[sel], ini[sel]] += 1
+    d[ys[sel], fin[sel]] -= 1
+    return np.cumsum(d, axis=1)[:, :ancho] > 0
+
+
+def analizar_componentes(mascara: np.ndarray, probabilidad: np.ndarray) -> list[dict]:
+    """Componentes conexas (8-conectividad) de `mascara` (bool HxW).
+
+    Por componente devuelve: area (px), x0,y0,x1,y1 (caja, fin exclusivo),
+    prob_media (media de `probabilidad` sobre sus píxeles) e `inicio`
+    (x, y) = píxel más arriba y a la izquierda (siempre es borde).
+    Ordenadas de mayor a menor área.
+    """
+    alto, _ = mascara.shape
+    res = _etiquetar_corridas(mascara)
+    if res is None:
+        return []
+    ys, ini, fin, etiqueta, primera, ncomp = res
 
     largo = (fin - ini).astype(np.float64)
     acum = np.zeros((alto, mascara.shape[1] + 1), dtype=np.float64)

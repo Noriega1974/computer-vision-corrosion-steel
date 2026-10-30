@@ -17,7 +17,9 @@ por detección. Se emulan así (decisión documentada en docs/runbook_unet.md):
     el área de la foto reescalada (sin el relleno del lienzo). Mismo
     significado que con YOLO: % de la foto cubierto por la unión de
     corrosión, sin doble conteo. Cuenta TODA la máscara, también las
-    manchas menores a MIN_AREA_PX que no se dibujan;
+    manchas menores a MIN_AREA_PX que no se dibujan. Con la máscara de la
+    placa (separador, placa_model.py) la base pasa a ser la placa: ver
+    `postprocesar`;
   * `confianza_promedio` = media de `confianza` de las pseudo-detecciones
     (igual que YOLO: media de las confianzas de lo que se devuelve).
 
@@ -41,6 +43,7 @@ import numpy as np
 from PIL import Image
 
 import mask_polygons as mp
+import placa_model
 
 logger = logging.getLogger()
 
@@ -96,13 +99,32 @@ def _poligono_caja(x0: int, y0: int, x1: int, y1: int, w: int, h: int) -> list[d
     ]
 
 
-def postprocesar(prob: np.ndarray, w: int, h: int, cfg: dict | None = None) -> dict:
+def postprocesar(prob: np.ndarray, w: int, h: int, cfg: dict | None = None,
+                 placa: np.ndarray | None = None) -> dict:
     """Mapa de probabilidades (SIZE,SIZE) -> dict con el contrato de la API.
-    `w`, `h`: tamaño de la foto dentro del lienzo (se ignora el relleno)."""
+    `w`, `h`: tamaño de la foto dentro del lienzo (se ignora el relleno).
+
+    `placa` (opcional): máscara bool de la placa (separador, cualquier
+    resolución). Con ella `area_corroida_pct` = corrosión DENTRO de la placa /
+    píxeles de la placa, y se agrega `area_corroida_pct_foto` con el % de
+    siempre sobre la foto. La intersección se hace en la resolución de la
+    máscara de la U-Net (la placa se remuestrea a (w, h) por vecino más
+    cercano): es la resolución a la que la U-Net decide cada píxel, no cuesta
+    remuestrear la máscara a los megapíxeles de la foto y los bordes de la
+    placa (que sale de un lienzo de 512) no ganan precisión al subirla.
+    Sin `placa` el resultado es idéntico al de siempre.
+    """
     cfg = cfg or configuracion()
     region = np.ascontiguousarray(prob[:h, :w])
     mascara = region > cfg["umbral"]
     area_pct = float(mascara.sum()) / (w * h) * 100.0
+    area_pct_foto = area_pct
+    if placa is not None:
+        placa_r = placa_model.remuestrear(placa, w, h)
+        px_placa = int(placa_r.sum())
+        if px_placa == 0:
+            raise ValueError("The plate mask is empty")
+        area_pct = float((mascara & placa_r).sum()) / px_placa * 100.0
 
     comps = [c for c in mp.analizar_componentes(mascara, region) if c["area"] >= cfg["min_area_px"]]
     comps = comps[: cfg["max_componentes"]]
@@ -143,20 +165,24 @@ def postprocesar(prob: np.ndarray, w: int, h: int, cfg: dict | None = None) -> d
             mascaras.append({"puntos": puntos})
 
     conf_prom = float(np.mean([d["confianza"] for d in detecciones])) if detecciones else 0.0
-    return {
+    resultado = {
         "area_corroida_pct": round(area_pct, 2),
         "confianza_promedio": round(conf_prom, 4),
         "detecciones": detecciones,
         "mascaras": mascaras,
     }
+    if placa is not None:
+        resultado["area_corroida_pct_foto"] = round(area_pct_foto, 2)
+    return resultado
 
 
-def inferir(imagen: Image.Image, sesion) -> tuple[dict, int]:
+def inferir(imagen: Image.Image, sesion, placa: np.ndarray | None = None) -> tuple[dict, int]:
     """Foto PIL -> (dict del contrato sin `nivel_corrosion`, onnx_ms). El
-    handler calcula el nivel con la misma función que usa YOLO."""
+    handler calcula el nivel con la misma función que usa YOLO. `placa`: ver
+    `postprocesar`."""
     x, w, h = preparar_entrada(imagen)
     t0 = time.perf_counter()
     logits = sesion.run(None, {sesion.get_inputs()[0].name: x})[0]
     onnx_ms = round((time.perf_counter() - t0) * 1000)
     prob = sigmoide(logits[0, 0].astype(np.float32, copy=False))
-    return postprocesar(prob, w, h), onnx_ms
+    return postprocesar(prob, w, h, placa=placa), onnx_ms

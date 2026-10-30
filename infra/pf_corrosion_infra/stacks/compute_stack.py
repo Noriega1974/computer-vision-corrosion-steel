@@ -46,8 +46,9 @@ IAM is scoped per function to the minimum actually used by its handler code:
                                    strictly required to resolve empresa_id,
                                    never a write path back into it.
                                    Also READ-ONLY (s3:GetObject, prefixes
-                                   `unet/*` and `yolo/*`) on the models bucket,
-                                   to download the ONNX model at cold start.
+                                   `unet/*`, `yolo/*` and `placa/*`) on the
+                                   models bucket, to download the ONNX models
+                                   (main model + plate separator) at cold start.
 
 Model selection (CDK context, all optional). The defaults are the production
 state: U-Net final, no flags needed. YOLO exists only to time it against the
@@ -56,6 +57,14 @@ U-Net on the same infrastructure (docs/runbook_unet.md):
   -c model_key=<prefix>/<file>   S3 key inside the models bucket; the prefix
                                  must match model_type (IAM is scoped to it)
   -c model_sha256=<hex>          optional integrity check after the download
+Plate separator (secondary ONNX; the U-Net % is computed over the plate, with
+the whole photo as fallback; ignored by YOLO). On by default:
+  -c plate_model_key=<placa/file>  PLATE_MODEL_KEY; must live under placa/.
+                                   `none` (or `off`) disables the separator:
+                                   the env var is not set and the Lambda
+                                   behaves as before
+  -c plate_model_sha256=<hex>      PLATE_MODEL_SHA256; defaults to the sha256 of
+                                   the default separator, `none` skips the check
 The Lambda memory is fixed at 3008 MB for both models (fair timing).
 """
 import os
@@ -81,6 +90,11 @@ DEFAULT_MODEL_KEYS = {
     "unet": "unet/unet_final_1024.onnx",
     "yolo": "yolo/yolo_final_ep80_1024.onnx",
 }
+# Plate separator (placa_model.py): second ONNX, under its own S3 prefix.
+PLATE_MODEL_PREFIX = "placa/"
+DEFAULT_PLATE_MODEL_KEY = "placa/separador_placa_v1_512.onnx"
+DEFAULT_PLATE_MODEL_SHA256 = "a09b08692ae1ae0e3f3b722ecb40b290b8647356f6d1eeb1d50e83d31d4dadc3"
+_DISABLED = ("none", "off", "false", "0", "")
 # Lambda CPU scales with memory (~1 vCPU per 1769 MB). The U-Net peaks at
 # ~1.2 GB RSS; 3008 MB gives ~1.7 vCPU and ~2x memory headroom. The same value
 # is used for YOLO so the latency comparison is fair.
@@ -121,6 +135,21 @@ class CorriaComputeStack(Stack):
                 "(IAM is scoped to the unet/ and yolo/ prefixes)"
             )
         model_sha256 = str(self.node.try_get_context("model_sha256") or "")
+
+        # Plate separator: enabled by default; `-c plate_model_key=none` turns it off.
+        plate_ctx = self.node.try_get_context("plate_model_key")
+        plate_key = DEFAULT_PLATE_MODEL_KEY if plate_ctx is None else str(plate_ctx).strip()
+        if plate_key.lower() in _DISABLED:
+            plate_key = ""
+        elif not plate_key.startswith(PLATE_MODEL_PREFIX):
+            raise ValueError(
+                f"context plate_model_key must live under the {PLATE_MODEL_PREFIX} prefix "
+                "(IAM is scoped to the unet/, yolo/ and placa/ prefixes)"
+            )
+        plate_sha_ctx = self.node.try_get_context("plate_model_sha256")
+        plate_sha256 = DEFAULT_PLATE_MODEL_SHA256 if plate_sha_ctx is None else str(plate_sha_ctx).strip()
+        if plate_sha256.lower() in _DISABLED:
+            plate_sha256 = ""
 
         # ── api-usuarios ─────────────────────────────────────────────────
         self.api_usuarios_fn = _lambda.Function(
@@ -225,7 +254,7 @@ class CorriaComputeStack(Stack):
             runtime=_lambda.Runtime.PYTHON_3_11,
             handler="handler.lambda_handler",
             code=_lambda.Code.from_asset(os.path.join(LAMBDA_SRC, "api_mediciones")),
-            memory_size=128,
+            memory_size=512,
             timeout=Duration.seconds(30),
             environment={
                 **common_env,
@@ -285,7 +314,7 @@ class CorriaComputeStack(Stack):
             memory_size=INFERENCE_MEMORY_MB,
             # 30 s = API Gateway's 29 s integration limit, rounded; a cold
             # start (download ~98 MB + session load) still fits. The ONNX is
-            # cached in /tmp (512 MB default is enough for either model).
+            # cached in /tmp (512 MB default holds the main model + the 26 MB separator).
             timeout=Duration.seconds(30),
             environment={
                 **common_env,
@@ -299,6 +328,9 @@ class CorriaComputeStack(Stack):
                 "MODEL_BUCKET": models_bucket.bucket_name,
                 "MODEL_KEY": model_key,
                 **({"MODEL_SHA256": model_sha256} if model_sha256 else {}),
+                # Plate separator (absent => Lambda behaves exactly as before).
+                **({"PLATE_MODEL_KEY": plate_key} if plate_key else {}),
+                **({"PLATE_MODEL_SHA256": plate_sha256} if plate_key and plate_sha256 else {}),
                 "CONF_MINIMA": CONF_MINIMA,
                 "UNET_THRESHOLD": UNET_THRESHOLD,
                 # Intentionally NO USER_POOL_ID / Cognito admin-* actions —
@@ -319,13 +351,17 @@ class CorriaComputeStack(Stack):
         # Solo lee: validar el bloque_id opcional al crear un punto y
         # congelar bloque_nombre en la medición — nunca escribe bloques.
         bloques_table.grant_read_data(self.inference_fn)
-        # Model download: GetObject only, only under unet/ and yolo/ (no
+        # Model download: GetObject only, only under unet/, yolo/ and placa/ (no
         # List, no write, no other prefix). Without s3:ListBucket a missing
         # key shows up as AccessDenied instead of NoSuchKey -- see the runbook.
         self.inference_fn.add_to_role_policy(
             iam.PolicyStatement(
                 actions=["s3:GetObject"],
-                resources=[models_bucket.arn_for_objects("unet/*"), models_bucket.arn_for_objects("yolo/*")],
+                resources=[
+                    models_bucket.arn_for_objects("unet/*"),
+                    models_bucket.arn_for_objects("yolo/*"),
+                    models_bucket.arn_for_objects("placa/*"),
+                ],
             )
         )
         # Intentionally NOT granted: write access to usuarios_table, Cognito actions.

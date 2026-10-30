@@ -63,7 +63,9 @@ LIMITE_PUNTO_MAX = 500
 MAX_PAGINAS = 40
 # Campos que pesan (máscaras, detecciones, ...) y que la galería no usa: con
 # ?resumen=1 se omiten para que 1000 mediciones quepan en los 6 MB de respuesta.
-CAMPOS_PESADOS = ("mascaras", "detecciones", "inferencia_local", "clima")
+# `area_base` NO se omite (la galería indica sobre qué se calculó el %); el
+# contorno de la placa sí, igual que las máscaras.
+CAMPOS_PESADOS = ("mascaras", "detecciones", "inferencia_local", "clima", "contorno_placa")
 
 # Mismo criterio que lambda_src/inference (_nombre_foto): no hay módulo
 # compartido entre lambdas, así que se replica.
@@ -189,6 +191,30 @@ def _item_permitido(usuario: dict, item: dict) -> bool:
         return True
     empresa = usuario.get("empresa_id")
     return bool(empresa) and item.get("empresa_id") == empresa
+
+
+# Light attributes read when ?resumen=1. Reading the full item and dropping
+# CAMPOS_PESADOS afterwards still pays for deserializing every mask polygon
+# (Decimal by Decimal), which took ~8 s for 49 items on a 128 MB Lambda.
+CAMPOS_LIVIANOS = (
+    "id_punto", "sk", "id_medicion", "tipo_registro", "timestamp", "nombre", "notas",
+    "area_corroida_pct", "area_base", "area_corroida_pct_foto", "nivel_corrosion",
+    "confianza_promedio", "modelo", "fuente",
+    "bloque_id", "bloque_nombre", "empresa_id", "usuario_id", "tomado_por_id",
+    "creado_por_nombre", "latitud_real", "longitud_real", "tiempo_procesamiento_ms",
+    "tiempo_subida_s", "s3_key_imagen", "s3_key_thumbnail", "s3_key_resultado",
+)
+
+
+def _proyeccion_liviana(kwargs: dict) -> dict:
+    """Adds a ProjectionExpression with only CAMPOS_LIVIANOS (keeps any
+    ExpressionAttributeNames already present, e.g. from a FilterExpression)."""
+    nombres = {f"#c{i}": c for i, c in enumerate(CAMPOS_LIVIANOS)}
+    return {
+        **kwargs,
+        "ProjectionExpression": ", ".join(nombres),
+        "ExpressionAttributeNames": {**kwargs.get("ExpressionAttributeNames", {}), **nombres},
+    }
 
 
 def _sin_campos_pesados(items: list) -> list:
@@ -517,6 +543,8 @@ def lambda_handler(event: dict, context) -> dict:
                 # Ver datos de otra empresa es exclusivo de super_admin.
                 empresa_id = creador.get("empresa_id") if creador else None
                 kwargs["FilterExpression"] = Attr("empresa_id").eq(empresa_id)
+            if qp.get("resumen") == "1":
+                kwargs = _proyeccion_liviana(kwargs)
             # Limit cuenta ítems antes del filtro: se pagina hasta juntar `limite`.
             items = _consultar(kwargs, limite)
             if qp.get("resumen") == "1":
@@ -555,6 +583,8 @@ def lambda_handler(event: dict, context) -> dict:
                 filtro = filtro_empresa if filtro is None else filtro & filtro_empresa
             if filtro is not None:
                 kwargs["FilterExpression"] = filtro
+            if qp.get("resumen") == "1":
+                kwargs = _proyeccion_liviana(kwargs)
             items = _consultar(kwargs, limite)
             if qp.get("resumen") == "1":
                 _sin_campos_pesados(items)

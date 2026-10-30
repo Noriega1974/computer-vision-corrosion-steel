@@ -8,19 +8,23 @@ import React, { useEffect, useRef } from 'react';
  *   @param {Array}  mascaras  - Array de objetos con polígonos de las áreas detectadas:
  *                               [{ puntos: [{x, y}], color?: string, opacidad?: number }]
  *                               donde x/y están en rango [0, 1] relativo a la imagen
+ *   @param {Object} contorno  - (opcional) contorno de la placa: { puntos: [{x, y}] } en [0, 1];
+ *                               se dibuja en verde, solo línea, sobre los polígonos
  *
  * TODO: el backend actualmente no devuelve datos de segmentación por píxel/polígono.
  *       Solo expone nivel_corrosion, area_corroida_pct y confianza_promedio.
  *       Cuando el backend devuelva los polígonos, conectar aquí sin cambiar la interfaz.
  */
-export default function SegmentationOverlay({ imagenUrl, mascaras = [], boxStyle, imgStyle }) {
+export default function SegmentationOverlay({ imagenUrl, mascaras = [], contorno = null, boxStyle, imgStyle }) {
   const canvasRef = useRef(null);
   const imgRef = useRef(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const img = imgRef.current;
-    if (!canvas || !img || mascaras.length === 0) return;
+    if (!canvas || !img) return;
+    const puntosPlaca = contorno?.puntos ?? [];
+    if (mascaras.length === 0 && puntosPlaca.length < 3) return;
 
     const draw = () => {
       if (!img.naturalWidth) return;
@@ -51,6 +55,15 @@ export default function SegmentationOverlay({ imagenUrl, mascaras = [], boxStyle
         ctx.lineWidth = 1.5;
         ctx.stroke();
       });
+      if (puntosPlaca.length >= 3) {
+        ctx.beginPath();
+        ctx.moveTo(offX + puntosPlaca[0].x * w, offY + puntosPlaca[0].y * h);
+        puntosPlaca.slice(1).forEach(p => ctx.lineTo(offX + p.x * w, offY + p.y * h));
+        ctx.closePath();
+        ctx.strokeStyle = '#16a34a';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+      }
     };
 
     if (img.complete && img.naturalWidth > 0) draw();
@@ -62,7 +75,7 @@ export default function SegmentationOverlay({ imagenUrl, mascaras = [], boxStyle
       img.removeEventListener('load', draw);
       ro?.disconnect();
     };
-  }, [mascaras]);
+  }, [mascaras, contorno]);
 
   if (!imagenUrl) return null;
 

@@ -70,6 +70,9 @@ function GaleriaSkeleton({ cantidad, fotos = false, conNivel = false }) {
                 }}>
                   <SkeletonLinea width={48} />
                 </div>
+                <div style={{ fontSize: 11, marginTop: 2, fontFamily: 'var(--font-ui)' }}>
+                  <SkeletonLinea width={70} />
+                </div>
                 {filaNivel}
               </div>
             ) : (

@@ -11,7 +11,7 @@ import { nivelColor, nivelBg, nivelLabel } from '../lib/statusUtils';
 import SearchableSelect from '../components/SearchableSelect';
 import NivelIcon from '../components/NivelIcon';
 import NivelInfo from '../components/NivelInfo';
-import { formatoPct } from '../lib/textUtils';
+import { formatoPct, etiquetaBase } from '../lib/textUtils';
 
 // ─── Componente: resultado del análisis ─────────────────────────────────────
 const NOMBRE_MAX = 80;
@@ -60,7 +60,7 @@ function ResultadoAnalisis({ result, onReset, onDashboard }) {
             {formatoPct(areaPct)}
           </div>
           <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', marginTop: 6, letterSpacing: '0.08em', fontWeight: 600 }}>
-            ÁREA CORROÍDA
+            ÁREA CORROÍDA {etiquetaBase(result).toUpperCase()}
           </div>
         </div>
 
@@ -361,6 +361,9 @@ export default function UploadPage() {
                   Arrastra una o varias imágenes aquí o haz clic para seleccionar
                 </div>
                 <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>JPG o PNG · Máximo 50 MB cada una · Hasta {LOTE_MAX} por tanda</div>
+                <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', marginTop: 'var(--space-1)' }}>
+                  Para un mejor resultado, encuadra la placa completa, con poco fondo y de frente.
+                </div>
                 <input
                   id="file-input" name="imagen" type="file" multiple
                   accept="image/jpeg,image/png" tabIndex={-1}

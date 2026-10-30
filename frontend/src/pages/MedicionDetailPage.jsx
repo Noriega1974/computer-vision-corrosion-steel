@@ -12,23 +12,13 @@ import { formatFecha } from '../utils/dateFormat';
 import { apiDelete, apiPatch } from '../lib/apiClient';
 import { useRefreshKey } from '../hooks/RefreshKeyContext';
 import SegmentationOverlay from '../components/SegmentationOverlay';
+import { baseArea, formatoPct } from '../lib/textUtils';
+import { tiempoRelativo } from '../lib/tiempoRelativo';
 import NivelIcon from '../components/NivelIcon';
 import NivelInfo from '../components/NivelInfo';
 import Skeleton, { SkeletonLinea } from '../components/Skeleton';
-import { formatoPct } from '../lib/textUtils';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { AvisoEnLinea } from '../components/Aviso';
-
-// ─── Helper tiempo relativo ───────────────────────────────────────────────────
-function tiempoRelativo(timestamp) {
-  if (!timestamp) return '';
-  const diff = Date.now() - new Date(timestamp).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `hace ${mins} min`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `hace ${hrs} h`;
-  return `hace ${Math.floor(hrs / 24)} días`;
-}
 
 // ─── Carga Leaflet via CDN ────────────────────────────────────────────────────
 function useLeaflet() {
@@ -391,6 +381,16 @@ export default function MedicionDetailPage() {
           ctx.lineWidth = Math.max(1.5, canvas.width * 0.002);
           ctx.stroke();
         });
+        const placa = medicion.contorno_placa?.puntos ?? [];
+        if (placa.length >= 3) {
+          ctx.beginPath();
+          ctx.moveTo(placa[0].x * canvas.width, placa[0].y * canvas.height);
+          placa.slice(1).forEach(p => ctx.lineTo(p.x * canvas.width, p.y * canvas.height));
+          ctx.closePath();
+          ctx.strokeStyle = '#16a34a';
+          ctx.lineWidth = Math.max(2.5, canvas.width * 0.003);
+          ctx.stroke();
+        }
       }
 
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
@@ -588,6 +588,7 @@ export default function MedicionDetailPage() {
                   <SegmentationOverlay
                     imagenUrl={medicion.url_imagen}
                     mascaras={medicion.mascaras ?? []}
+                    contorno={medicion.contorno_placa}
                     boxStyle={IMAGEN_BOX_STYLE}
                     imgStyle={IMAGEN_FIT_STYLE}
                   />
@@ -656,11 +657,24 @@ export default function MedicionDetailPage() {
                   {formatoPct(medicion.area_corroida_pct)}
                 </div>
                 <div style={FICHA_PCT_LABEL_STYLE}>
-                  Área corroída
+                  {baseArea(medicion) === 'placa' ? 'Área corroída sobre la placa' : 'Área corroída sobre la foto completa'}
                 </div>
+                {baseArea(medicion) === 'placa' && medicion.area_corroida_pct_foto != null && (
+                  <div style={{ ...FICHA_PCT_LABEL_STYLE, fontWeight: 500, marginTop: 1 }}>
+                    {formatoPct(medicion.area_corroida_pct_foto)} sobre la foto completa
+                  </div>
+                )}
               </div>
             </div>
             <BarraPorcentaje valor={medicion.area_corroida_pct ?? 0} color={color} />
+            {medicion.area_base === 'foto' && (
+              <p style={{
+                margin: 0, fontSize: 12, lineHeight: 1.5, color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)',
+              }}>
+                No se pudo reconocer la placa en esta foto. El porcentaje se calculó sobre la foto completa
+                y depende del encuadre.
+              </p>
+            )}
 
             {/* Metadatos secundarios compactos dentro de la caja central */}
             <div style={{

@@ -29,6 +29,33 @@ def construir(ruta, size=1024):
     return ruta
 
 
+def construir_placa(ruta, size=512, canal=1, k=2.0, b=-1.0):
+    """Separador de placa de juguete (entrada `images`, salida `logits`):
+    logits = k * canal_normalizado + b. Con el canal G (1) y los valores por
+    defecto, un píxel con G >= ~145 es "placa" y el fondo gris (G=100) o el
+    relleno negro del lienzo no."""
+    x = helper.make_tensor_value_info("images", TensorProto.FLOAT, [1, 3, size, size])
+    y = helper.make_tensor_value_info("logits", TensorProto.FLOAT, [1, 1, size, size])
+    nodos = [
+        helper.make_node("Slice", ["images", "ini", "fin", "ejes"], ["c"]),
+        helper.make_node("Mul", ["c", "k"], ["ck"]),
+        helper.make_node("Add", ["ck", "b"], ["logits"]),
+    ]
+    inits = [
+        helper.make_tensor("ini", TensorProto.INT64, [1], [canal]),
+        helper.make_tensor("fin", TensorProto.INT64, [1], [canal + 1]),
+        helper.make_tensor("ejes", TensorProto.INT64, [1], [1]),
+        helper.make_tensor("k", TensorProto.FLOAT, [1], [k]),
+        helper.make_tensor("b", TensorProto.FLOAT, [1], [b]),
+    ]
+    g = helper.make_graph(nodos, "fake_placa", [x], [y], inits)
+    m = helper.make_model(g, opset_imports=[helper.make_opsetid("", 17)])
+    m.ir_version = 8
+    onnx.checker.check_model(m)
+    onnx.save(m, str(ruta))
+    return ruta
+
+
 def construir_yolo(ruta, caja_xyxy=(200, 300, 600, 500), conf=0.9, size=1024, nc_coefs=32, extra=()):
     """YOLOv8n-seg de juguete: salidas CONSTANTES con el formato del real
     (output0 [1,37,N] = xywh en píxeles del lienzo + conf + 32 coeficientes;

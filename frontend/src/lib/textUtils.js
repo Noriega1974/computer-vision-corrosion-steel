@@ -14,3 +14,14 @@ export function normalizar(s) {
 export function formatoPct(n) {
   return `${Number(n ?? 0).toFixed(1).replace('.', ',')}%`;
 }
+
+// Sobre qué se calculó el % de corrosión de una medición. Las mediciones
+// anteriores al separador de placa no traen `area_base` y se calcularon sobre
+// la foto completa.
+export function baseArea(m) {
+  return m?.area_base === 'placa' ? 'placa' : 'foto';
+}
+
+export function etiquetaBase(m) {
+  return baseArea(m) === 'placa' ? 'sobre la placa' : 'sobre la foto';
+}
