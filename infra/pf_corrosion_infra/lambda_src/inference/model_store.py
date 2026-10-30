@@ -43,6 +43,17 @@ _PLACA = "PLATE_MODEL"
 # Una sesión cacheada por modelo: {prefijo de variables: (sesion, ruta)}.
 _sesiones: dict[str, tuple[object, str]] = {}
 
+# Cache negativa SOLO del separador de placa: {prefijo: (instante_del_fallo, mensaje)}.
+# Un separador mal configurado (llave inexistente, sha256 distinto, onnx corrupto,
+# tamano incorrecto) haria que cada solicitud tibia reintente la descarga antes de
+# caer a la foto completa. El modelo principal NO la usa: sigue lanzando.
+PLATE_FAILURE_TTL_S = 300.0
+_fallos: dict[str, tuple[float, str]] = {}
+
+
+def _ahora() -> float:
+    return time.monotonic()
+
 
 def tipo_modelo() -> str:
     tipo = os.environ.get("MODEL_TYPE", "unet").strip().lower()
@@ -147,9 +158,19 @@ def etiqueta_placa() -> str:
 def obtener_sesion_placa(s3_client=None, size: int = 512):
     """Session of the plate separator, cached independently of the main
     model. Same return shape as `obtener_sesion`."""
-    return _sesion_cacheada(_PLACA, s3_client, size)
+    previo = _fallos.get(_PLACA)
+    if previo is not None:
+        if _ahora() - previo[0] < PLATE_FAILURE_TTL_S:
+            raise RuntimeError(f"Plate separator unavailable (recent failure, retrying later): {previo[1]}")
+        del _fallos[_PLACA]
+    try:
+        return _sesion_cacheada(_PLACA, s3_client, size)
+    except Exception as exc:
+        _fallos[_PLACA] = (_ahora(), f"{type(exc).__name__}: {exc}")
+        raise
 
 
 def reiniciar_cache() -> None:
     """Drops the cached sessions (tests and local scripts)."""
     _sesiones.clear()
+    _fallos.clear()

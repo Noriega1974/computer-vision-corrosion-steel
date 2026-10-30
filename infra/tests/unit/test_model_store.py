@@ -158,3 +158,75 @@ def test_sesiones_principal_y_placa_se_cachean_por_separado(monkeypatch, tmp_pat
     with pytest.raises(RuntimeError, match="expects input"):
         ms.reiniciar_cache()
         ms.obtener_sesion_placa(None, 1024)                  # el tamaño se valida por modelo
+
+
+def _placa_rota(monkeypatch, tmp_path):
+    monkeypatch.setenv("MODEL_BUCKET", "bucket-modelos")
+    monkeypatch.setenv("MODEL_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("PLATE_MODEL_KEY", "placa/no_existe.onnx")
+    return FakeS3()
+
+
+def _reloj(monkeypatch):
+    t = {"now": 1000.0}
+    monkeypatch.setattr(ms, "_ahora", lambda: t["now"])
+    return t
+
+
+def test_fallo_del_separador_se_recuerda_y_no_vuelve_a_tocar_s3(monkeypatch, tmp_path, _sin_placa):
+    s3 = _placa_rota(monkeypatch, tmp_path)
+    _reloj(monkeypatch)
+    with pytest.raises(FileNotFoundError):
+        ms.obtener_sesion_placa(s3, 512)
+    with pytest.raises(RuntimeError, match="recent failure"):
+        ms.obtener_sesion_placa(s3, 512)
+    assert s3.descargas == [("bucket-modelos", "placa/no_existe.onnx")]
+
+
+def test_fallo_del_separador_se_reintenta_pasada_la_ventana(monkeypatch, tmp_path, _sin_placa):
+    s3 = _placa_rota(monkeypatch, tmp_path)
+    reloj = _reloj(monkeypatch)
+    with pytest.raises(FileNotFoundError):
+        ms.obtener_sesion_placa(s3, 512)
+    reloj["now"] += ms.PLATE_FAILURE_TTL_S - 1
+    with pytest.raises(RuntimeError, match="recent failure"):
+        ms.obtener_sesion_placa(s3, 512)
+    assert len(s3.descargas) == 1
+    reloj["now"] += 2
+    with pytest.raises(FileNotFoundError):
+        ms.obtener_sesion_placa(s3, 512)
+    assert len(s3.descargas) == 2
+
+
+def test_separador_recupera_y_cachea_tras_el_reintento(monkeypatch, tmp_path, _sin_placa):
+    pytest.importorskip("onnx")
+    import modelo_falso_onnx
+    s3 = _placa_rota(monkeypatch, tmp_path)
+    reloj = _reloj(monkeypatch)
+    with pytest.raises(FileNotFoundError):
+        ms.obtener_sesion_placa(s3, 512)
+    s3.archivos_descargables[("bucket-modelos", "placa/no_existe.onnx")] = modelo_falso_onnx.construir_placa(tmp_path / "p.onnx")
+    reloj["now"] += ms.PLATE_FAILURE_TTL_S + 1
+    sesion, _ = ms.obtener_sesion_placa(s3, 512)
+    assert ms.obtener_sesion_placa(s3, 512)[0] is sesion
+    assert len(s3.descargas) == 2
+
+
+def test_reiniciar_cache_olvida_el_fallo_del_separador(monkeypatch, tmp_path, _sin_placa):
+    s3 = _placa_rota(monkeypatch, tmp_path)
+    _reloj(monkeypatch)
+    with pytest.raises(FileNotFoundError):
+        ms.obtener_sesion_placa(s3, 512)
+    ms.reiniciar_cache()
+    with pytest.raises(FileNotFoundError):
+        ms.obtener_sesion_placa(s3, 512)
+    assert len(s3.descargas) == 2
+
+
+def test_el_modelo_principal_no_usa_la_cache_negativa(monkeypatch, tmp_path):
+    _env(monkeypatch, tmp_path)
+    s3 = FakeS3()
+    for _ in range(2):
+        with pytest.raises(FileNotFoundError):
+            ms.obtener_sesion(s3, 1024)
+    assert len(s3.descargas) == 2

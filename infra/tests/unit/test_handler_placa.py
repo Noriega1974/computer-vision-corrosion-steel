@@ -142,3 +142,18 @@ def test_yolo_ignora_el_separador(h, monkeypatch, tmp_path):
     assert not CAMPOS_PLACA & set(cuerpo)
     assert cuerpo["modelo"].startswith("yolo:")
     assert not [d for d in h.s3.descargas if d[1].startswith("placa/")]
+
+
+def test_respaldo_no_reintenta_la_descarga_del_separador_en_solicitudes_tibias(h, monkeypatch, tmp_path):
+    _poner_unet(h, monkeypatch, tmp_path)
+    monkeypatch.setenv("PLATE_MODEL_KEY", "placa/no_existe.onnx")
+    model_store.reiniciar_cache()
+    reloj = {"now": 5000.0}
+    monkeypatch.setattr(model_store, "_ahora", lambda: reloj["now"])
+    llave = ("bucket-modelos", "placa/no_existe.onnx")
+    for _ in range(3):
+        _comprobar_respaldo(_ok(h.lambda_handler(_evento(_foto_placa()), None)), None)
+    assert h.s3.descargas.count(llave) == 1
+    reloj["now"] += model_store.PLATE_FAILURE_TTL_S + 1
+    _comprobar_respaldo(_ok(h.lambda_handler(_evento(_foto_placa()), None)), None)
+    assert h.s3.descargas.count(llave) == 2
