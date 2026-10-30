@@ -130,6 +130,11 @@ class CorriaApiStack(Stack):
         mediciones_id.add_method("DELETE", mediciones_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
         mediciones_id.add_method("PATCH", mediciones_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
 
+        # Reintentar el analisis de una medicion guardada (herramienta temporal,
+        # solo super_admin: el chequeo esta en el handler). Va a la Lambda de
+        # INFERENCIA (tiene los modelos); ?id_medicion=MED-... como en DELETE/PATCH.
+        mediciones_id.add_resource("reanalizar").add_method("POST", inference_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
+
         # ── /medicion (inference) ────────────────────────────────────────
         medicion = self.api.root.add_resource("medicion")
         medicion.add_method("POST", inference_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)

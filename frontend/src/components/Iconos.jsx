@@ -608,3 +608,11 @@ export function IconoDesactivarUsuario(props) {
     </Base>
   );
 }
+
+export function IconoQuitar(props) {
+  return (
+    <Base {...props}>
+      <path d="M5 12h14"/>
+    </Base>
+  );
+}

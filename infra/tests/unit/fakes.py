@@ -1,5 +1,6 @@
 """Dobles en memoria de S3 y DynamoDB para probar handler.py sin AWS."""
 import io
+import re
 import shutil
 from decimal import Decimal
 
@@ -35,6 +36,9 @@ class FakeS3:
     def get_object(self, Bucket, Key):
         return {"Body": io.BytesIO(self._obj(Bucket, Key))}
 
+    def generate_presigned_url(self, op, Params, ExpiresIn):
+        return f"https://fake-s3/{Params['Bucket']}/{Params['Key']}?op={op}"
+
     def download_file(self, bucket, key, destino):
         self.descargas.append((bucket, key))
         if (bucket, key) not in self.archivos_descargables:
@@ -47,6 +51,7 @@ class FakeTabla:
         self.items = list(items or [])
         self.claves = claves
         self.escritos = []
+        self.actualizados = []
 
     def get_item(self, Key):
         for it in self.items:
@@ -60,6 +65,28 @@ class FakeTabla:
     def put_item(self, Item):
         _rechazar_floats(Item)
         self.escritos.append(Item)
+
+    def update_item(self, Key, UpdateExpression, ExpressionAttributeNames=None,
+                    ExpressionAttributeValues=None, ReturnValues=None, **_):
+        """Interprete minimo de `SET #a = :v, #b = if_not_exists(#b, :w) REMOVE #c, #d`
+        (la condicion se ignora). Guarda el ítem actualizado en `actualizados`."""
+        nombres, valores = ExpressionAttributeNames or {}, ExpressionAttributeValues or {}
+        _rechazar_floats(valores)
+        item = next((it for it in self.items if all(it.get(k) == v for k, v in Key.items())), None)
+        if item is None:
+            raise AssertionError("update_item sobre un ítem que no existe")
+        sets, _, quitar = UpdateExpression.partition("REMOVE")
+        for attr, valor in re.findall(r"(#\w+)\s*=\s*(if_not_exists\([^)]*\)|:\w+)", sets):
+            nombre = nombres[attr]
+            if valor.startswith("if_not_exists"):
+                if nombre not in item:
+                    item[nombre] = valores[re.search(r":\w+", valor).group()]
+            else:
+                item[nombre] = valores[valor]
+        for attr in re.findall(r"#\w+", quitar):
+            item.pop(nombres[attr], None)
+        self.actualizados.append(dict(item))
+        return {"Attributes": dict(item)}
 
 
 def _rechazar_floats(obj, ruta="item"):
