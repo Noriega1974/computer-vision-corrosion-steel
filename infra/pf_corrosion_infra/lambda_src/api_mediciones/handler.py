@@ -198,7 +198,8 @@ def _item_permitido(usuario: dict, item: dict) -> bool:
 # (Decimal by Decimal), which took ~8 s for 49 items on a 128 MB Lambda.
 CAMPOS_LIVIANOS = (
     "id_punto", "sk", "id_medicion", "tipo_registro", "timestamp", "nombre", "notas",
-    "area_corroida_pct", "nivel_corrosion", "confianza_promedio", "modelo", "fuente",
+    "area_corroida_pct", "area_base", "area_corroida_pct_foto", "nivel_corrosion",
+    "confianza_promedio", "modelo", "fuente",
     "bloque_id", "bloque_nombre", "empresa_id", "usuario_id", "tomado_por_id",
     "creado_por_nombre", "latitud_real", "longitud_real", "tiempo_procesamiento_ms",
     "tiempo_subida_s", "s3_key_imagen", "s3_key_thumbnail", "s3_key_resultado",

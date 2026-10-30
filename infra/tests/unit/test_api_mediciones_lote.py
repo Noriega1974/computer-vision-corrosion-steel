@@ -135,6 +135,16 @@ def test_recientes_max_1000_y_resumen_quita_campos_pesados(h):
     assert all("contorno_placa" not in m and m["area_base"] == "placa" for m in ms)
 
 
+
+def test_proyeccion_liviana_lleva_la_base_del_area_y_no_el_contorno(h):
+    # DynamoDB solo devuelve lo proyectado (el doble en memoria no proyecta):
+    # sin area_base la galería rotularía todo "sobre la foto".
+    kw = h._proyeccion_liviana({"ExpressionAttributeNames": {"#e": "empresa_id"}})
+    campos = set(kw["ExpressionAttributeNames"].values())
+    assert {"area_corroida_pct", "area_base", "area_corroida_pct_foto", "empresa_id"} <= campos
+    assert not campos & {"contorno_placa", "mascaras", "detecciones"}
+    assert len(kw["ProjectionExpression"].split(", ")) == len(h.CAMPOS_LIVIANOS)
+
 def test_punto_pagina_y_respeta_empresa(h):
     h.tabla.items = [_med(n, "BLQ-1", "EMP-2") for n in range(1, 6)] + [_med(n) for n in range(6, 9)]
     ev = {"httpMethod": "GET", "pathParameters": {"id_punto": "BLQ-1"}, "queryStringParameters": {"limite": "3"},
