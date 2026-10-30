@@ -13,22 +13,12 @@ import { apiDelete, apiPatch } from '../lib/apiClient';
 import { useRefreshKey } from '../hooks/RefreshKeyContext';
 import SegmentationOverlay from '../components/SegmentationOverlay';
 import { baseArea, formatoPct } from '../lib/textUtils';
+import { tiempoRelativo } from '../lib/tiempoRelativo';
 import NivelIcon from '../components/NivelIcon';
 import NivelInfo from '../components/NivelInfo';
 import Skeleton, { SkeletonLinea } from '../components/Skeleton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { AvisoEnLinea } from '../components/Aviso';
-
-// ─── Helper tiempo relativo ───────────────────────────────────────────────────
-function tiempoRelativo(timestamp) {
-  if (!timestamp) return '';
-  const diff = Date.now() - new Date(timestamp).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `hace ${mins} min`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `hace ${hrs} h`;
-  return `hace ${Math.floor(hrs / 24)} días`;
-}
 
 // ─── Carga Leaflet via CDN ────────────────────────────────────────────────────
 function useLeaflet() {

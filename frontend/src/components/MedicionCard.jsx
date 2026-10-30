@@ -6,20 +6,7 @@ import NivelIcon from './NivelIcon';
 import { nivelColor, nivelLabel } from '../lib/statusUtils';
 import { formatFecha } from '../utils/dateFormat';
 import { formatoPct, etiquetaBase } from '../lib/textUtils';
-
-// ─── Helper: tiempo relativo ─────────────────────────────────────────────────
-function tiempoRelativo(timestamp) {
-  if (!timestamp) return '—';
-  const diff = Date.now() - new Date(timestamp).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'hace un momento';
-  if (mins < 60) return `hace ${mins} min`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `hace ${hrs} h`;
-  const days = Math.floor(hrs / 24);
-  if (days < 30) return `hace ${days} días`;
-  return formatFecha(timestamp);
-}
+import { tiempoRelativo } from '../lib/tiempoRelativo';
 
 // ─── Card de galería (patrón Flashcard) ──────────────────────────────────────
 // `contexto` (opcional): texto que antecede a la fecha en el subtítulo, p. ej.
@@ -76,7 +63,7 @@ export default function MedicionCard({ medicion, to, state, contexto, seleccion 
           {titulo}
         </div>
         <div style={{ ...CARD_SUBTITULO_STYLE, color: 'var(--text-muted)' }}>
-          {prefijo ? `${prefijo} · ` : ''}{tiempoRelativo(medicion.timestamp)}
+          {prefijo ? `${prefijo} · ` : ''}{tiempoRelativo(medicion.timestamp, { vacio: '—', formatFecha })}
         </div>
       </div>
 
@@ -129,15 +116,19 @@ export default function MedicionCard({ medicion, to, state, contexto, seleccion 
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         gap: 10, marginTop: 2,
       }}>
-        <div>
+        <div style={{ minWidth: 0 }}>
           <div style={{
             fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 18,
-            color: 'var(--text-primary)', lineHeight: 1.05, letterSpacing: '-0.02em',
+            color: 'var(--text-primary)', lineHeight: 1.05, letterSpacing: '-0.02em', whiteSpace: 'nowrap',
           }}>
+            <span className="sr-only-pw">Área corroída </span>
             {formatoPct(medicion.area_corroida_pct)}
-            <span style={{ fontFamily: 'var(--font-ui)', fontWeight: 500, fontSize: 11, color: 'var(--text-muted)', letterSpacing: 0, marginLeft: 6 }}>
-              Área corroída {etiquetaBase(medicion)}
-            </span>
+          </div>
+          <div style={{
+            fontFamily: 'var(--font-ui)', fontWeight: 500, fontSize: 11, color: 'var(--text-muted)',
+            marginTop: 2, whiteSpace: 'nowrap',
+          }}>
+            {etiquetaBase(medicion)}
           </div>
           <div style={{
             display: 'flex', alignItems: 'center', gap: 6, marginTop: 4,

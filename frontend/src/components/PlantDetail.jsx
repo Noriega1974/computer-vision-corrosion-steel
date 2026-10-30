@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useMedicionesPunto } from '../hooks/useMedicionesPunto';
 import {
   nivelColor, nivelBg, nivelLabel,
@@ -9,24 +9,6 @@ import { formatFecha } from '../utils/dateFormat';
 import { formatoPct, etiquetaBase, baseArea } from '../lib/textUtils';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { IconoCamara, IconoHumedad, IconoLluvia, IconoTemperatura, IconoViento } from './Iconos';
-
-const CustomTooltip = ({ active, payload, label }) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div style={{
-      background: 'var(--bg-section)', border: '1px solid var(--border)',
-      padding: '8px 12px', fontFamily: 'var(--font-data)', fontSize: 'var(--text-2xs)',
-    }}>
-      <div style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-1)' }}>{label}</div>
-      <div style={{ color: 'var(--accent-amber)' }}>
-        Área: <strong>{payload[0]?.value?.toFixed(1)}%</strong>
-      </div>
-      {payload[0]?.payload?.base && (
-        <div style={{ color: 'var(--text-muted)' }}>sobre la {payload[0].payload.base}</div>
-      )}
-    </div>
-  );
-};
 
 // Estilos de texto compartidos con el esqueleto: mismo line-height cargado o no.
 const FOOTER_TITULO_STYLE = {
@@ -40,6 +22,9 @@ const HISTORIAL_LINEA_STYLE = { fontSize: 'var(--text-3xs)', fontWeight: 600, fo
 // ─── Tarjeta Flashcard de Ubicación (Dashboard) ─────────────────────────────
 export default function PlantDetail({ punto }) {
   const { mediciones, loading, error } = useMedicionesPunto(punto?.id_bloque);
+  // Lectura del punto bajo el cursor en la gráfica de tendencia; se muestra en una
+  // línea fija sobre la gráfica para no tapar los ejes (el alto es de ~70 px).
+  const [puntoActivo, setPuntoActivo] = useState(null);
   const filasSkeleton = useConteoRecordado(`dashboard:historial:${punto?.id_bloque}`, mediciones, loading, 4);
 
   if (!punto) {
@@ -118,23 +103,22 @@ export default function PlantDetail({ punto }) {
             background: 'var(--bg-card)', border: '1px solid var(--border)',
             borderRadius: 8, padding: '8px 10px',
             display: 'grid',
-            gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))`,
-            gap: 6,
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            gap: '6px 10px',
           }}>
             {stats.map(({ Icon, label, v }) => (
-              <div key={label} style={{ textAlign: 'center', minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                  <Icon size={16} strokeWidth={2} style={{ color: 'var(--accent-amber)', flexShrink: 0 }} />
-                  <span style={{
-                    fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 15,
-                    color: 'var(--text-primary)', lineHeight: 1.1, letterSpacing: '-0.02em',
-                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                <Icon size={16} strokeWidth={2} style={{ color: 'var(--accent-amber)', flexShrink: 0 }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{
+                    fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 14,
+                    color: 'var(--text-primary)', lineHeight: 1.1, letterSpacing: '-0.02em', whiteSpace: 'nowrap',
                   }}>
                     {v}
-                  </span>
-                </div>
-                <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginTop: 2, whiteSpace: 'nowrap' }}>
-                  {label}
+                  </div>
+                  <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                    {label}
+                  </div>
                 </div>
               </div>
             ))}
@@ -187,11 +171,33 @@ export default function PlantDetail({ punto }) {
       )}
       {trendData.length > 1 && (
         <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-          <div style={TENDENCIA_TITULO_STYLE}>
+          <div style={{ ...TENDENCIA_TITULO_STYLE, marginBottom: 2 }}>
             TENDENCIA — ÁREA CORROÍDA (%)
           </div>
+          <div aria-live="off" style={{
+            fontFamily: 'var(--font-data)', fontSize: 'var(--text-2xs)', color: 'var(--text-muted)',
+            minHeight: 16, marginBottom: 'var(--space-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>
+            {(() => {
+              const d = puntoActivo ?? trendData[trendData.length - 1];
+              return (
+                <>
+                  {d.fecha} · <strong style={{ color: 'var(--accent-amber)' }}>{formatoPct(d.corrosion)}</strong> sobre la {d.base}
+                </>
+              );
+            })()}
+          </div>
           <ResponsiveContainer width="100%" height={70}>
-            <AreaChart data={trendData} margin={{ top: 2, right: 0, left: -28, bottom: 0 }}>
+            <AreaChart
+              data={trendData}
+              margin={{ top: 2, right: 0, left: -28, bottom: 0 }}
+              onMouseMove={(e) => {
+                const i = e?.activeTooltipIndex;
+                const d = i != null ? trendData[i] : null;
+                setPuntoActivo((prev) => (prev === d ? prev : d));
+              }}
+              onMouseLeave={() => setPuntoActivo(null)}
+            >
               <defs>
                 <linearGradient id={`grad-${punto.id_bloque}`} x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#C1460B" stopOpacity={0.4}/>
@@ -200,7 +206,7 @@ export default function PlantDetail({ punto }) {
               </defs>
               <XAxis dataKey="fecha" tick={{ fill: '#3d5a72', fontSize: 11 }} tickLine={false} axisLine={false} interval={4} />
               <YAxis tick={{ fill: '#3d5a72', fontSize: 11 }} tickLine={false} axisLine={false} />
-              <Tooltip content={<CustomTooltip />} />
+              <Tooltip content={() => null} cursor={{ stroke: 'var(--border-strong)' }} />
               <Area type="monotone" dataKey="corrosion" stroke="#C1460B" strokeWidth={1.5} fill={`url(#grad-${punto.id_bloque})`} dot={false} />
             </AreaChart>
           </ResponsiveContainer>
