@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { IconoAgregarImagen, IconoError, IconoEliminar, IconoUbicacion } from './Iconos';
 import NivelIcon from './NivelIcon';
 import { nivelColor, nivelLabel } from '../lib/statusUtils';
-import { formatoPct } from '../lib/textUtils';
+import { formatoPct, etiquetaBase } from '../lib/textUtils';
 import { LOTE_MAX, NOMBRE_MAX } from '../hooks/useUploadLote';
 
 const visuallyHidden = {
@@ -46,7 +46,7 @@ function EstadoFila({ it, ocupado, onReintentar }) {
         {nivel != null && <NivelIcon nivel={nivel} size={18} color={color} />}
         <span>
           Listo{nivel != null && <> · <strong>{nivelLabel(nivel)}</strong></>}
-          {r.area_corroida_pct != null && <> · <span style={numStyle}>{formatoPct(r.area_corroida_pct)}</span></>}
+          {r.area_corroida_pct != null && <> · <span style={numStyle}>{formatoPct(r.area_corroida_pct)}</span> {etiquetaBase(r)}</>}
         </span>
       </span>
     );

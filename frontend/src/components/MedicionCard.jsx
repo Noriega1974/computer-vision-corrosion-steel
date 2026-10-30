@@ -5,7 +5,7 @@ import { IconoCasilla, IconoCasillaMarcada, IconoError } from './Iconos';
 import NivelIcon from './NivelIcon';
 import { nivelColor, nivelLabel } from '../lib/statusUtils';
 import { formatFecha } from '../utils/dateFormat';
-import { formatoPct } from '../lib/textUtils';
+import { formatoPct, etiquetaBase } from '../lib/textUtils';
 
 // ─── Helper: tiempo relativo ─────────────────────────────────────────────────
 function tiempoRelativo(timestamp) {
@@ -136,7 +136,7 @@ export default function MedicionCard({ medicion, to, state, contexto, seleccion 
           }}>
             {formatoPct(medicion.area_corroida_pct)}
             <span style={{ fontFamily: 'var(--font-ui)', fontWeight: 500, fontSize: 11, color: 'var(--text-muted)', letterSpacing: 0, marginLeft: 6 }}>
-              Área corroída
+              Área corroída {etiquetaBase(medicion)}
             </span>
           </div>
           <div style={{

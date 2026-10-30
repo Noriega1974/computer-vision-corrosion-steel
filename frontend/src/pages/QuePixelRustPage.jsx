@@ -388,8 +388,10 @@ export default function QuePixelRustPage() {
       {/* Cómo leer el resultado */}
       <Seccion id="resultado" titulo="Cómo leer el resultado">
         <p style={parrafo}>
-          El <strong>área corroída</strong> es el porcentaje de los píxeles de la foto que el modelo
-          marcó como corrosión. Con ese porcentaje se asigna el nivel, según la norma ISO 10289, que
+          El <strong>área corroída</strong> es el porcentaje de la superficie de la placa que el modelo
+          marcó como corrosión. La aplicación reconoce la placa metálica de forma automática y
+          calcula el porcentaje sobre ella; si no logra reconocerla, lo calcula sobre la foto
+          completa y lo indica en el resultado. Con ese porcentaje se asigna el nivel, según la norma ISO 10289, que
           califica piezas con recubrimientos metálicos, como el zinc del galvanizado, por la fracción
           de superficie afectada.
         </p>
@@ -424,8 +426,9 @@ export default function QuePixelRustPage() {
         <h3 style={h3Style}>Alcance del resultado</h3>
         <ul style={lista}>
           <li>
-            El porcentaje se calcula sobre la foto completa, así que depende del encuadre y de la
-            distancia de captura. Es una estimación relativa, no una medida del área física.
+            El porcentaje se calcula sobre la placa cuando la aplicación la reconoce. Si no la reconoce,
+            se calcula sobre la foto completa y entonces depende del encuadre y de la distancia de
+            captura. En ambos casos es una estimación relativa, no una medida del área física.
           </li>
           <li>
             El modelo se entrenó solo con acero galvanizado; en otros materiales su resultado no está
@@ -496,11 +499,10 @@ export default function QuePixelRustPage() {
       {/* Precisión */}
       <Seccion id="precision" titulo="Precisión del modelo">
         <p style={parrafo}>
-          El modelo que analiza las fotos hoy es <strong>YOLOv8n-seg</strong>, una red de segmentación
-          liviana, con un umbral de confianza de 0,25: solo cuenta como corrosión lo que el modelo
-          marca con más de un 25 % de confianza. En paralelo se entrenó una red <strong>U-Net</strong>,
-          diseñada específicamente para segmentar imágenes, que obtuvo mejores resultados y se está
-          evaluando para producción.
+          El modelo que analiza las fotos hoy es una red <strong>U-Net</strong>, diseñada
+          específicamente para segmentar imágenes. Marca como corrosión cada píxel cuya salida del
+          modelo supera el umbral de 0,5. Se comparó con <strong>YOLOv8n-seg</strong>, una red de
+          segmentación más liviana, y la U-Net obtuvo mejores resultados.
         </p>
         <p style={parrafo}>
           Ambos modelos se calificaron con el mismo examen: 1.245 fotos que no vieron durante el
@@ -514,8 +516,8 @@ export default function QuePixelRustPage() {
             <thead>
               <tr>
                 <th scope="col" style={th}>Métrica</th>
-                <th scope="col" style={{ ...th, textAlign: 'right' }}>YOLOv8n-seg (en uso)</th>
-                <th scope="col" style={{ ...th, textAlign: 'right' }}>U-Net (en evaluación)</th>
+                <th scope="col" style={{ ...th, textAlign: 'right' }}>YOLOv8n-seg (alternativa comparada)</th>
+                <th scope="col" style={{ ...th, textAlign: 'right' }}>U-Net (en uso)</th>
               </tr>
             </thead>
             <tbody>

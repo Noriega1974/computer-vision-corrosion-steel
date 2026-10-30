@@ -63,7 +63,9 @@ LIMITE_PUNTO_MAX = 500
 MAX_PAGINAS = 40
 # Campos que pesan (máscaras, detecciones, ...) y que la galería no usa: con
 # ?resumen=1 se omiten para que 1000 mediciones quepan en los 6 MB de respuesta.
-CAMPOS_PESADOS = ("mascaras", "detecciones", "inferencia_local", "clima")
+# `area_base` NO se omite (la galería indica sobre qué se calculó el %); el
+# contorno de la placa sí, igual que las máscaras.
+CAMPOS_PESADOS = ("mascaras", "detecciones", "inferencia_local", "clima", "contorno_placa")
 
 # Mismo criterio que lambda_src/inference (_nombre_foto): no hay módulo
 # compartido entre lambdas, así que se replica.

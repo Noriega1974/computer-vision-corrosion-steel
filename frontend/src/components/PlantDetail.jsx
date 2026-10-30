@@ -6,7 +6,7 @@ import {
 import Skeleton, { SkeletonLinea } from './Skeleton';
 import { useConteoRecordado } from '../hooks/useConteoRecordado';
 import { formatFecha } from '../utils/dateFormat';
-import { formatoPct } from '../lib/textUtils';
+import { formatoPct, etiquetaBase, baseArea } from '../lib/textUtils';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { IconoCamara, IconoHumedad, IconoLluvia, IconoTemperatura, IconoViento } from './Iconos';
 
@@ -21,6 +21,9 @@ const CustomTooltip = ({ active, payload, label }) => {
       <div style={{ color: 'var(--accent-amber)' }}>
         Área: <strong>{payload[0]?.value?.toFixed(1)}%</strong>
       </div>
+      {payload[0]?.payload?.base && (
+        <div style={{ color: 'var(--text-muted)' }}>sobre la {payload[0].payload.base}</div>
+      )}
     </div>
   );
 };
@@ -71,6 +74,7 @@ export default function PlantDetail({ punto }) {
     .map(m => ({
       fecha: new Date(m.timestamp).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }),
       corrosion: parseFloat((m.area_corroida_pct ?? 0).toFixed(1)),
+      base: baseArea(m),
     }));
 
   const clima = ultimaMedicion?.clima;
@@ -152,7 +156,7 @@ export default function PlantDetail({ punto }) {
                 </div>
                 <div style={FOOTER_SUB_STYLE}>
                   {ultimaMedicion?.area_corroida_pct != null
-                    ? `Última área corroída: ${formatoPct(ultimaMedicion.area_corroida_pct)}`
+                    ? `Última área corroída: ${formatoPct(ultimaMedicion.area_corroida_pct)} ${etiquetaBase(ultimaMedicion)}`
                     : 'Sin lecturas registradas'}
                 </div>
               </>
@@ -321,7 +325,7 @@ function MedicionRow({ medicion }) {
           }} />
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, display: 'flex', justifyContent: 'space-between' }}>
-          <span>Área corroída: {formatoPct(medicion.area_corroida_pct)}</span>
+          <span>Área corroída: {formatoPct(medicion.area_corroida_pct)} {etiquetaBase(medicion)}</span>
           {medicion.notas && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 100 }}>{medicion.notas}</span>}
         </div>
       </div>
