@@ -10,7 +10,6 @@ const ROUTE_TITLES = {
   '/puntos':       'Puntos',
   '/usuarios':     'Usuarios',
   '/configuracion':'Configuración',
-  '/deteccion-ia': 'Detección IA',
   '/privacidad':   'Privacidad',
 };
 
