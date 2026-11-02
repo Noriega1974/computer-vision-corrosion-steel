@@ -129,7 +129,7 @@ function EmptyChart({ message }) {
   );
 }
 
-export default function ChartsRow({ selectedPunto }) {
+export default function ChartsRow({ selectedPunto, children }) {
   const {
     mediciones,
     loading,
@@ -187,6 +187,12 @@ export default function ChartsRow({ selectedPunto }) {
         gap: 'var(--space-4)',
       }}
     >
+
+      {/* 2026-11-03: "Idea D" -- Mediciones por nivel se mudó a este
+          acordeón (ver DashboardPage.jsx), en la misma grilla que las
+          otras 2 tarjetas en vez de en su propia fila junto a
+          Indicadores. */}
+      {children}
 
       {/* -------------------------------------------
           TENDENCIA DEL PUNTO SELECCIONADO

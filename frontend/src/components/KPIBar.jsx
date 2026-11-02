@@ -10,61 +10,35 @@ import { formatoPct } from '../lib/textUtils';
 // MÉTRICA
 // ================================================================
 
-// Minimal tipográfico (elegido por el usuario entre 4 opciones): sin
-// bordes de color ni fondo propio, solo una línea vertical fina entre
-// métricas -- el número hace el trabajo visual. El color queda
-// reservado casi del todo a la alerta real (Severas > 0 en rojo), no a
-// decorar cada métrica con un color distinto.
-function Metrica({ label, value, sub, alert, loading, isLast }) {
+// 2026-11-03: "Idea D" (ver conversación) -- Indicadores pasa de 4
+// tarjetas a una sola línea tipo "ticker" (valor + etiqueta), para que
+// no compita en altura con el resto del dashboard. El detalle que antes
+// iba como leyenda debajo de cada tarjeta (p.ej. "Planta Industrial
+// Bogotá · Sin corrosión") no desaparece, pasa a `title` (tooltip nativo
+// al pasar el mouse) -- se prioriza una sola línea compacta por sobre
+// tenerlo siempre visible.
+function Metrica({ label, value, sub, alert, loading }) {
   return (
-    <div
-      style={{
-        flex: '1 1 0',
-        minWidth: 0,
-        padding: '2px 14px',
-        borderRight: isLast ? 'none' : '1px solid var(--border)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 4,
-      }}
-    >
-      {/* Truncar a 1 línea cortaba texto que el usuario quería poder leer
-          completo. En su lugar: hasta 2 líneas (line-clamp) con un alto
-          mínimo fijo e igual en las 4 tarjetas -- así una leyenda corta
-          ("en total") no hace que esta tarjeta sea más baja que una larga
-          ("Planta Industrial Bogotá · Sin corrosión"), sin necesidad de
-          truncar ninguna de las dos. */}
-      <span style={{
-        fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', fontFamily: 'var(--font-ui)',
-        textTransform: 'uppercase', letterSpacing: '0.05em',
-        lineHeight: 1.25, minHeight: '2.3em',
-        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-      }}>
-        {label}
-      </span>
-
+    <div title={sub || undefined} style={{ display: 'flex', alignItems: 'baseline', gap: 7, minWidth: 0 }}>
       <span
         style={{
           fontFamily: 'var(--font-ui)',
-          fontSize: 24,
+          fontSize: 19,
           fontWeight: 800,
           color: alert ? 'var(--accent-red)' : 'var(--text-primary)',
           lineHeight: 1,
           fontVariantNumeric: 'tabular-nums',
           whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
         }}
       >
-        {loading ? <SkeletonLinea width="3ch" /> : value}
+        {loading ? <SkeletonLinea width="2.5ch" /> : value}
       </span>
 
       <span style={{
-        fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', fontFamily: 'var(--font-ui)', letterSpacing: '0.01em',
-        lineHeight: 1.3, minHeight: '3.6em',
-        display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+        fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', fontFamily: 'var(--font-ui)',
+        textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap',
       }}>
-        {sub}
+        {label}
       </span>
     </div>
   );
@@ -160,12 +134,20 @@ export default function KPIBar() {
         Indicadores
       </div>
 
-      {/* nowrap a propósito: las 4 tarjetas se achican entre sí para
-          seguir cabiendo en una sola fila en vez de pasar la 4ta ("Severas")
-          a una fila nueva -- eso hacía crecer todo el bloque de Indicadores. */}
-      <div style={{ display: 'flex', flexWrap: 'nowrap' }}>
+      {/* wrap (no nowrap): ya no son tarjetas de ancho igual compitiendo por
+          la fila -- es texto que puede pasar a una segunda línea en
+          pantallas angostas sin que eso infle el resto del dashboard. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', rowGap: 8 }}>
         {metricasMostradas.map((m, i) => (
-          <Metrica key={i} {...m} loading={loading} isLast={i === metricasMostradas.length - 1} />
+          <React.Fragment key={i}>
+            {i > 0 && (
+              <span
+                aria-hidden="true"
+                style={{ width: 1, minHeight: 18, alignSelf: 'stretch', background: 'var(--border)', margin: '0 18px', flexShrink: 0 }}
+              />
+            )}
+            <Metrica {...m} loading={loading} />
+          </React.Fragment>
         ))}
       </div>
 
