@@ -31,14 +31,16 @@ function Metrica({ label, value, sub, color, loading }) {
         gap: 4,
       }}
     >
-      {/* Las 3 líneas van a una sola línea con "..." -- un nombre de punto
-          largo en "sub" (p. ej. "Última área corroída") envolvía a varias
-          líneas, estiraba esta tarjeta más que las otras 3 y, como esta
-          fila comparte alto con "Mediciones por nivel" al lado, terminaba
-          agrandando todo el bloque de arriba del dashboard. */}
+      {/* Truncar a 1 línea cortaba texto que el usuario quería poder leer
+          completo. En su lugar: hasta 2 líneas (line-clamp) con un alto
+          mínimo fijo e igual en las 4 tarjetas -- así una leyenda corta
+          ("en total") no hace que esta tarjeta sea más baja que una larga
+          ("Planta Industrial Bogotá · Sin corrosión"), sin necesidad de
+          truncar ninguna de las dos. */}
       <span style={{
         fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-ui)',
-        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        lineHeight: 1.25, minHeight: '2.5em',
+        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
       }}>
         {label}
       </span>
@@ -59,13 +61,11 @@ function Metrica({ label, value, sub, color, loading }) {
         {loading ? <SkeletonLinea width="3ch" /> : value}
       </span>
 
-      <span
-        title={sub}
-        style={{
-          fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-ui)', letterSpacing: '0.01em',
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        }}
-      >
+      <span style={{
+        fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-ui)', letterSpacing: '0.01em',
+        lineHeight: 1.3, minHeight: '3.9em',
+        display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+      }}>
         {sub}
       </span>
     </div>

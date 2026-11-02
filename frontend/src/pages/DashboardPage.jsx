@@ -209,7 +209,7 @@ export default function DashboardPage() {
 
           <section
             className="dashboard-section section-kpi"
-            style={{ padding: '10px 12px' }}
+            style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column' }}
           >
             <MedicionesPorNivel />
           </section>

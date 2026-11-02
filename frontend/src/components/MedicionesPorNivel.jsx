@@ -20,33 +20,36 @@ export default function MedicionesPorNivel() {
   const max = Math.max(1, ...conteos.map(c => c.valor));
 
   return (
-    <div>
-      <div className="dashboard-section-title" style={{ marginBottom: 6 }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div className="dashboard-section-title" style={{ marginBottom: 6, flexShrink: 0 }}>
         Mediciones por nivel
       </div>
 
+      {/* flex:1 -- las barras usan el alto que le sobre a la tarjeta (la
+          misma fila que Indicadores) en vez de un alto fijo chico; antes
+          quedaban "chatas" sin aprovechar el espacio disponible. */}
       {loading ? (
-        <div aria-busy="true" style={{ display: 'flex', gap: 8 }}>
+        <div aria-busy="true" style={{ display: 'flex', gap: 8, flex: 1, minHeight: 90 }}>
           {conteos.map(c => (
             <div key={c.nivel} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
               <SkeletonLinea width={18} />
-              <Skeleton width="100%" height={44} radius={6} />
+              <Skeleton width="100%" height="100%" radius={6} />
               <SkeletonLinea width={48} />
             </div>
           ))}
         </div>
       ) : (
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flex: 1, minHeight: 90 }}>
           {conteos.map(c => (
             <div key={c.nivel} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
               <span style={{
                 fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 700,
-                color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums',
+                color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', flexShrink: 0,
               }}>
                 {c.valor}
               </span>
               <div style={{
-                width: '100%', height: 44, display: 'flex', alignItems: 'flex-end',
+                width: '100%', flex: 1, minHeight: 0, display: 'flex', alignItems: 'flex-end',
                 background: 'var(--bg-inset)', borderRadius: 6,
               }}>
                 <div style={{
@@ -59,7 +62,7 @@ export default function MedicionesPorNivel() {
               </div>
               <span style={{
                 fontFamily: 'var(--font-ui)', fontSize: 10, color: 'var(--text-secondary)',
-                textAlign: 'center', lineHeight: 1.15,
+                textAlign: 'center', lineHeight: 1.15, flexShrink: 0,
               }}>
                 {c.label}
               </span>
