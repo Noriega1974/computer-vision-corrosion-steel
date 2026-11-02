@@ -10,22 +10,19 @@ import { formatoPct } from '../lib/textUtils';
 // MÉTRICA
 // ================================================================
 
-// Tarjetas separadas con borde superior de color (vuelta al estilo de la
-// versión anterior del dashboard, a pedido del usuario -- lo prefería
-// sobre las métricas en línea separadas por divisores). Etiqueta y
-// leyenda en var(--text-primary) -- antes iban en var(--text-secondary),
-// más chico y más claro, y costaba leerlas.
-function Metrica({ label, value, sub, color, loading }) {
+// Minimal tipográfico (elegido por el usuario entre 4 opciones): sin
+// bordes de color ni fondo propio, solo una línea vertical fina entre
+// métricas -- el número hace el trabajo visual. El color queda
+// reservado casi del todo a la alerta real (Severas > 0 en rojo), no a
+// decorar cada métrica con un color distinto.
+function Metrica({ label, value, sub, alert, loading, isLast }) {
   return (
     <div
       style={{
         flex: '1 1 0',
         minWidth: 0,
-        padding: '10px 12px',
-        borderRadius: 10,
-        background: 'var(--bg-card-solid)',
-        border: '1px solid var(--border)',
-        borderTop: `3px solid ${color}`,
+        padding: '2px 14px',
+        borderRight: isLast ? 'none' : '1px solid var(--border)',
         display: 'flex',
         flexDirection: 'column',
         gap: 4,
@@ -38,8 +35,9 @@ function Metrica({ label, value, sub, color, loading }) {
           ("Planta Industrial Bogotá · Sin corrosión"), sin necesidad de
           truncar ninguna de las dos. */}
       <span style={{
-        fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-ui)',
-        lineHeight: 1.25, minHeight: '2.5em',
+        fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', fontFamily: 'var(--font-ui)',
+        textTransform: 'uppercase', letterSpacing: '0.05em',
+        lineHeight: 1.25, minHeight: '2.3em',
         display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
       }}>
         {label}
@@ -48,9 +46,9 @@ function Metrica({ label, value, sub, color, loading }) {
       <span
         style={{
           fontFamily: 'var(--font-ui)',
-          fontSize: 22,
+          fontSize: 24,
           fontWeight: 800,
-          color,
+          color: alert ? 'var(--accent-red)' : 'var(--text-primary)',
           lineHeight: 1,
           fontVariantNumeric: 'tabular-nums',
           whiteSpace: 'nowrap',
@@ -62,8 +60,8 @@ function Metrica({ label, value, sub, color, loading }) {
       </span>
 
       <span style={{
-        fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-ui)', letterSpacing: '0.01em',
-        lineHeight: 1.3, minHeight: '3.9em',
+        fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', fontFamily: 'var(--font-ui)', letterSpacing: '0.01em',
+        lineHeight: 1.3, minHeight: '3.6em',
         display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
       }}>
         {sub}
@@ -127,13 +125,11 @@ export default function KPIBar() {
       label: 'Mediciones',
       value: alcanzoLimite ? `${totalMediciones}+` : totalMediciones,
       sub: alcanzoLimite ? `las ${LIMITE_DASHBOARD} más recientes` : 'en todos los puntos',
-      color: 'var(--accent-blue)',
     },
     {
       label: 'Puntos activos',
       value: puntosMedidos,
       sub: 'con mediciones registradas',
-      color: 'var(--accent-green)',
     },
     {
       label: 'Última área corroída',
@@ -141,18 +137,17 @@ export default function KPIBar() {
       sub: ultima
         ? [bloqueUltima?.nombre, nivelLabel(ultima.nivel_corrosion)].filter(Boolean).join(' · ')
         : 'sin mediciones aún',
-      color: 'var(--accent-amber)',
     },
     {
       label: 'Severas',
       value: puntosSeveros,
       sub: 'requieren revisión',
-      color: puntosSeveros > 0 ? 'var(--accent-red)' : 'var(--accent-green)',
+      alert: puntosSeveros > 0,
     },
   ];
 
   const metricasMostradas = sinDatos
-    ? metricas.map(k => ({ ...k, value: '—', sub: 'No se pudo cargar', color: 'var(--text-muted)' }))
+    ? metricas.map(k => ({ ...k, value: '—', sub: 'No se pudo cargar', alert: false }))
     : metricas;
 
   // ==============================================================
@@ -168,9 +163,9 @@ export default function KPIBar() {
       {/* nowrap a propósito: las 4 tarjetas se achican entre sí para
           seguir cabiendo en una sola fila en vez de pasar la 4ta ("Severas")
           a una fila nueva -- eso hacía crecer todo el bloque de Indicadores. */}
-      <div style={{ display: 'flex', flexWrap: 'nowrap', gap: 6 }}>
+      <div style={{ display: 'flex', flexWrap: 'nowrap' }}>
         {metricasMostradas.map((m, i) => (
-          <Metrica key={i} {...m} loading={loading} />
+          <Metrica key={i} {...m} loading={loading} isLast={i === metricasMostradas.length - 1} />
         ))}
       </div>
 
