@@ -11,12 +11,15 @@ import { formatoPct } from '../lib/textUtils';
 import { IconoCamara, IconoHumedad, IconoLluvia, IconoTemperatura, IconoViento } from './Iconos';
 
 // Estilos de texto compartidos con el esqueleto: mismo line-height cargado o no.
+// Tamaños pensados para la columna más angosta de las 3 del dashboard --
+// antes el título y estos valores eran grandes y se recortaban o dejaban
+// poco aire para el historial.
 const FOOTER_TITULO_STYLE = {
-  fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 22,
-  color: 'var(--text-primary)', lineHeight: 1.1, letterSpacing: '-0.01em',
+  fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 17,
+  color: 'var(--text-primary)', lineHeight: 1.15, letterSpacing: '-0.01em',
 };
-const FOOTER_SUB_STYLE = { fontSize: 12, color: 'var(--text-secondary)', marginTop: 2, fontFamily: 'var(--font-ui)' };
-const HISTORIAL_LINEA_STYLE = { fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-ui)' };
+const FOOTER_SUB_STYLE = { fontSize: 11, color: 'var(--text-secondary)', marginTop: 2, fontFamily: 'var(--font-ui)' };
+const HISTORIAL_LINEA_STYLE = { fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-ui)' };
 
 // ─── Tarjeta Flashcard de Ubicación (Dashboard) ─────────────────────────────
 export default function PlantDetail({ punto }) {
@@ -70,33 +73,35 @@ export default function PlantDetail({ punto }) {
           2) Caja encuadrada de clima en el centro, 3) Pie con total de
           mediciones y última área corroída */}
       <div style={{
-        padding: 16, borderRadius: 14, background: 'var(--bg-highlight)',
-        flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 14,
+        padding: 12, borderRadius: 14, background: 'var(--bg-highlight)',
+        flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10,
       }}>
-        {/* 1. Título + píldora */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+        {/* 1. Título + píldora. El nombre pasa a 2 líneas (en vez de
+            recortarse en una) -- a 20px un nombre normal no entraba en
+            esta columna, la más angosta de las 3 del dashboard. */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
             <span style={{
-              fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 20,
-              color: 'var(--text-primary)', letterSpacing: '-0.01em', lineHeight: 1.15,
-              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 16,
+              color: 'var(--text-primary)', letterSpacing: '-0.01em', lineHeight: 1.2,
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
             }}>
               {punto.nombre ?? 'Punto sin nombre'}
             </span>
-            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
               {punto.ciudad ?? '—'}{punto.departamento ? ` · ${punto.departamento}` : ''}
             </span>
           </div>
 
           {nivel >= 0 && (
             <div className={nivel === 3 ? 'severa-pulse' : undefined} style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '4px 10px', borderRadius: 999,
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '3px 9px', borderRadius: 999,
               background: pillBg, color: pillText,
-              fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+              fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
               flexShrink: 0,
             }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: color }} />
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: color }} />
               {nivelLabel(nivel)}
             </div>
           )}
@@ -105,25 +110,22 @@ export default function PlantDetail({ punto }) {
         {/* 2. Bloque central encuadrado: datos meteorológicos con iconos y textos grandes */}
         {stats.length > 0 && (
           <div style={{
-            background: 'var(--bg-card-solid)', borderRadius: 12, padding: '10px 4px',
+            background: 'var(--bg-card-solid)', borderRadius: 12, padding: '8px 4px',
             display: 'grid',
             gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))`,
             gap: 4,
           }}>
             {stats.map(({ Icon, label, v }) => (
               <div key={label} style={{ textAlign: 'center', minWidth: 0 }}>
-                <Icon size={18} strokeWidth={2} style={{ color: 'var(--accent-blue)' }} />
-                {/* 12px en vez de 15px -- a tamaños mayores "11 km/h" se
-                    recortaba en esta columna (la más angosta de las 3 del
-                    dashboard). */}
+                <Icon size={15} strokeWidth={2} style={{ color: 'var(--accent-blue)' }} />
                 <div style={{
-                  fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 12,
-                  color: 'var(--text-primary)', lineHeight: 1.1, marginTop: 4,
+                  fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 11,
+                  color: 'var(--text-primary)', lineHeight: 1.1, marginTop: 3,
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}>
                   {v}
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2, whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: 9, color: 'var(--text-secondary)', marginTop: 1, whiteSpace: 'nowrap' }}>
                   {label}
                 </div>
               </div>
@@ -151,7 +153,7 @@ export default function PlantDetail({ punto }) {
 
           {ultimaMedicion?.area_corroida_pct != null && (
             <span style={{
-              fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 28,
+              fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 20,
               color: 'var(--accent-amber)', lineHeight: 1, flexShrink: 0,
             }}>
               {formatoPct(ultimaMedicion.area_corroida_pct)}
@@ -161,8 +163,8 @@ export default function PlantDetail({ punto }) {
       </div>
 
       {/* Historial de mediciones */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '16px 0 0', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <div className="dashboard-section-title" style={{ padding: '0 2px 10px' }}>
+      <div style={{ flex: 1, overflow: 'auto', padding: '10px 0 0', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div className="dashboard-section-title" style={{ padding: '0 2px 8px' }}>
           Historial de mediciones
         </div>
 
@@ -172,16 +174,16 @@ export default function PlantDetail({ punto }) {
               <div
                 key={i}
                 style={{
-                  padding: 12,
-                  border: '1px solid var(--border)', borderRadius: 12,
-                  display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
+                  padding: 8,
+                  border: '1px solid var(--border)', borderRadius: 10,
+                  display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
                 }}
               >
-                <Skeleton width={52} height={52} radius={10} />
+                <Skeleton width={40} height={40} radius={8} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ ...HISTORIAL_LINEA_STYLE, marginBottom: 2 }}><SkeletonLinea width="45%" /></div>
-                  <Skeleton height={6} radius={3} />
-                  <div style={{ fontSize: 12, marginTop: 4 }}><SkeletonLinea width="70%" /></div>
+                  <Skeleton height={5} radius={3} />
+                  <div style={{ fontSize: 10, marginTop: 3 }}><SkeletonLinea width="70%" /></div>
                 </div>
               </div>
             ))}
@@ -232,44 +234,44 @@ function MedicionRow({ medicion }) {
 
   return (
     <div style={{
-      padding: 12,
+      padding: 8,
       background: 'var(--bg-card-solid)',
       border: '1px solid var(--border)',
-      borderRadius: 12,
-      display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
+      borderRadius: 10,
+      display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
     }}>
-      {/* Miniatura -- 52px, así que usa url_thumbnail (~400px) en vez de
+      {/* Miniatura -- 40px, así que usa url_thumbnail (~400px) en vez de
           bajar la foto original completa para mostrar un cuadrito */}
       {medicion.url_imagen ? (
         <img
           src={medicion.url_thumbnail || medicion.url_imagen}
           alt=""
           loading="lazy"
-          style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 10, flexShrink: 0 }}
+          style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }}
         />
       ) : (
         <div style={{
-          width: 52, height: 52, borderRadius: 10, flexShrink: 0,
+          width: 40, height: 40, borderRadius: 8, flexShrink: 0,
           background: `${color}15`, border: `1px solid ${color}30`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           color,
         }}>
-          <IconoCamara size={18} aria-hidden="true" />
+          <IconoCamara size={15} aria-hidden="true" />
         </div>
       )}
 
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, marginBottom: 4 }}>
           <span style={{
-            fontSize: 14, fontWeight: 700, color: 'var(--text-primary)',
+            fontSize: 12, fontWeight: 700, color: 'var(--text-primary)',
             fontFamily: 'var(--font-ui)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
             {medicion.nombre || 'Medición'}
           </span>
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)', flexShrink: 0 }}>{fecha}</span>
+          <span style={{ fontSize: 10, color: 'var(--text-secondary)', flexShrink: 0 }}>{fecha}</span>
         </div>
 
-        <div style={{ height: 6, background: 'var(--bg-inset)', borderRadius: 3 }}>
+        <div style={{ height: 5, background: 'var(--bg-inset)', borderRadius: 3 }}>
           <div style={{
             height: '100%',
             width: `${Math.min(100, (medicion.area_corroida_pct ?? 0) * 2)}%`,
@@ -277,8 +279,8 @@ function MedicionRow({ medicion }) {
           }} />
         </div>
 
-        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-          <span>Área corroída: <strong style={{ color: 'var(--text-primary)' }}>{formatoPct(medicion.area_corroida_pct)}</strong></span>
+        <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+          <span>Área: <strong style={{ color: 'var(--text-primary)' }}>{formatoPct(medicion.area_corroida_pct)}</strong></span>
           <span style={{ ...HISTORIAL_LINEA_STYLE, color, flexShrink: 0, textTransform: 'uppercase' }}>
             {nivelLabel(nivel)}
           </span>

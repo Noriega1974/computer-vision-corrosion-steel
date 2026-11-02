@@ -1054,6 +1054,36 @@ body {
    RESPONSIVE
    ================================================================ */
 
+/* TopNav: con 8 pestañas de texto, envolver en varias filas (flex-wrap)
+   deja la barra ocupando media pantalla antes de llegar al contenido en
+   celular/tablet angosta. Pasa a desplazarse en horizontal en su lugar;
+   cada pestaña ya tiene flex-shrink:0 (TopNav.jsx) para no aplastarse. */
+@media (max-width: 900px) {
+  .topnav-links {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .topnav-links::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* A este ancho el logo de texto + los botones redondos (tema, avatar) ya
+   se comen casi todo el header, dejando a la barra de navegacion una tira
+   casi invisible para desplazarse -- se esconde el wordmark (el logo
+   solo alcanza) y se achican los botones. */
+@media (max-width: 480px) {
+  .topnav-wordmark {
+    display: none;
+  }
+  .topnav-icon-btn {
+    width: 36px !important;
+    height: 36px !important;
+  }
+}
+
 /* Paso intermedio: en tablet no entran tres columnas, pero apilarlas todas
    desperdicia el ancho. La lista de plantas pasa a ocupar la fila completa
    arriba y mapa y detalle se reparten la de abajo. */
@@ -1064,11 +1094,14 @@ body {
       minmax(0, 2fr) minmax(300px, 1fr) !important;
   }
 
-  /* Las alturas fijas (480px) viven en estilos inline y solo valen para tres
-     columnas. Con dos filas se liberan: cada seccion crece segun su contenido
-     con un minimo razonable, y mapa y detalle (misma fila) se estiran al mismo
-     alto por el propio grid. */
+  /* El alto base (flex:1, ver DashboardPage.jsx) reparte lo que sobra de
+     una sola fila de 3 columnas -- con 2 filas eso ya no tiene sentido:
+     se desactiva el flex-grow (flex-basis vuelve a `auto`, no al 0% de
+     `flex:1`) y cada seccion crece segun su contenido con un minimo
+     razonable; mapa y detalle (misma fila) se estiran al mismo alto por
+     el propio grid. */
   .main-grid {
+    flex: none !important;
     height: auto !important;
     max-height: none !important;
   }
@@ -1095,6 +1128,7 @@ body {
   .main-grid {
     grid-template-columns: 1fr !important;
 
+    flex: none !important;
     height: auto !important;
   }
 
@@ -1116,6 +1150,7 @@ body {
   .main-grid {
     grid-template-columns: 1fr !important;
 
+    flex: none !important;
     height: auto !important;
   }
 

@@ -75,7 +75,7 @@ function NavTab({ item }) {
         alignItems: 'center',
         gap: 7,
         minHeight: 44,
-        padding: '0 14px',
+        padding: '0 12px',
         textDecoration: 'none',
         fontFamily: 'var(--font-ui)',
         fontSize: 14,
@@ -83,6 +83,7 @@ function NavTab({ item }) {
         color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
         borderBottom: isActive ? '3px solid var(--accent-vivid)' : '3px solid transparent',
         whiteSpace: 'nowrap',
+        flexShrink: 0,
         transition: 'color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out)',
       }}
     >
@@ -186,30 +187,31 @@ export default function TopNav({ darkMode, onToggleDark, onLogout }) {
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 24,
-        padding: '0 24px',
-        minHeight: 64,
+        gap: 16,
+        padding: '0 16px',
+        minHeight: 56,
         background: 'var(--bg-card)',
         borderBottom: '1px solid var(--border)',
         flexWrap: 'wrap',
-        rowGap: 8,
+        rowGap: 6,
         flexShrink: 0,
         position: 'relative',
         zIndex: 50,
       }}
     >
       {/* Logo */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         <img
           src={pixelrustLogo}
           alt=""
-          style={{ width: 26, height: 23, objectFit: 'contain', flexShrink: 0 }}
+          style={{ width: 24, height: 21, objectFit: 'contain', flexShrink: 0 }}
         />
         <span
+          className="topnav-wordmark"
           style={{
             fontFamily: 'var(--font-display)',
             fontWeight: 700,
-            fontSize: 17,
+            fontSize: 16,
             letterSpacing: '0.03em',
             color: 'var(--accent-amber)',
           }}
@@ -218,8 +220,11 @@ export default function TopNav({ darkMode, onToggleDark, onLogout }) {
         </span>
       </div>
 
-      {/* Navegación */}
-      <nav aria-label="Principal" style={{ display: 'flex', gap: 4, flex: 1, flexWrap: 'wrap' }}>
+      {/* Navegación -- en pantallas angostas pasa a desplazarse en
+          horizontal en vez de apilarse en muchas filas (ver .topnav-links
+          en index.css): con 8 pestañas, envolver texto deja la barra
+          ocupando media pantalla antes de llegar al contenido. */}
+      <nav aria-label="Principal" className="topnav-links" style={{ display: 'flex', gap: 2, flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
         {visibleItems.map(item => (
           <NavTab key={item.path} item={item} />
         ))}
@@ -231,6 +236,7 @@ export default function TopNav({ darkMode, onToggleDark, onLogout }) {
         onClick={onToggleDark}
         aria-label={darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
         title={darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+        className="topnav-icon-btn"
         style={{
           width: 44,
           height: 44,
@@ -259,6 +265,7 @@ export default function TopNav({ darkMode, onToggleDark, onLogout }) {
           aria-haspopup="menu"
           aria-expanded={menuOpen}
           aria-label={`Menú de ${nombreMostrado || 'usuario'}`}
+          className="topnav-icon-btn"
           style={{
             width: 44,
             height: 44,
