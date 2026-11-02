@@ -1127,12 +1127,49 @@ body {
   }
 }
 
-/* 2026-11-03: "Idea D" (ver conversacion) -- el mapa se mudo fuera de
-   main-grid, a su propia fila a todo el ancho arriba (section-map ya no
-   es columna de main-grid); main-grid ahora son solo 2 columnas, Plantas
-   y Detalle. Los pasos de 1280/1024px de antes existian para la
-   transicion de 3 columnas -> Plantas a todo el ancho + Mapa/Detalle
-   apareados -- ya no aplica con 2 columnas, un solo quiebre alcanza. */
+/* 2026-11-04: vuelve a 3 columnas (Plantas | Mapa | Detalle) a pedido
+   del usuario -- "Idea D" (2026-11-03) las había dejado en 2, con el
+   mapa en su propia fila arriba. */
+
+/* Paso intermedio: en tablet no entran tres columnas, pero apilarlas
+   todas desperdicia el ancho. La lista de plantas pasa a ocupar la fila
+   completa arriba y mapa y detalle se reparten la de abajo. */
+@media (max-width: 1280px) {
+
+  .main-grid {
+    grid-template-columns:
+      minmax(0, 2fr) minmax(300px, 1fr) !important;
+  }
+
+  /* El alto base (flex:1, ver DashboardPage.jsx) reparte lo que sobra de
+     una sola fila de 3 columnas -- con 2 filas eso ya no tiene sentido:
+     se desactiva el flex-grow (flex-basis vuelve a `auto`, no al 0% de
+     `flex:1`) y cada seccion crece segun su contenido con un minimo
+     razonable; mapa y detalle (misma fila) se estiran al mismo alto por
+     el propio grid. */
+  .main-grid {
+    flex: none !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  .main-grid > .section-plants {
+    grid-column: 1 / -1;
+
+    height: auto !important;
+    max-height: none !important;
+    min-height: 280px !important;
+  }
+
+  .main-grid > .section-map,
+  .main-grid > .section-detail {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 420px !important;
+  }
+}
+
+
 @media (max-width: 1024px) {
 
   .main-grid {
@@ -1142,29 +1179,31 @@ body {
     height: auto !important;
   }
 
-  .main-grid > .section-plants {
-    height: auto !important;
-    min-height: 240px !important;
+  .main-grid > .section-map {
+    height: 460px !important;
   }
 
   .main-grid > .section-detail {
-    height: 380px !important;
-  }
-
-  .section-map {
-    height: 300px !important;
+    height: 400px !important;
   }
 }
 
 
 @media (max-width: 768px) {
 
-  .section-map {
-    height: 260px !important;
+  .main-grid {
+    grid-template-columns: 1fr !important;
+
+    flex: none !important;
+    height: auto !important;
+  }
+
+  .main-grid > .section-map {
+    height: 400px !important;
   }
 
   .main-grid > .section-detail {
-    height: 360px !important;
+    height: 400px !important;
   }
 
 }

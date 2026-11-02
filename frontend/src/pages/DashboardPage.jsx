@@ -191,115 +191,39 @@ export default function DashboardPage() {
 
         {/* ========================================================
             INDICADORES
-            2026-11-03: "Idea D" (a pedido del usuario, ver conversación)
-            -- pasa de 2 tarjetas lado a lado (Indicadores + Mediciones
-            por nivel) a una sola línea tipo "ticker" a todo el ancho.
-            Mediciones por nivel se mudó al acordeón de Análisis (abajo)
-            y el mapa pasa a ser lo primero y más grande que se ve.
+            2026-11-03: línea tipo "ticker" (valor + etiqueta), a pedido
+            del usuario -- pero estirada para aprovechar el ancho
+            completo (antes de esto compartía fila con Mediciones por
+            nivel, ahora Indicadores va solo y quedaba con mucho espacio
+            vacío sin usar). Ver KPIBar.jsx.
             ======================================================== */}
 
         <section
           className="dashboard-section"
-          style={{ padding: '10px 16px', flexShrink: 0 }}
+          style={{ padding: '18px 24px', flexShrink: 0 }}
         >
           <KPIBar />
         </section>
 
         {/* ========================================================
-            MAPA DE UBICACIONES
-            Protagonista de la página -- a todo el ancho, antes de
-            Zonas/Detalle en vez de compartir fila con ellas.
-            ======================================================== */}
-
-        <section
-          className="dashboard-section section-map"
-          style={{
-            padding: '12px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--space-2-5)',
-            height: 320,
-            flexShrink: 0,
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'flex-start',
-              gap: 'var(--space-2-5)',
-              flexWrap: 'wrap',
-              flexShrink: 0,
-            }}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <div className="dashboard-section-title">
-                Mapa de ubicaciones
-              </div>
-              <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                {puntos?.length ?? 0} {puntos?.length === 1 ? 'punto registrado' : 'puntos registrados'}
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-              {NIVELES.map((_, n) => (
-                <span
-                  key={n}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    padding: '4px 10px', borderRadius: 999,
-                    background: nivelBg(n), color: nivelPillText(n),
-                    fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 700,
-                    letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap',
-                  }}
-                >
-                  <span style={{ width: 7, height: 7, borderRadius: 999, background: nivelColor(n), flexShrink: 0 }} />
-                  {nivelLabel(n)}
-                </span>
-              ))}
-              <NivelInfo />
-            </div>
-          </div>
-
-          <div
-            style={{
-              flex: 1,
-              minHeight: 0,
-              borderRadius: 10,
-              overflow: 'hidden',
-              border: '1px solid var(--border)',
-              background: 'var(--bg-inset)',
-            }}
-          >
-            {leafletReady ? (
-              <ColombiaMap
-                selectedPunto={selectedPunto}
-                onSelectPunto={setSelectedPunto}
-                selectedZona={selectedZona}
-              />
-            ) : (
-              <div aria-busy="true" style={{ height: '100%' }}>
-                <Skeleton height="100%" radius={0} />
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* ========================================================
-            ZONAS/PUNTOS + DETALLE
+            ZONAS/PUNTOS + MAPA + DETALLE
+            2026-11-04: vuelve a como estaba antes de "Idea D" (a pedido
+            del usuario) -- el mapa va de nuevo en el medio, Plantas a la
+            izquierda y Detalle a la derecha, los 3 compartiendo fila en
+            vez de que el mapa tenga su propia fila arriba.
             flex:1 -- ocupa el alto que sobra, con un piso (minHeight)
-            para no aplastarse en pantallas muy bajas. Por debajo de
-            1024px ver index.css para el apilado.
+            para no aplastarse en pantallas muy bajas. Ver index.css para
+            el apilado por debajo de 1280/1024/768px.
             ======================================================== */}
 
         <div
           className="main-grid"
           style={{
             display: 'grid',
-            gridTemplateColumns: 'minmax(280px, 0.9fr) minmax(340px, 1.3fr)',
+            gridTemplateColumns: 'minmax(250px, 0.85fr) minmax(0, 2.1fr) minmax(320px, 1.05fr)',
             gap: 10,
             flex: 1,
-            minHeight: 280,
+            minHeight: 320,
           }}
         >
           {/* ======================================================
@@ -329,6 +253,84 @@ export default function DashboardPage() {
                 selectedZona={selectedZona}
                 onSelectZona={setSelectedZona}
               />
+            </div>
+          </section>
+
+          {/* ======================================================
+              MAPA DE UBICACIONES
+              ====================================================== */}
+          <section
+            className="dashboard-section section-map"
+            style={{
+              padding: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 'var(--space-2-5)',
+              height: '100%',
+              minHeight: 0,
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                gap: 'var(--space-2-5)',
+                flexWrap: 'wrap',
+                flexShrink: 0,
+              }}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div className="dashboard-section-title">
+                  Mapa de ubicaciones
+                </div>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                  {puntos?.length ?? 0} {puntos?.length === 1 ? 'punto registrado' : 'puntos registrados'}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                {NIVELES.map((_, n) => (
+                  <span
+                    key={n}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      padding: '4px 10px', borderRadius: 999,
+                      background: nivelBg(n), color: nivelPillText(n),
+                      fontFamily: 'var(--font-ui)', fontSize: 10, fontWeight: 700,
+                      letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <span style={{ width: 7, height: 7, borderRadius: 999, background: nivelColor(n), flexShrink: 0 }} />
+                    {nivelLabel(n)}
+                  </span>
+                ))}
+                <NivelInfo />
+              </div>
+            </div>
+
+            <div
+              style={{
+                flex: 1,
+                minHeight: 0,
+                borderRadius: 10,
+                overflow: 'hidden',
+                border: '1px solid var(--border)',
+                background: 'var(--bg-inset)',
+              }}
+            >
+              {leafletReady ? (
+                <ColombiaMap
+                  selectedPunto={selectedPunto}
+                  onSelectPunto={setSelectedPunto}
+                  selectedZona={selectedZona}
+                />
+              ) : (
+                <div aria-busy="true" style={{ height: '100%' }}>
+                  <Skeleton height="100%" radius={0} />
+                </div>
+              )}
             </div>
           </section>
 

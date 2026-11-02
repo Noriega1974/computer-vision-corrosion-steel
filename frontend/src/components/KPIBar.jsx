@@ -10,20 +10,36 @@ import { formatoPct } from '../lib/textUtils';
 // MÉTRICA
 // ================================================================
 
-// 2026-11-03: "Idea D" (ver conversación) -- Indicadores pasa de 4
-// tarjetas a una sola línea tipo "ticker" (valor + etiqueta), para que
-// no compita en altura con el resto del dashboard. El detalle que antes
-// iba como leyenda debajo de cada tarjeta (p.ej. "Planta Industrial
-// Bogotá · Sin corrosión") no desaparece, pasa a `title` (tooltip nativo
-// al pasar el mouse) -- se prioriza una sola línea compacta por sobre
-// tenerlo siempre visible.
-function Metrica({ label, value, sub, alert, loading }) {
+// 2026-11-03: Indicadores pasa de 4 tarjetas a una línea tipo "ticker"
+// (valor + etiqueta). El detalle que antes iba como leyenda debajo de
+// cada tarjeta (p.ej. "Planta Industrial Bogotá · Sin corrosión") no
+// desaparece, pasa a `title` (tooltip nativo al pasar el mouse) -- se
+// prioriza una sola línea compacta por sobre tenerlo siempre visible.
+//
+// 2026-11-04: Mediciones por nivel ya no comparte fila con Indicadores
+// (se mudó al acordeón de Análisis) -- Indicadores quedó solo, con
+// mucho ancho libre sin usar. `flex:1` reparte las 4 métricas en el
+// ancho completo en vez de dejarlas agrupadas a la izquierda, y el
+// valor crece de 19px a 28px para que se note el espacio de más.
+function Metrica({ label, value, sub, alert, loading, isFirst }) {
   return (
-    <div title={sub || undefined} style={{ display: 'flex', alignItems: 'baseline', gap: 7, minWidth: 0 }}>
+    <div
+      title={sub || undefined}
+      style={{
+        flex: '1 1 160px',
+        minWidth: 0,
+        display: 'flex',
+        alignItems: 'baseline',
+        justifyContent: 'center',
+        gap: 9,
+        padding: '4px 0',
+        borderLeft: isFirst ? 'none' : '1px solid var(--border)',
+      }}
+    >
       <span
         style={{
           fontFamily: 'var(--font-ui)',
-          fontSize: 19,
+          fontSize: 28,
           fontWeight: 800,
           color: alert ? 'var(--accent-red)' : 'var(--text-primary)',
           lineHeight: 1,
@@ -35,7 +51,7 @@ function Metrica({ label, value, sub, alert, loading }) {
       </span>
 
       <span style={{
-        fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', fontFamily: 'var(--font-ui)',
+        fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', fontFamily: 'var(--font-ui)',
         textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap',
       }}>
         {label}
@@ -134,20 +150,11 @@ export default function KPIBar() {
         Indicadores
       </div>
 
-      {/* wrap (no nowrap): ya no son tarjetas de ancho igual compitiendo por
-          la fila -- es texto que puede pasar a una segunda línea en
-          pantallas angostas sin que eso infle el resto del dashboard. */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', rowGap: 8 }}>
+      {/* wrap (no nowrap): en pantallas angostas pasan a 2 filas de 2 en vez
+          de inflar el dashboard con overflow horizontal. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'stretch', rowGap: 10 }}>
         {metricasMostradas.map((m, i) => (
-          <React.Fragment key={i}>
-            {i > 0 && (
-              <span
-                aria-hidden="true"
-                style={{ width: 1, minHeight: 18, alignSelf: 'stretch', background: 'var(--border)', margin: '0 18px', flexShrink: 0 }}
-              />
-            )}
-            <Metrica {...m} loading={loading} />
-          </React.Fragment>
+          <Metrica key={i} {...m} loading={loading} isFirst={i === 0} />
         ))}
       </div>
 
