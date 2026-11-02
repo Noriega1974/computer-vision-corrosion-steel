@@ -10,37 +10,45 @@ import { formatoPct } from '../lib/textUtils';
 // MÉTRICA
 // ================================================================
 
-function Metrica({ label, value, sub, color, loading, primera }) {
+// Tarjetas separadas con borde superior de color (vuelta al estilo de la
+// versión anterior del dashboard, a pedido del usuario -- lo prefería
+// sobre las métricas en línea separadas por divisores). Etiqueta y
+// leyenda en var(--text-primary) -- antes iban en var(--text-secondary),
+// más chico y más claro, y costaba leerlas.
+function Metrica({ label, value, sub, color, loading }) {
   return (
     <div
       style={{
-        flex: '1 1 120px',
-        minWidth: 120,
+        flex: '1 1 150px',
+        minWidth: 150,
+        padding: '12px 14px',
+        borderRadius: 10,
+        background: 'var(--bg-card-solid)',
+        border: '1px solid var(--border)',
+        borderTop: `3px solid ${color}`,
         display: 'flex',
         flexDirection: 'column',
-        gap: 1,
-        padding: '0 14px',
-        borderLeft: primera ? 'none' : '1px solid var(--border)',
+        gap: 5,
       }}
     >
-      <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)' }}>
+      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-ui)' }}>
         {label}
       </span>
 
       <span
         style={{
           fontFamily: 'var(--font-ui)',
-          fontSize: 20,
+          fontSize: 24,
           fontWeight: 800,
           color,
-          lineHeight: 1.2,
+          lineHeight: 1,
           fontVariantNumeric: 'tabular-nums',
         }}
       >
         {loading ? <SkeletonLinea width="3ch" /> : value}
       </span>
 
-      <span style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)' }}>
+      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-ui)', letterSpacing: '0.01em' }}>
         {sub}
       </span>
     </div>
@@ -102,13 +110,13 @@ export default function KPIBar() {
       label: 'Mediciones',
       value: alcanzoLimite ? `${totalMediciones}+` : totalMediciones,
       sub: alcanzoLimite ? `las ${LIMITE_DASHBOARD} más recientes` : 'en todos los puntos',
-      color: 'var(--text-primary)',
+      color: 'var(--accent-blue)',
     },
     {
       label: 'Puntos activos',
       value: puntosMedidos,
       sub: 'con mediciones registradas',
-      color: 'var(--text-primary)',
+      color: 'var(--accent-green)',
     },
     {
       label: 'Última área corroída',
@@ -122,12 +130,12 @@ export default function KPIBar() {
       label: 'Severas',
       value: puntosSeveros,
       sub: 'requieren revisión',
-      color: puntosSeveros > 0 ? 'var(--accent-red)' : 'var(--text-primary)',
+      color: puntosSeveros > 0 ? 'var(--accent-red)' : 'var(--accent-green)',
     },
   ];
 
   const metricasMostradas = sinDatos
-    ? metricas.map(k => ({ ...k, value: '—', sub: 'No se pudo cargar', color: 'var(--text-faint)' }))
+    ? metricas.map(k => ({ ...k, value: '—', sub: 'No se pudo cargar', color: 'var(--text-muted)' }))
     : metricas;
 
   // ==============================================================
@@ -136,13 +144,13 @@ export default function KPIBar() {
 
   return (
     <div>
-      <div className="dashboard-section-title" style={{ marginBottom: 6 }}>
+      <div className="dashboard-section-title" style={{ marginBottom: 8 }}>
         Indicadores
       </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', rowGap: 6, alignItems: 'center' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         {metricasMostradas.map((m, i) => (
-          <Metrica key={i} {...m} loading={loading} primera={i === 0} />
+          <Metrica key={i} {...m} loading={loading} />
         ))}
       </div>
 
