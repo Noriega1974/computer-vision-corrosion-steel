@@ -418,7 +418,7 @@ export default function DashboardPage() {
 
           {showAnalisis && (
             <div style={{ padding: '18px 20px 20px', borderTop: '1px solid var(--border)' }}>
-              <ChartsRow />
+              <ChartsRow selectedPunto={selectedPunto} />
             </div>
           )}
         </section>

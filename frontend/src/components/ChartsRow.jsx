@@ -8,10 +8,13 @@ import {
   Cell,
   BarChart,
   Bar,
+  AreaChart,
+  Area,
 } from 'recharts';
 
 import { useMediciones, LIMITE_DASHBOARD } from '../hooks/useMediciones';
 import { useBloques } from '../hooks/useBloques';
+import { useMedicionesPunto } from '../hooks/useMedicionesPunto';
 import Skeleton from './Skeleton';
 import {
   nivelColor,
@@ -126,11 +129,24 @@ function EmptyChart({ message }) {
   );
 }
 
-export default function ChartsRow() {
+export default function ChartsRow({ selectedPunto }) {
   const {
     mediciones,
     loading,
   } = useMediciones(LIMITE_DASHBOARD, { resumen: true });
+
+  // Tendencia del punto seleccionado en el mapa/lista -- vivía en
+  // PlantDetail.jsx (columna angosta, poco legible) y se mudó acá, con más
+  // espacio horizontal, a pedido del usuario.
+  const { mediciones: medicionesPunto, loading: loadingPunto } = useMedicionesPunto(selectedPunto?.id_bloque);
+  const trendData = [...medicionesPunto]
+    .filter(m => m.area_corroida_pct != null)
+    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+    .slice(-20)
+    .map(m => ({
+      fecha: new Date(m.timestamp).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }),
+      corrosion: parseFloat((m.area_corroida_pct ?? 0).toFixed(1)),
+    }));
 
   // Ciudad ya no viaja denormalizada en la medición -- se resuelve por
   // bloque_id contra la lista de puntos (bloques).
@@ -163,7 +179,46 @@ export default function ChartsRow() {
     }));
 
   return (
-    <div className="charts-grid">
+    <div
+      className="charts-grid"
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+        gap: 'var(--space-4)',
+      }}
+    >
+
+      {/* -------------------------------------------
+          TENDENCIA DEL PUNTO SELECCIONADO
+      ------------------------------------------- */}
+
+      <ChartCard
+        title="TENDENCIA — ÁREA CORROÍDA (%)"
+        subtitle={selectedPunto ? `${selectedPunto.nombre} · últimas ${trendData.length} mediciones` : 'SELECCIONA UN PUNTO EN EL MAPA'}
+      >
+        {!selectedPunto ? (
+          <EmptyChart message="Selecciona un punto en el mapa o la lista para ver su tendencia" />
+        ) : loadingPunto ? (
+          <BarsSkeleton />
+        ) : trendData.length < 2 ? (
+          <EmptyChart message="Este punto todavía no tiene suficientes mediciones para una tendencia" />
+        ) : (
+          <ResponsiveContainer width="100%" height={150}>
+            <AreaChart data={trendData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+              <defs>
+                <linearGradient id={`grad-${selectedPunto.id_bloque}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--accent-amber)" stopOpacity={0.4}/>
+                  <stop offset="100%" stopColor="var(--accent-amber)" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="fecha" tick={{ fill: 'var(--text-muted)', fontSize: 'var(--text-2xs)' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+              <YAxis tick={{ fill: 'var(--text-faint)', fontSize: 'var(--text-3xs)' }} tickLine={false} axisLine={false} unit="%" />
+              <Tooltip content={<CustomTooltip />} />
+              <Area type="monotone" dataKey="corrosion" name="Área %" stroke="var(--accent-amber)" strokeWidth={2} fill={`url(#grad-${selectedPunto.id_bloque})`} dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
+      </ChartCard>
 
       {/* -------------------------------------------
           MEDICIONES POR CIUDAD
