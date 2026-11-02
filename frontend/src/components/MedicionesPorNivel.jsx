@@ -1,19 +1,28 @@
 import React from 'react';
 import { useMediciones, LIMITE_DASHBOARD } from '../hooks/useMediciones';
 import Skeleton, { SkeletonLinea } from './Skeleton';
-import { nivelColor, nivelLabel } from '../lib/statusUtils';
+import { nivelLabel } from '../lib/statusUtils';
 
 // Barras simples (no Recharts): el rediseño pide columnas planas por nivel
 // de corrosión, con la altura proporcional al máximo -- ver mockup en
 // docs/rediseno/REDISENO_DASHBOARD.md. Reemplaza al anillo (Pie de
 // Recharts) que vivía en ChartsRow.jsx.
+
+// Colores propios de este gráfico (--sev-*, ver index.css) en vez de
+// nivelColor()/getStatusColor() -- esos los usan el mapa, la galería, el
+// detalle de medición, etc. en toda la app y deben seguir siendo los
+// mismos colores cálidos en los dos temas. Acá el usuario pidió
+// específicamente que combinaran mejor con el azul del tema oscuro, así
+// que --sev-* sí tiene un segundo valor para oscuro (ver index.css).
+const SEVERITY_COLOR_VARS = ['var(--sev-ok)', 'var(--sev-early)', 'var(--sev-moderate)', 'var(--sev-critical)'];
+
 export default function MedicionesPorNivel() {
   const { mediciones, loading } = useMediciones(LIMITE_DASHBOARD, { resumen: true });
 
   const conteos = [0, 1, 2, 3].map(nivel => ({
     nivel,
     label: nivelLabel(nivel),
-    color: nivelColor(nivel),
+    color: SEVERITY_COLOR_VARS[nivel],
     valor: mediciones.filter(m => m.nivel_corrosion === nivel).length,
   }));
 

@@ -160,6 +160,17 @@
   --accent-red: #DC2626;
   --accent-orange: #7A3510;
 
+  /* Escala de severidad para "Mediciones por nivel" (MedicionesPorNivel.jsx):
+     mismos 4 colores que ya usa statusUtils.js/getStatusColor en este tema
+     (no cambia nada en claro) -- existen como tokens aparte porque el tema
+     oscuro SI necesita valores distintos, ver [data-theme="dark"]. No se
+     tocan nivelColor()/getStatusColor() (los usan mapa, galeria, upload,
+     etc. en toda la app): esto es solo para las 4 barras del dashboard. */
+  --sev-ok: #6F7F55;
+  --sev-early: #E3A24F;
+  --sev-moderate: #D06E2A;
+  --sev-critical: #9C3A1A;
+
 
   /* ─────────────────────────────────────────────────────────────
      TEXT
@@ -359,6 +370,17 @@
   --accent-green: #9BAE7C;
   --accent-red: #EF4444;
   --accent-orange: #E0995F;
+
+  /* El usuario pidio colores que combinen con el azul del tema oscuro --
+     los 4 tonos de severidad de --sev-* de arriba (claro) son calidos y
+     apagados, pensados para el fondo crema que ya no existe en oscuro:
+     sobre el pizarra azul se ven opacos/sucios. Estos son mas luminosos
+     y saturados (mismo criterio que --accent-green/--accent-red arriba),
+     conservando el mismo orden verde -> dorado -> naranja -> rojo. */
+  --sev-ok: #8FBF8A;
+  --sev-early: #F2C75E;
+  --sev-moderate: #F0924B;
+  --sev-critical: #EF5350;
 
 
   /* Text */
