@@ -31,7 +31,15 @@ function Metrica({ label, value, sub, color, loading }) {
         gap: 4,
       }}
     >
-      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-ui)' }}>
+      {/* Las 3 líneas van a una sola línea con "..." -- un nombre de punto
+          largo en "sub" (p. ej. "Última área corroída") envolvía a varias
+          líneas, estiraba esta tarjeta más que las otras 3 y, como esta
+          fila comparte alto con "Mediciones por nivel" al lado, terminaba
+          agrandando todo el bloque de arriba del dashboard. */}
+      <span style={{
+        fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-ui)',
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+      }}>
         {label}
       </span>
 
@@ -51,7 +59,13 @@ function Metrica({ label, value, sub, color, loading }) {
         {loading ? <SkeletonLinea width="3ch" /> : value}
       </span>
 
-      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-ui)', letterSpacing: '0.01em' }}>
+      <span
+        title={sub}
+        style={{
+          fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-ui)', letterSpacing: '0.01em',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}
+      >
         {sub}
       </span>
     </div>
