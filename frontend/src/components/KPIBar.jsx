@@ -19,16 +19,16 @@ function Metrica({ label, value, sub, color, loading }) {
   return (
     <div
       style={{
-        flex: '1 1 150px',
-        minWidth: 150,
-        padding: '12px 14px',
+        flex: '1 1 0',
+        minWidth: 0,
+        padding: '10px 12px',
         borderRadius: 10,
         background: 'var(--bg-card-solid)',
         border: '1px solid var(--border)',
         borderTop: `3px solid ${color}`,
         display: 'flex',
         flexDirection: 'column',
-        gap: 5,
+        gap: 4,
       }}
     >
       <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-ui)' }}>
@@ -38,11 +38,14 @@ function Metrica({ label, value, sub, color, loading }) {
       <span
         style={{
           fontFamily: 'var(--font-ui)',
-          fontSize: 24,
+          fontSize: 22,
           fontWeight: 800,
           color,
           lineHeight: 1,
           fontVariantNumeric: 'tabular-nums',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
         }}
       >
         {loading ? <SkeletonLinea width="3ch" /> : value}
@@ -148,7 +151,10 @@ export default function KPIBar() {
         Indicadores
       </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+      {/* nowrap a propósito: las 4 tarjetas se achican entre sí para
+          seguir cabiendo en una sola fila en vez de pasar la 4ta ("Severas")
+          a una fila nueva -- eso hacía crecer todo el bloque de Indicadores. */}
+      <div style={{ display: 'flex', flexWrap: 'nowrap', gap: 6 }}>
         {metricasMostradas.map((m, i) => (
           <Metrica key={i} {...m} loading={loading} />
         ))}
