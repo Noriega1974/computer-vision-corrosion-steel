@@ -100,6 +100,7 @@ export default function DashboardPage() {
   return (
 
     <div
+      className="dashboard-shell"
       style={{
         height: '100%',
         maxWidth: 1400,

@@ -23,24 +23,24 @@
      BACKGROUNDS
      ───────────────────────────────────────────────────────────── */
 
-  /* 2026-10-29: paleta "PixelRust" calida (rediseno del dashboard, ver
-     docs/rediseno/REDISENO_DASHBOARD.md) -- reemplaza el celeste/vidrio
-     heredado de CorpoAcero. --bg-card pasa a ser solido (antes
-     traslucido, pensado para el efecto glass): el nuevo diseno no usa
-     backdrop-filter en las tarjetas del dashboard, asi que un card
-     traslucido sobre .dashboard-shell ya no aplica -- pero las paginas
-     que si usan vidrio (Login, RouteFallback) siguen leyendo
-     --glass-bg/--glass-bg-strong, no --bg-card, asi que no se ven
-     afectadas por este cambio. */
-  --bg-page: #FBF7F1;
-  --bg-section: #F6EEE3;
+  /* 2026-11-02: a pedido del usuario, el fondo vuelve a ser blanco/gris
+     claro en vez del crema calido del rediseno -- "no quiero que sea
+     cafe claro". El vidrio (glassmorphism) tambien vuelve: --bg-card
+     vuelve a ser traslucido via .dashboard-section (ver mas abajo), que
+     ahora lee --glass-bg/--glass-bg-strong igual que .glass-panel
+     (Login, RouteFallback) -- ya no hay dos sistemas de vidrio
+     separados. Los acentos calidos (--accent-amber, etc.) NO cambian:
+     siguen siendo el color que "combina con la paleta" sobre este fondo
+     neutro, igual que los blobs ambiente de abajo. */
+  --bg-page: #F5F6F8;
+  --bg-section: #EEF0F3;
 
-  --bg-card: #FFFDF9;
-  --bg-card-solid: #FFFDF9;
+  --bg-card: #FFFFFF;
+  --bg-card-solid: #FFFFFF;
 
-  --bg-card-hover: #FFF8EE;
+  --bg-card-hover: #F7F8FA;
 
-  --bg-inset: #F4ECDF;
+  --bg-inset: #EEF0F3;
 
 
   /* ─────────────────────────────────────────────────────────────
@@ -64,9 +64,12 @@
      BORDERS
      ───────────────────────────────────────────────────────────── */
 
-  --border: #EADFCF;
-  --border-bright: #DECBAE;
-  --border-strong: #C9A876;
+  /* Bordes neutros-frios (antes tan/cafe, a tono con el fondo crema que
+     ya no existe) -- un borde calido se veia sucio sobre el gris claro
+     nuevo. */
+  --border: #E6E8EC;
+  --border-bright: #D8DBE2;
+  --border-strong: #B8BEC9;
 
   --border-glass: rgba(255, 255, 255, 0.72);
 
@@ -299,20 +302,21 @@
 
 [data-theme="dark"] {
 
-  /* 2026-10-29: contraparte oscura de la paleta calida del rediseno --
-     marron oscuro en vez del pizarra azulado heredado, para mantener la
-     misma familia calida que el tema claro (no hay un valor de spec para
-     oscuro: la spec solo pide "adaptar los tokens si ya hay variables de
-     tema", ver docs/rediseno/REDISENO_DASHBOARD.md). */
-  --bg-page: #241A14;
-  --bg-section: #2E2119;
+  /* 2026-11-02: a pedido del usuario, el oscuro vuelve a ser el
+     pizarra/azul "de la version original" (el que el rediseno del
+     2026-10-29 habia reemplazado por marron oscuro) -- coincide con los
+     mismos tonos que ya usaba el degradado ambiente de .dashboard-shell
+     y el vidrio de --glass-bg oscuro, asi que quedan consistentes entre
+     si en vez de competir (marron solido detras de vidrio azul). */
+  --bg-page: #161F2B;
+  --bg-section: #1E2B3B;
 
-  --bg-card: #2E2119;
-  --bg-card-solid: #2E2119;
+  --bg-card: #1E2B3B;
+  --bg-card-solid: #1E2B3B;
 
-  --bg-card-hover: #3A2A20;
+  --bg-card-hover: #243244;
 
-  --bg-inset: #2A1E17;
+  --bg-inset: #18222F;
 
 
   /* Ambient */
@@ -328,9 +332,11 @@
 
   /* Borders */
 
-  --border: rgba(234, 223, 207, 0.16);
-  --border-bright: rgba(234, 223, 207, 0.26);
-  --border-strong: rgba(234, 223, 207, 0.40);
+  /* Bordes azulados (antes un calido rgba sobre --text-primary) -- a
+     tono con el pizarra azul nuevo, igual que --border-glass ya usaba. */
+  --border: rgba(165, 196, 224, 0.16);
+  --border-bright: rgba(165, 196, 224, 0.26);
+  --border-strong: rgba(165, 196, 224, 0.42);
 
   --border-glass: rgba(165, 196, 224, 0.22);
 
@@ -542,9 +548,9 @@ body {
 
     linear-gradient(
       135deg,
-      #edf4fa 0%,
-      #f8fbfd 48%,
-      #eaf2f8 100%
+      #fafbfc 0%,
+      #ffffff 48%,
+      #f1f2f5 100%
     );
 
   filter: saturate(0.92);
@@ -697,16 +703,32 @@ body {
    solida (--bg-card) en las 5, borde de 1px, sin sombras fuertes. Los 8
    tokens --section-* (claro + oscuro) se quitaron de :root con este cambio
    al quedar sin consumidores.
+
+   2026-11-02: el vidrio vuelve a pedido del usuario -- mismo tratamiento
+   que .glass-panel (Login), ahora sobre el fondo con degradado de
+   .dashboard-shell en vez de una superficie solida. Necesita que el
+   dashboard este envuelto en .dashboard-shell (ver DashboardPage.jsx)
+   para que el degradado de atras se note a traves del vidrio.
    ================================================================ */
 
 .dashboard-section {
   position: relative;
 
-  background: var(--bg-card);
+  background:
+    linear-gradient(
+      135deg,
+      var(--glass-bg-strong),
+      var(--glass-bg)
+    );
 
-  border: 1px solid var(--border);
+  border: 1px solid var(--glass-border);
 
   border-radius: 16px;
+
+  box-shadow: var(--shadow-glass);
+
+  backdrop-filter: blur(18px) saturate(115%);
+  -webkit-backdrop-filter: blur(18px) saturate(115%);
 
   overflow: hidden;
 }
