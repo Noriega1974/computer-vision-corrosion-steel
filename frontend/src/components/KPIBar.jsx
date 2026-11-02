@@ -10,52 +10,57 @@ import { formatoPct } from '../lib/textUtils';
 // MÉTRICA
 // ================================================================
 
-// 2026-11-03: Indicadores pasa de 4 tarjetas a una línea tipo "ticker"
-// (valor + etiqueta). El detalle que antes iba como leyenda debajo de
-// cada tarjeta (p.ej. "Planta Industrial Bogotá · Sin corrosión") no
-// desaparece, pasa a `title` (tooltip nativo al pasar el mouse) -- se
-// prioriza una sola línea compacta por sobre tenerlo siempre visible.
+// 2026-11-03: Indicadores pasa de 4 tarjetas a una línea tipo "ticker".
 //
-// 2026-11-04: Mediciones por nivel ya no comparte fila con Indicadores
-// (se mudó al acordeón de Análisis) -- Indicadores quedó solo, con
-// mucho ancho libre sin usar. `flex:1` reparte las 4 métricas en el
-// ancho completo en vez de dejarlas agrupadas a la izquierda, y el
-// valor crece de 19px a 28px para que se note el espacio de más.
-function Metrica({ label, value, sub, alert, loading, isFirst }) {
+// 2026-11-04: estirado a flex:1 por métrica para usar el ancho completo
+// (Mediciones por nivel ya no comparte fila con esto).
+//
+// 2026-11-05: el detalle (p.ej. "Planta Industrial Bogotá · Sin
+// corrosión") había pasado a `title` (tooltip al pasar el mouse) para
+// que la línea quedara compacta -- el usuario lo quería visible siempre,
+// no solo al pasar el mouse. Vuelve a texto, debajo de etiqueta + valor
+// en vez de al lado. Severas tampoco se distingue más por color -- el
+// número va igual que las otras 3 métricas.
+function Metrica({ label, value, sub, loading, isFirst }) {
   return (
     <div
-      title={sub || undefined}
       style={{
-        flex: '1 1 160px',
+        flex: '1 1 170px',
         minWidth: 0,
         display: 'flex',
-        alignItems: 'baseline',
-        justifyContent: 'center',
-        gap: 9,
-        padding: '4px 0',
+        flexDirection: 'column',
+        alignItems: 'center',
+        textAlign: 'center',
+        gap: 3,
+        padding: '2px 16px',
         borderLeft: isFirst ? 'none' : '1px solid var(--border)',
       }}
     >
+      <span style={{
+        fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', fontFamily: 'var(--font-ui)',
+        textTransform: 'uppercase', letterSpacing: '0.05em',
+      }}>
+        {label}
+      </span>
+
       <span
         style={{
           fontFamily: 'var(--font-ui)',
           fontSize: 28,
           fontWeight: 800,
-          color: alert ? 'var(--accent-red)' : 'var(--text-primary)',
+          color: 'var(--text-primary)',
           lineHeight: 1,
           fontVariantNumeric: 'tabular-nums',
-          whiteSpace: 'nowrap',
         }}
       >
         {loading ? <SkeletonLinea width="2.5ch" /> : value}
       </span>
 
-      <span style={{
-        fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', fontFamily: 'var(--font-ui)',
-        textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap',
-      }}>
-        {label}
-      </span>
+      {sub && (
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', fontFamily: 'var(--font-ui)', lineHeight: 1.3 }}>
+          {sub}
+        </span>
+      )}
     </div>
   );
 }
@@ -132,12 +137,11 @@ export default function KPIBar() {
       label: 'Severas',
       value: puntosSeveros,
       sub: 'requieren revisión',
-      alert: puntosSeveros > 0,
     },
   ];
 
   const metricasMostradas = sinDatos
-    ? metricas.map(k => ({ ...k, value: '—', sub: 'No se pudo cargar', alert: false }))
+    ? metricas.map(k => ({ ...k, value: '—', sub: 'No se pudo cargar' }))
     : metricas;
 
   // ==============================================================
