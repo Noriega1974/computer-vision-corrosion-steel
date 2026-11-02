@@ -104,7 +104,7 @@ export default function DashboardPage() {
         height: '100%',
         maxWidth: 1400,
         margin: '0 auto',
-        padding: '16px 28px 18px',
+        padding: '12px 28px 12px',
         display: 'flex',
         flexDirection: 'column',
       }}
@@ -124,7 +124,7 @@ export default function DashboardPage() {
         style={{
           display: 'flex',
           flexDirection: 'column',
-          gap: 14,
+          gap: 10,
           width: '100%',
           flex: 1,
           minHeight: 0,
@@ -167,7 +167,7 @@ export default function DashboardPage() {
               style={{
                 margin: 0,
                 fontFamily: 'var(--font-ui)',
-                fontSize: 22,
+                fontSize: 19,
                 fontWeight: 800,
                 color: 'var(--text-primary)',
               }}
@@ -180,9 +180,9 @@ export default function DashboardPage() {
             <Link
               to="/upload"
               className="dashboard-action"
-              style={{ minHeight: 40, padding: '0 18px', fontSize: 14 }}
+              style={{ minHeight: 34, padding: '0 16px', fontSize: 13 }}
             >
-              <IconoSubir size={16} />
+              <IconoSubir size={14} />
               Nueva medición
             </Link>
           )}
@@ -196,20 +196,20 @@ export default function DashboardPage() {
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))',
-            gap: 14,
+            gap: 10,
             flexShrink: 0,
           }}
         >
           <section
             className="dashboard-section section-kpi"
-            style={{ padding: 14 }}
+            style={{ padding: '10px 12px' }}
           >
             <KPIBar />
           </section>
 
           <section
             className="dashboard-section section-kpi"
-            style={{ padding: 14 }}
+            style={{ padding: '10px 12px' }}
           >
             <MedicionesPorNivel />
           </section>
@@ -228,9 +228,9 @@ export default function DashboardPage() {
           style={{
             display: 'grid',
             gridTemplateColumns: 'minmax(250px, 0.85fr) minmax(0, 2.1fr) minmax(320px, 1.05fr)',
-            gap: 14,
+            gap: 10,
             flex: 1,
-            minHeight: 360,
+            minHeight: 320,
           }}
         >
           {/* ======================================================
@@ -239,7 +239,7 @@ export default function DashboardPage() {
           <section
             className="dashboard-section section-plants"
             style={{
-              padding: '16px',
+              padding: '12px',
               display: 'flex',
               flexDirection: 'column',
               gap: 'var(--space-2)',
@@ -269,7 +269,7 @@ export default function DashboardPage() {
           <section
             className="dashboard-section section-map"
             style={{
-              padding: '16px',
+              padding: '12px',
               display: 'flex',
               flexDirection: 'column',
               gap: 'var(--space-2-5)',
@@ -347,7 +347,7 @@ export default function DashboardPage() {
           <section
             className="dashboard-section section-detail"
             style={{
-              padding: '16px',
+              padding: '12px',
               display: 'flex',
               flexDirection: 'column',
               gap: 'var(--space-2-5)',
@@ -392,7 +392,7 @@ export default function DashboardPage() {
             aria-expanded={showAnalisis}
             style={{
               width: '100%',
-              minHeight: 52,
+              minHeight: 44,
               padding: '0 20px',
               display: 'flex',
               alignItems: 'center',

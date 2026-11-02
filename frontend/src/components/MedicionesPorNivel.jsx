@@ -21,45 +21,45 @@ export default function MedicionesPorNivel() {
 
   return (
     <div>
-      <div className="dashboard-section-title" style={{ marginBottom: 'var(--space-2)' }}>
+      <div className="dashboard-section-title" style={{ marginBottom: 6 }}>
         Mediciones por nivel
       </div>
 
       {loading ? (
-        <div aria-busy="true" style={{ display: 'flex', gap: 10 }}>
+        <div aria-busy="true" style={{ display: 'flex', gap: 8 }}>
           {conteos.map(c => (
-            <div key={c.nivel} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+            <div key={c.nivel} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
               <SkeletonLinea width={18} />
-              <Skeleton width="100%" height={72} radius={8} />
+              <Skeleton width="100%" height={44} radius={6} />
               <SkeletonLinea width={48} />
             </div>
           ))}
         </div>
       ) : (
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 8 }}>
           {conteos.map(c => (
-            <div key={c.nivel} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+            <div key={c.nivel} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
               <span style={{
-                fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 700,
+                fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 700,
                 color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums',
               }}>
                 {c.valor}
               </span>
               <div style={{
-                width: '100%', height: 72, display: 'flex', alignItems: 'flex-end',
-                background: 'var(--bg-inset)', borderRadius: 8,
+                width: '100%', height: 44, display: 'flex', alignItems: 'flex-end',
+                background: 'var(--bg-inset)', borderRadius: 6,
               }}>
                 <div style={{
                   width: '100%',
-                  height: `${Math.max(5, (c.valor / max) * 100)}%`,
+                  height: `${Math.max(8, (c.valor / max) * 100)}%`,
                   background: c.color,
-                  borderRadius: 8,
+                  borderRadius: 6,
                   transition: 'height var(--dur-base) var(--ease-out)',
                 }} />
               </div>
               <span style={{
-                fontFamily: 'var(--font-ui)', fontSize: 11, color: 'var(--text-secondary)',
-                textAlign: 'center', lineHeight: 1.2,
+                fontFamily: 'var(--font-ui)', fontSize: 10, color: 'var(--text-secondary)',
+                textAlign: 'center', lineHeight: 1.15,
               }}>
                 {c.label}
               </span>
