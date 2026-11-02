@@ -12,13 +12,14 @@ import { IconoCamara, IconoHumedad, IconoLluvia, IconoTemperatura, IconoViento }
 
 // Estilos de texto compartidos con el esqueleto: mismo line-height cargado o no.
 // Tamaños pensados para la columna más angosta de las 3 del dashboard --
-// antes el título y estos valores eran grandes y se recortaban o dejaban
-// poco aire para el historial.
+// antes esta cabecera (nombre + clima + pie) ocupaba tanto que el
+// historial de abajo, lo que realmente importa ver, quedaba aplastado a
+// una fila apenas visible.
 const FOOTER_TITULO_STYLE = {
-  fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 17,
+  fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 14,
   color: 'var(--text-primary)', lineHeight: 1.15, letterSpacing: '-0.01em',
 };
-const FOOTER_SUB_STYLE = { fontSize: 11, color: 'var(--text-secondary)', marginTop: 2, fontFamily: 'var(--font-ui)' };
+const FOOTER_SUB_STYLE = { fontSize: 10, color: 'var(--text-secondary)', marginTop: 1, fontFamily: 'var(--font-ui)' };
 const HISTORIAL_LINEA_STYLE = { fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-ui)' };
 
 // ─── Tarjeta Flashcard de Ubicación (Dashboard) ─────────────────────────────
@@ -73,22 +74,22 @@ export default function PlantDetail({ punto }) {
           2) Caja encuadrada de clima en el centro, 3) Pie con total de
           mediciones y última área corroída */}
       <div style={{
-        padding: 12, borderRadius: 14, background: 'var(--bg-highlight)',
-        flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10,
+        padding: '10px 10px', borderRadius: 14, background: 'var(--bg-highlight)',
+        flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6,
       }}>
         {/* 1. Título + píldora. El nombre pasa a 2 líneas (en vez de
             recortarse en una) -- a 20px un nombre normal no entraba en
             esta columna, la más angosta de las 3 del dashboard. */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
             <span style={{
-              fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 16,
+              fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 15,
               color: 'var(--text-primary)', letterSpacing: '-0.01em', lineHeight: 1.2,
               display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
             }}>
               {punto.nombre ?? 'Punto sin nombre'}
             </span>
-            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+            <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
               {punto.ciudad ?? '—'}{punto.departamento ? ` · ${punto.departamento}` : ''}
             </span>
           </div>
@@ -96,36 +97,41 @@ export default function PlantDetail({ punto }) {
           {nivel >= 0 && (
             <div className={nivel === 3 ? 'severa-pulse' : undefined} style={{
               display: 'inline-flex', alignItems: 'center', gap: 5,
-              padding: '3px 9px', borderRadius: 999,
+              padding: '2px 8px', borderRadius: 999,
               background: pillBg, color: pillText,
-              fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+              fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
               flexShrink: 0,
             }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: color }} />
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: color }} />
               {nivelLabel(nivel)}
             </div>
           )}
         </div>
 
-        {/* 2. Bloque central encuadrado: datos meteorológicos con iconos y textos grandes */}
+        {/* 2. Clima: icono + valor en una sola línea, etiqueta chiquita
+            debajo -- antes icono/valor/etiqueta eran 3 líneas apiladas por
+            dato y este bloque por sí solo ya ocupaba más de un tercio de
+            la tarjeta. */}
         {stats.length > 0 && (
           <div style={{
-            background: 'var(--bg-card-solid)', borderRadius: 12, padding: '8px 4px',
+            background: 'var(--bg-card-solid)', borderRadius: 10, padding: '6px 4px',
             display: 'grid',
             gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))`,
             gap: 4,
           }}>
             {stats.map(({ Icon, label, v }) => (
               <div key={label} style={{ textAlign: 'center', minWidth: 0 }}>
-                <Icon size={15} strokeWidth={2} style={{ color: 'var(--accent-blue)' }} />
-                <div style={{
-                  fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 11,
-                  color: 'var(--text-primary)', lineHeight: 1.1, marginTop: 3,
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                }}>
-                  {v}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
+                  <Icon size={12} strokeWidth={2} style={{ color: 'var(--accent-blue)', flexShrink: 0 }} />
+                  <span style={{
+                    fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 10,
+                    color: 'var(--text-primary)', lineHeight: 1.1,
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  }}>
+                    {v}
+                  </span>
                 </div>
-                <div style={{ fontSize: 9, color: 'var(--text-secondary)', marginTop: 1, whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: 8, color: 'var(--text-secondary)', marginTop: 1, whiteSpace: 'nowrap' }}>
                   {label}
                 </div>
               </div>
@@ -163,8 +169,8 @@ export default function PlantDetail({ punto }) {
       </div>
 
       {/* Historial de mediciones */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '10px 0 0', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <div className="dashboard-section-title" style={{ padding: '0 2px 8px' }}>
+      <div style={{ flex: 1, overflow: 'auto', padding: '8px 0 0', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div className="dashboard-section-title" style={{ padding: '0 2px 6px' }}>
           Historial de mediciones
         </div>
 
