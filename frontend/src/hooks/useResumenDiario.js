@@ -26,7 +26,14 @@ export function useResumenDiario({ anios, idPunto, empresaId, habilitado = true 
     setError(null);
     Promise.all(anios.map((a) => apiGet(urlResumenDiario(a, { idPunto, empresaId }))))
       .then((resp) => { if (!cancelled) { claveCargada.current = clave; setResumen(combinarResumenes(resp)); setLoading(false); } })
-      .catch((err) => { if (!cancelled) { setError(err.message); setLoading(false); } });
+      .catch((err) => {
+        if (cancelled) return;
+        // Never paint stale data next to an error: the bar shows the error + retry.
+        claveCargada.current = null;
+        setResumen(combinarResumenes([]));
+        setError(err.message);
+        setLoading(false);
+      });
     return () => { cancelled = true; };
     // `clave` stands for anios/idPunto/empresaId (a new array each render would loop).
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -16,6 +16,7 @@ import DatePicker from './DatePicker';
 import Skeleton, { SkeletonLinea } from './Skeleton';
 import { useMediciones, LIMITE_DASHBOARD } from '../hooks/useMediciones';
 import { useResumenDiario } from '../hooks/useResumenDiario';
+import { useMedicionesRango } from '../hooks/useMedicionesRango';
 import { useBloques } from '../hooks/useBloques';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useAuth } from '../auth/AuthContext';
@@ -31,6 +32,7 @@ import {
   ANIO_MINIMO_LINEA_TIEMPO,
   aniosDisponiblesLineaTiempo,
   construirBarraAnualDesdeResumen,
+  rangoFueraDeVentana,
   colorNivelBarra,
 } from '../lib/lineaTiempo';
 
@@ -390,6 +392,8 @@ export function BarraAnualLineaTiempo({
   resumenDias = [],
   nivel = 'all',
   cargando = false,
+  error = null,
+  onReintentar,
   anioSeleccionado,
   onChangeAnio,
   diaFiltradoISO = '',
@@ -449,6 +453,39 @@ export function BarraAnualLineaTiempo({
           }}>
             Actividad anual ({barra.anio}) · 1 de enero al 31 de diciembre
           </div>
+          {error ? (
+            <div role="alert" style={{
+              display: 'flex',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 8,
+              fontFamily: 'var(--font-ui)',
+              fontSize: 'var(--text-2xs)',
+              color: 'var(--accent-red)',
+              marginTop: 2,
+            }}>
+              <span>No se pudo cargar la actividad de {barra.anio}. {error}</span>
+              {onReintentar && (
+                <button
+                  type="button"
+                  onClick={onReintentar}
+                  style={{
+                    padding: '2px 9px',
+                    background: 'var(--bg-inset)',
+                    border: '1px solid var(--border-strong)',
+                    borderRadius: 6,
+                    color: 'var(--text-primary)',
+                    fontFamily: 'var(--font-ui)',
+                    fontSize: 'var(--text-2xs)',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Reintentar
+                </button>
+              )}
+            </div>
+          ) : (
           <div style={{
             fontFamily: 'var(--font-ui)',
             fontSize: 'var(--text-2xs)',
@@ -457,6 +494,7 @@ export function BarraAnualLineaTiempo({
           }}>
             {barra.diasConFotos} {barra.diasConFotos === 1 ? 'día con mediciones' : 'días con mediciones'} · {barra.totalFotosAnio} {barra.totalFotosAnio === 1 ? 'imagen registrada' : 'imágenes registradas'} en {barra.anio}
           </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -675,7 +713,8 @@ export function BarraAnualLineaTiempo({
         >
           {diaInspeccionado
             ? diaInspeccionado.resumenTexto
-            : cargando ? 'Cargando la actividad del año...' : `Sin mediciones registradas en ${barra.anio}`}
+            : error ? 'Actividad del año no disponible'
+              : cargando ? 'Cargando la actividad del año...' : `Sin mediciones registradas en ${barra.anio}`}
         </div>
       </div>
     </div>
@@ -685,7 +724,7 @@ export function BarraAnualLineaTiempo({
 export default function LineaTiempoMediciones() {
   const { user } = useAuth();
   const esSuperAdmin = Boolean(user?.groups?.includes('super_admin'));
-  const { mediciones, loading, error } = useMediciones(LIMITE_LINEA_TIEMPO, { resumen: true });
+  const { mediciones: medicionesRecientes, loading: loadingRecientes, error: errorRecientes } = useMediciones(LIMITE_LINEA_TIEMPO, { resumen: true });
   const { bloques } = useBloques();
   const { empresas } = useEmpresas(esSuperAdmin);
 
@@ -715,6 +754,14 @@ export default function LineaTiempoMediciones() {
     idPunto: bloqueId !== 'all' ? bloqueId : undefined,
     empresaId: esSuperAdmin && empresaId !== 'all' ? empresaId : undefined,
   });
+
+  // Un día (o rango) más antiguo que la ventana de las 1000 recientes se pide al
+  // servidor por rango; si no, la lista quedaría vacía aunque haya fotos.
+  const fueraDeVentana = rangoFueraDeVentana(medicionesRecientes, fechaInicio, fechaFin, LIMITE_LINEA_TIEMPO);
+  const rango = useMedicionesRango({ desde: fechaInicio, hasta: fechaFin, habilitado: fueraDeVentana });
+  const mediciones = fueraDeVentana ? rango.mediciones : medicionesRecientes;
+  const loading = fueraDeVentana ? rango.loading : loadingRecientes;
+  const error = fueraDeVentana ? rango.error : errorRecientes;
 
   const medicionesFiltradas = useMemo(
     () =>
@@ -780,6 +827,8 @@ export default function LineaTiempoMediciones() {
         resumenDias={resumenAnual.dias}
         nivel={nivel}
         cargando={resumenAnual.loading}
+        error={resumenAnual.error}
+        onReintentar={resumenAnual.refetch}
         anioSeleccionado={anioBarra}
         onChangeAnio={(nuevoAnio) => {
           setAnioBarra(nuevoAnio);
@@ -957,8 +1006,8 @@ export default function LineaTiempoMediciones() {
               setLimiteEventos(EVENTOS_POR_PAGINA);
             }}
             maxISO={hoyLocalISO()}
-            inspecciones={mediciones}
-            mesInicial={fechaUltimaMedicionISO(mediciones)}
+            inspecciones={medicionesRecientes}
+            mesInicial={fechaUltimaMedicionISO(medicionesRecientes)}
             ctaLabel="Filtrar línea de tiempo"
             clearLabel="Limpiar fechas"
             futureTitle="No hay fotos en fechas futuras"
@@ -1123,7 +1172,12 @@ export default function LineaTiempoMediciones() {
         </div>
       )}
 
-      {mediciones.length >= LIMITE_LINEA_TIEMPO && (
+      {fueraDeVentana && rango.truncado && (
+        <div role="note" style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
+          El rango elegido tiene más de {LIMITE_LINEA_TIEMPO} mediciones; se muestran las {LIMITE_LINEA_TIEMPO} más recientes del rango. Acota las fechas para ver el resto.
+        </div>
+      )}
+      {!fueraDeVentana && medicionesRecientes.length >= LIMITE_LINEA_TIEMPO && (
         <div role="note" style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
           Se muestran las {LIMITE_LINEA_TIEMPO} mediciones más recientes por fecha de medición; las anteriores no aparecen aquí.
         </div>
