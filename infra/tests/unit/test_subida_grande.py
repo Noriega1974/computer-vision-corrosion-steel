@@ -294,3 +294,59 @@ def test_base64_no_deja_marcador(h, monkeypatch, tmp_path):
     _poner_unet(h, monkeypatch, tmp_path)
     _ok(h.lambda_handler(_evento(_foto()), None))
     assert _marcadores(h) == []
+
+
+def _quitar_medicion(h, cuerpo):
+    h.tabla_mediciones.items = [i for i in h.tabla_mediciones.items if i["id_punto"].startswith("IDEM#")]
+    h.tabla_mediciones.escritos = [i for i in h.tabla_mediciones.escritos if i["id_punto"].startswith("IDEM#")]
+
+
+def test_listo_sin_medicion_y_con_temporal_se_reprocesa_en_vez_de_409(h, monkeypatch, tmp_path):
+    _poner_unet(h, monkeypatch, tmp_path)
+    h.s3.put_object("bucket-de-prueba", CLAVE, _foto())
+    primera = _ok(h.lambda_handler(_evento_clave(CLAVE), None))
+    _sincronizar(h)
+    _quitar_medicion(h, primera)           # la medición se borró; el marcador quedó 'listo'
+    h.s3.objetos.pop(("bucket-de-prueba", primera["s3_key_resultado"]), None)
+    h.s3.put_object("bucket-de-prueba", CLAVE, _foto())   # el temporal sigue ahí
+    segunda = _ok(h.lambda_handler(_evento_clave(CLAVE), None))
+    assert segunda["id_medicion"] != primera["id_medicion"]
+    assert [m["estado"] for m in _marcadores(h)] == ["listo"]
+
+
+def test_listo_sin_medicion_ni_temporal_es_410_con_mensaje_claro(h, monkeypatch, tmp_path):
+    _poner_unet(h, monkeypatch, tmp_path)
+    h.s3.put_object("bucket-de-prueba", CLAVE, _foto())
+    primera = _ok(h.lambda_handler(_evento_clave(CLAVE), None))
+    _sincronizar(h)
+    _quitar_medicion(h, primera)
+    resp = h.lambda_handler(_evento_clave(CLAVE), None)   # el temporal ya se borró
+    assert resp["statusCode"] == 410 and "galería" in json.loads(resp["body"])["error"]
+
+
+def test_listo_con_medicion_pero_resultado_ilegible_es_410_y_no_duplica(h, monkeypatch, tmp_path):
+    _poner_unet(h, monkeypatch, tmp_path)
+    h.s3.put_object("bucket-de-prueba", CLAVE, _foto())
+    primera = _ok(h.lambda_handler(_evento_clave(CLAVE), None))
+    _sincronizar(h)
+    h.s3.objetos.pop(("bucket-de-prueba", primera["s3_key_resultado"]))
+    h.s3.put_object("bucket-de-prueba", CLAVE, _foto())
+    escritos = len(h.tabla_mediciones.escritos)
+    resp = h.lambda_handler(_evento_clave(CLAVE), None)
+    assert resp["statusCode"] == 410 and len(h.tabla_mediciones.escritos) == escritos
+
+
+def test_si_falla_cerrar_el_marcador_se_conserva_el_temporal_y_se_libera_el_reclamo(h, monkeypatch, tmp_path):
+    _poner_unet(h, monkeypatch, tmp_path)
+    h.s3.put_object("bucket-de-prueba", CLAVE, _foto())
+    original = h.tabla_mediciones.put_item
+
+    def put_item(Item, ConditionExpression=None):
+        if Item.get("estado") == "listo":
+            raise RuntimeError("ddb caído")
+        return original(Item, ConditionExpression=ConditionExpression)
+
+    monkeypatch.setattr(h.tabla_mediciones, "put_item", put_item)
+    assert h.lambda_handler(_evento_clave(CLAVE), None)["statusCode"] == 200
+    assert ("bucket-de-prueba", CLAVE) in h.s3.objetos and ("bucket-de-prueba", CLAVE) not in h.s3.eliminados
+    assert _marcadores(h) == []   # ni 'procesando' ni 'listo': el reintento puede reclamar
