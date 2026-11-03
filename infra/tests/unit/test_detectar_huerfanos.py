@@ -1,5 +1,6 @@
 """Pruebas unitarias para el auditor de solo lectura scripts/detectar_huerfanos.py."""
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 import importlib.util
 
@@ -334,3 +335,108 @@ def test_error_inesperado_es_exit_1(sesion, monkeypatch):
         raise RuntimeError("AccessDenied")
     monkeypatch.setattr(detectar_huerfanos, "auditar_huerfanos", boom)
     assert detectar_huerfanos.main(ARGS_OK) == 1
+
+
+AHORA = datetime(2026, 11, 2, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def _auditar_usuarios(usuarios, cog_users=()):
+    ddb = DdbResourceFake({
+        "t-emp": [{"id_empresa": "EMP-1", "activa": True}],
+        "t-usr": usuarios,
+    })
+    return detectar_huerfanos.auditar_huerfanos(
+        ddb, S3ListFake([]), CognitoListFake(cog_users), {**CFG, "bucket_name": ""}, ahora=AHORA
+    )
+
+
+def _colab(vence_en):
+    return {"id_usuario": "U-C", "rol": "tecnico", "empresa_id": "EMP-1", "es_colaborador": True,
+            "activo": True, "email": "c@x.co", "vence_en": vence_en}
+
+
+@pytest.mark.parametrize("vence_en", [Decimal("1762000000"), 1762000000, "no-es-fecha", ["x"]])
+def test_vence_en_invalido_se_reporta_y_cuenta_como_accionable(vence_en):
+    rep = _auditar_usuarios([_colab(vence_en)])
+    motivos = [d["motivo"] for d in rep["usuarios_estado_discordante"]]
+    assert motivos == ["vence_en_invalido"]
+    assert rep["resumen"]["total_hallazgos"] >= 1
+
+
+def test_vence_en_valido_futuro_y_ausente_no_generan_hallazgo_de_estado():
+    futuro = _auditar_usuarios([_colab("2026-12-01T00:00:00+00:00")])
+    ausente = _auditar_usuarios([_colab(None), _colab("")])
+    assert futuro["usuarios_estado_discordante"] == []
+    assert ausente["usuarios_estado_discordante"] == []
+
+
+def test_vence_en_pasado_sigue_reportando_expirado():
+    rep = _auditar_usuarios([_colab("2026-10-01T00:00:00Z")])
+    assert [d["motivo"] for d in rep["usuarios_estado_discordante"]] == ["colaborador_expirado_sigue_activo"]
+
+
+def test_s3_truncado_sin_token_es_error_en_vez_de_listado_parcial():
+    class S3Roto:
+        def list_objects_v2(self, **kwargs):
+            return {"Contents": [{"Key": "a", "Size": 1}], "IsTruncated": True}
+
+    with pytest.raises(RuntimeError, match="NextContinuationToken"):
+        detectar_huerfanos._listar_objetos_s3(S3Roto(), "b")
+
+
+def test_s3_truncado_sin_token_termina_main_con_exit_1(sesion, monkeypatch):
+    class S3Roto:
+        def list_objects_v2(self, **kwargs):
+            return {"Contents": [], "IsTruncated": True}
+
+    class SesionS3Rota(SessionFake):
+        def client(self, nombre, **kw):
+            return S3Roto() if nombre == "s3" else super().client(nombre, **kw)
+
+    monkeypatch.setattr(detectar_huerfanos.boto3, "Session", lambda **kw: SesionS3Rota("111111111111", {}, **kw))
+    assert detectar_huerfanos.main(ARGS_OK) == 1
+
+
+def test_reporte_humano_aclara_que_carpetas_y_uploads_son_informativos():
+    ddb = DdbResourceFake({})
+    s3 = S3ListFake([{"Key": "carpeta/", "Size": 0}, {"Key": "uploads/x.jpg", "Size": 5}])
+    rep = detectar_huerfanos.auditar_huerfanos(ddb, s3, None, {**CFG, "user_pool_id": ""})
+    assert rep["resumen"]["total_hallazgos"] == 0
+    texto = detectar_huerfanos.formatear_reporte_humano(rep)
+    assert "[informativo] Marcadores de carpeta" in texto
+    assert "[informativo] Subidas temporales" in texto
+    assert "NO entran en el total accionable" in texto
+
+
+def test_ayuda_de_region_refleja_el_default_real(capsys):
+    assert detectar_huerfanos.main(["--help"]) == 0
+    ayuda = " ".join(capsys.readouterr().out.split())
+    assert "variable de entorno REGION" in ayuda and "us-east-1" in ayuda
+
+
+def test_cruce_cognito_por_email_y_sin_distinguir_mayusculas():
+    # No sub, no username match: pairs only through the lower-cased email.
+    usuarios = [{"id_usuario": "U-1", "rol": "admin", "empresa_id": "EMP-1", "email": "Adm@X.co", "activo": True,
+                 "cognito_username": "otro-nombre"}]
+    cog = [{"Username": "uuid-1", "Enabled": True, "Attributes": [{"Name": "sub", "Value": "s9"},
+                                                                  {"Name": "email", "Value": "ADM@x.CO"}]}]
+    rep = _auditar_usuarios(usuarios, cog)
+    assert rep["usuarios_ddb_sin_cognito"] == []
+    assert rep["cognito_sin_usuario_ddb"] == []
+
+
+def test_cruce_cognito_por_username_sin_distinguir_mayusculas():
+    usuarios = [{"id_usuario": "U-1", "rol": "admin", "empresa_id": "EMP-1", "email": "z@x.co", "activo": True,
+                 "cognito_username": "Colab01@Corria.app"}]
+    cog = [{"Username": "colab01@corria.app", "Enabled": True, "Attributes": []}]
+    rep = _auditar_usuarios(usuarios, cog)
+    assert rep["usuarios_ddb_sin_cognito"] == []
+    assert rep["cognito_sin_usuario_ddb"] == []
+
+
+def test_usuario_sin_ningun_cruce_posible_se_reporta():
+    usuarios = [{"id_usuario": "U-1", "rol": "admin", "empresa_id": "EMP-1", "email": "a@x.co", "activo": True}]
+    cog = [{"Username": "b@x.co", "Enabled": True, "Attributes": [{"Name": "email", "Value": "b@x.co"}]}]
+    rep = _auditar_usuarios(usuarios, cog)
+    assert len(rep["usuarios_ddb_sin_cognito"]) == 1
+    assert len(rep["cognito_sin_usuario_ddb"]) == 1

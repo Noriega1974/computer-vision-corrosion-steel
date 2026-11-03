@@ -41,6 +41,8 @@ DEFAULT_CONFIG = {
 }
 
 # Solo los campos que la auditoría usa (alias por si alguno es palabra reservada).
+# `activa` es la ortografía vigente; `activo` es la de registros legados, por eso
+# se aceptan ambas al decidir si una empresa está desactivada.
 CAMPOS_EMPRESAS = ("id_empresa", "activa", "activo", "logo_key")
 CAMPOS_BLOQUES = ("id_bloque", "empresa_id", "nombre", "portada_key")
 CAMPOS_MEDICIONES = (
@@ -81,7 +83,9 @@ def _listar_objetos_s3(s3_client, bucket: str) -> list[dict[str, Any]]:
             break
         token = resp.get("NextContinuationToken")
         if not token:
-            break
+            # A truncated page without a token would silently yield a partial
+            # listing and false "orphan" / "broken reference" findings.
+            raise RuntimeError("list_objects_v2 devolvió IsTruncated sin NextContinuationToken: listado de S3 incompleto")
         kwargs["ContinuationToken"] = token
     return objetos
 
@@ -231,20 +235,30 @@ def auditar_huerfanos(
 
         # Verificar vencimiento (`vence_en`) de colaborador activo
         activo_ddb = u.get("activo", True) is not False
-        vence_en = u.get("vence_en", "")
-        if es_colab and activo_ddb and vence_en:
-            try:
-                dt_exp = datetime.fromisoformat(vence_en.replace("Z", "+00:00"))
-                if dt_exp.tzinfo is None:
-                    dt_exp = dt_exp.replace(tzinfo=timezone.utc)
-                if dt_exp <= ahora_utc:
-                    usuarios_estado_discordante.append({
-                        "id_usuario": uid,
-                        "motivo": "colaborador_expirado_sigue_activo",
-                        "vence_en": vence_en,
-                    })
-            except ValueError:
-                pass
+        vence_en = u.get("vence_en")
+        if es_colab and activo_ddb and vence_en not in (None, ""):
+            dt_exp = None
+            if isinstance(vence_en, str):
+                try:
+                    dt_exp = datetime.fromisoformat(vence_en.replace("Z", "+00:00"))
+                    if dt_exp.tzinfo is None:
+                        dt_exp = dt_exp.replace(tzinfo=timezone.utc)
+                except ValueError:
+                    dt_exp = None
+            if dt_exp is None:
+                # Non-string (Decimal/number) or unparseable: the expiry cannot be
+                # evaluated, so surface it instead of crashing or skipping it.
+                usuarios_estado_discordante.append({
+                    "id_usuario": uid,
+                    "motivo": "vence_en_invalido",
+                    "vence_en": str(vence_en),
+                })
+            elif dt_exp <= ahora_utc:
+                usuarios_estado_discordante.append({
+                    "id_usuario": uid,
+                    "motivo": "colaborador_expirado_sigue_activo",
+                    "vence_en": vence_en,
+                })
 
         if cognito_client is not None and cfg.get("user_pool_id"):
             sub_ddb = u.get("cognito_sub", "")
@@ -385,6 +399,8 @@ def formatear_reporte_humano(reporte: dict[str, Any]) -> str:
         f"Usuarios Cognito: {r['total_usuarios_cognito']} | Objetos S3: {r['total_objetos_s3']}",
         f"Total hallazgos accionables: {r['total_hallazgos']} "
         f"(informativos, no cuentan: {r.get('total_informativos', 0)})",
+        "Nota: los marcadores de carpeta S3 y las subidas temporales (uploads/) son informativos "
+        "y NO entran en el total accionable.",
         "",
         f"- Bloques sin empresa válida: {len(reporte['bloques_sin_empresa'])}",
         f"- Mediciones sin bloque padre: {len(reporte['mediciones_sin_bloque'])}",
@@ -394,8 +410,8 @@ def formatear_reporte_humano(reporte: dict[str, Any]) -> str:
         f"- Usuarios en Cognito sin DDB: {len(reporte['cognito_sin_usuario_ddb'])}",
         f"- Usuarios con estado discordante: {len(reporte['usuarios_estado_discordante'])}",
         f"- Archivos S3 huérfanos: {len(reporte['s3_huerfanos']['archivos_huerfanos'])}",
-        f"- Marcadores de carpeta S3 (0 B): {len(reporte['s3_huerfanos']['marcadores_carpeta'])}",
-        f"- Subidas temporales en S3 (uploads/): {len(reporte['s3_huerfanos']['subidas_temporales'])}",
+        f"- [informativo] Marcadores de carpeta S3 (0 B): {len(reporte['s3_huerfanos']['marcadores_carpeta'])}",
+        f"- [informativo] Subidas temporales en S3 (uploads/): {len(reporte['s3_huerfanos']['subidas_temporales'])}",
         f"- Referencias S3 rotas en DynamoDB: {len(reporte['referencias_s3_rotas'])}",
         "",
         "Informativos (estado intencional, no son hallazgos):",
@@ -419,7 +435,7 @@ def main(argv: list[str] | None = None) -> int:
         description="Auditoría de solo lectura para detectar registros y objetos huérfanos en pf-corrosion."
     )
     parser.add_argument("--json", action="store_true", help="Imprime el reporte completo en formato JSON.")
-    parser.add_argument("--region", default=DEFAULT_CONFIG["region"], help="Región AWS (por defecto us-east-1).")
+    parser.add_argument("--region", default=DEFAULT_CONFIG["region"], help="Región AWS (por defecto la variable de entorno REGION, o us-east-1 si no está definida).")
     parser.add_argument("--profile", default=None, help="Perfil de AWS CLI a usar.")
     parser.add_argument("--expected-account", required=True, help="ID de cuenta AWS (12 dígitos) que se espera; si difiere, aborta.")
     parser.add_argument("--bucket", default="", help="Nombre del bucket S3 a auditar (o use --skip-s3).")
