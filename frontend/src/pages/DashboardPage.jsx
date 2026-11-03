@@ -125,7 +125,7 @@ export default function DashboardPage() {
         style={{
           display: 'flex',
           flexDirection: 'column',
-          gap: 10,
+          gap: 8,
           width: '100%',
           flex: 1,
           minHeight: 0,
@@ -198,12 +198,16 @@ export default function DashboardPage() {
             vacío sin usar). Ver KPIBar.jsx.
             2026-11-06: al mostrar etiqueta/valor/detalle apiladas (antes
             una sola línea) esta sección le quitó alto al mapa de abajo
-            -- padding más chico acá para devolverle ese alto.
+            -- padding más chico acá para devolverle ese alto. El usuario
+            pidió además agrandar el mapa todavía más (las métricas
+            meteorológicas de Detalle de ubicación se veían chicas) --
+            padding más chico otra vez acá y en otros puntos de esta
+            página (ver más abajo) para liberarle más alto a esa fila.
             ======================================================== */}
 
         <section
           className="dashboard-section"
-          style={{ padding: '12px 24px', flexShrink: 0 }}
+          style={{ padding: '10px 24px', flexShrink: 0 }}
         >
           <KPIBar />
         </section>
@@ -226,7 +230,7 @@ export default function DashboardPage() {
             gridTemplateColumns: 'minmax(250px, 0.85fr) minmax(0, 2.1fr) minmax(320px, 1.05fr)',
             gap: 10,
             flex: 1,
-            minHeight: 360,
+            minHeight: 420,
           }}
         >
           {/* ======================================================
@@ -388,7 +392,7 @@ export default function DashboardPage() {
             aria-expanded={showAnalisis}
             style={{
               width: '100%',
-              minHeight: 44,
+              minHeight: 38,
               padding: '0 20px',
               display: 'flex',
               alignItems: 'center',

@@ -108,30 +108,35 @@ export default function PlantDetail({ punto }) {
           )}
         </div>
 
-        {/* 2. Clima: icono + valor en una sola línea, etiqueta chiquita
-            debajo -- antes icono/valor/etiqueta eran 3 líneas apiladas por
-            dato y este bloque por sí solo ya ocupaba más de un tercio de
-            la tarjeta. */}
+        {/* 2. Clima: 2 columnas x 2 filas (como en la versión anterior de
+            la página, a pedido del usuario) en vez de las 4 en una sola
+            fila que tenía antes -- con 4 al hilo, en la columna más
+            angosta de las 3 del dashboard, el valor quedaba en 10px y no
+            se alcanzaba a leer bien. Mismo color y tipografía que el
+            valor/etiqueta de Indicadores (ver KPIBar.jsx). */}
         {stats.length > 0 && (
           <div style={{
-            background: 'var(--bg-card-solid)', borderRadius: 10, padding: '6px 4px',
+            background: 'var(--bg-card-solid)', borderRadius: 10, padding: '10px 8px',
             display: 'grid',
-            gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))`,
-            gap: 4,
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            gap: '8px 4px',
           }}>
             {stats.map(({ Icon, label, v }) => (
               <div key={label} style={{ textAlign: 'center', minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
-                  <Icon size={12} strokeWidth={2} style={{ color: 'var(--accent-blue)', flexShrink: 0 }} />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                  <Icon size={17} strokeWidth={2} style={{ color: 'var(--accent-blue)', flexShrink: 0 }} />
                   <span style={{
-                    fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 10,
+                    fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 19,
                     color: 'var(--text-primary)', lineHeight: 1.1,
                     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                   }}>
                     {v}
                   </span>
                 </div>
-                <div style={{ fontSize: 8, color: 'var(--text-secondary)', marginTop: 1, whiteSpace: 'nowrap' }}>
+                <div style={{
+                  fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', fontFamily: 'var(--font-ui)',
+                  textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 2, whiteSpace: 'nowrap',
+                }}>
                   {label}
                 </div>
               </div>
