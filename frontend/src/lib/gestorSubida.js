@@ -25,9 +25,12 @@ const RE_RED = /conectar|failed to fetch|networkerror|network|load failed|timeou
 const RE_LIMITE = /throttl|too many|rate exceeded|slow ?down|demasiadas solicitudes/i;
 
 // Classifies an upload failure:
-// - 'reintentar': the request was certainly not executed (or the step is idempotent); retry automatically.
-// - 'incierto':   POST /medicion may have stored the measurement (502/504/5xx/network); never auto-retry,
-//                 because each call creates a new measurement and the photo would be duplicated.
+// - 'reintentar': safe to repeat automatically. Before POST /medicion every step is idempotent.
+//                 POST /medicion is idempotent on the server for a given `imagen_key` (a marker
+//                 item returns the original measurement), so a lost response (network, 502/503/504)
+//                 or a 409 "still analyzing" can be repeated as long as the SAME key is reused.
+// - 'incierto':   POST /medicion failed with a plain 500 / other 5xx: the outcome is unknown and
+//                 the user should check the gallery before a manual retry.
 // - 'detener':    the session expired; stop dispatching the rest of the batch.
 // - 'definitivo': a client error (400, 403, 413...) that a retry would not fix.
 export function clasificarFallo(err) {
@@ -38,8 +41,8 @@ export function clasificarFallo(err) {
   const red = !status && RE_RED.test(mensaje);
 
   if (err?.fase === FASE_MEDICION) {
-    if (limitado) return 'reintentar';
-    // Any server error or missing response leaves the outcome unknown.
+    if (limitado || status === 409 || red || [502, 503, 504].includes(status)) return 'reintentar';
+    // Any other server error or unreadable response leaves the outcome unknown.
     if (status >= 500 || !status) return 'incierto';
     return 'definitivo';
   }
@@ -90,6 +93,8 @@ const esperarPorDefecto = (ms) => new Promise((r) => setTimeout(r, ms));
 // One failure never stops the batch, except a 'detener' failure (expired
 // session), which stops dispatching new items and leaves them in 'cola'.
 // `onItemUpdate(id, cambios)` receives row patches ('listo' / 'error' / retry flag).
+// `cancelado()` is polled between steps: once true no new item starts, no retry
+// is scheduled and no further patch is emitted (logout aborts the pool this way).
 export async function ejecutarColaConcurrencia({
   items,
   tarea,
@@ -98,6 +103,7 @@ export async function ejecutarColaConcurrencia({
   demoraBaseMs = DEMORA_BASE_MS,
   esperar = esperarPorDefecto,
   onItemUpdate,
+  cancelado = () => false,
 }) {
   const cola = Array.from(items ?? []);
   const total = cola.length;
@@ -109,8 +115,10 @@ export async function ejecutarColaConcurrencia({
 
   async function procesarUno(item, idx) {
     for (let intento = 1; ; intento += 1) {
+      if (cancelado()) return;
       try {
         const resultado = await tarea(item, { intento });
+        if (cancelado()) return;
         completadas += 1;
         resultados[idx] = { id: item.id, ok: true, resultado, intentos: intento };
         onItemUpdate?.(item.id, {
@@ -118,6 +126,7 @@ export async function ejecutarColaConcurrencia({
         });
         return;
       } catch (err) {
+        if (cancelado()) return;
         const tipo = clasificarFallo(err);
         if (tipo === 'reintentar' && intento <= maxReintentos) {
           onItemUpdate?.(item.id, { reintentando: true, intentos: intento });
@@ -126,7 +135,10 @@ export async function ejecutarColaConcurrencia({
           continue;
         }
         if (tipo === 'detener') detenido = true;
-        const incierto = tipo === 'incierto';
+        // Retries of POST /medicion ran out: the analysis may have finished server-side
+        // (only a 429 proves it did not run), so ask the user to check the gallery.
+        const incierto = tipo === 'incierto'
+          || (tipo === 'reintentar' && err?.fase === FASE_MEDICION && Number(err?.status) !== 429);
         const error = incierto ? MENSAJE_NO_CONFIRMADO : (err?.message || 'No se pudo analizar la foto.');
         fallidas += 1;
         resultados[idx] = { id: item.id, ok: false, error, incierto, tipo, intentos: intento };
@@ -139,7 +151,7 @@ export async function ejecutarColaConcurrencia({
   }
 
   async function trabajador() {
-    while (!detenido && siguiente < total) {
+    while (!detenido && !cancelado() && siguiente < total) {
       const idx = siguiente;
       siguiente += 1;
       await procesarUno(cola[idx], idx);
@@ -189,6 +201,16 @@ export function clasificarArchivos(files) {
 export function sugerirNombreLote(fechaISO) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fechaISO || '');
   return m ? `Lote ${m[3]}/${m[2]}/${m[1]}` : 'Lote';
+}
+
+// Progress ticks fire many times per second per upload; publishing each one
+// re-renders the whole queue. True when a tick for this row should be published:
+// first tick, last tick (100), or at least `intervalo` ms since the last one.
+export const INTERVALO_PROGRESO_MS = 200;
+
+export function debeActualizarProgreso(ultimoMs, ahoraMs, progreso, intervalo = INTERVALO_PROGRESO_MS) {
+  if (ultimoMs == null || progreso <= 0 || progreso >= 100) return true;
+  return ahoraMs - ultimoMs >= intervalo;
 }
 
 // Throttle for the global data refresh: true when enough time has passed.
