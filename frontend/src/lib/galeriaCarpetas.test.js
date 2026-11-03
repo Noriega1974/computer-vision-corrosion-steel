@@ -10,6 +10,7 @@ import {
   bloquesDeEmpresa,
   agruparPorLote,
   medicionesDeLote,
+  contarOcultasPorFiltro,
 } from './galeriaCarpetas.js';
 
 describe('galeriaCarpetas', () => {
@@ -181,5 +182,29 @@ describe('galeriaCarpetas', () => {
 
     const l2 = lotes.find((l) => l.id === 'L2');
     assert.equal(l2.estado, 'en_proceso');
+  });
+
+  it('el promedio del lote ignora las fotos que aún no tienen % (en proceso)', () => {
+    const { lotes } = agruparPorLote([
+      { id_medicion: '1', lote_id: 'L', area_corroida_pct: 10, timestamp: '2026-10-28T10:00:00Z' },
+      { id_medicion: '2', lote_id: 'L', area_corroida_pct: null, timestamp: '2026-10-28T10:01:00Z' },
+      { id_medicion: '3', lote_id: 'L', timestamp: '2026-10-28T10:02:00Z' },
+    ]);
+    assert.equal(lotes[0].promedioPct, 10);
+    assert.equal(lotes[0].estado, 'en_proceso');
+    const vacio = agruparPorLote([{ id_medicion: '9', lote_id: 'V', area_corroida_pct: null, timestamp: '2026-10-28T10:00:00Z' }]);
+    assert.equal(vacio.lotes[0].promedioPct, 0);
+  });
+
+  it('contarOcultasPorFiltro compara conjuntos del mismo tipo (solo fotos con punto)', () => {
+    const idPunto = (m) => m.id_punto;
+    const a = { id_medicion: 'a', id_punto: 'P' };
+    const b = { id_medicion: 'b', id_punto: 'P' };
+    const sinPunto = { id_medicion: 'c' };
+    const marcadas = new Set(['a', 'b', 'c']);
+    // b queda oculta por el filtro; la que no tiene punto nunca fue elegible y no cuenta.
+    assert.equal(contarOcultasPorFiltro([a, b], [a, sinPunto], marcadas, idPunto), 1);
+    assert.equal(contarOcultasPorFiltro([a, b], [a, b, sinPunto], marcadas, idPunto), 0);
+    assert.equal(contarOcultasPorFiltro([], [], marcadas, idPunto), 0);
   });
 });

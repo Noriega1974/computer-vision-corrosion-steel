@@ -179,6 +179,7 @@ export function agruparPorLote(mediciones = []) {
       let peorNivel = 0;
       let peorPct = 0;
       let sumaPct = 0;
+      let conPct = 0;   // photos with a measured %: the ones still processing (null) are not averaged as 0
       let todasAnalizadas = ordenadas.length > 0;
 
       for (let i = 0; i < ordenadas.length; i += 1) {
@@ -187,7 +188,10 @@ export function agruparPorLote(mediciones = []) {
         const p = pctNum(item);
         if (i === 0 || niv > peorNivel) peorNivel = niv;
         if (i === 0 || p > peorPct) peorPct = p;
-        sumaPct += p;
+        if (item?.area_corroida_pct !== undefined && item?.area_corroida_pct !== null && Number.isFinite(Number(item.area_corroida_pct))) {
+          sumaPct += p;
+          conPct += 1;
+        }
         if (
           item?.area_corroida_pct === undefined ||
           item?.area_corroida_pct === null ||
@@ -198,8 +202,7 @@ export function agruparPorLote(mediciones = []) {
         }
       }
 
-      const promedioPct =
-        ordenadas.length > 0 ? Math.round((sumaPct / ordenadas.length) * 10) / 10 : 0;
+      const promedioPct = conPct > 0 ? Math.round((sumaPct / conPct) * 10) / 10 : 0;
 
       return {
         id: g.id,
@@ -225,4 +228,12 @@ export function agruparPorLote(mediciones = []) {
 export function medicionesDeLote(mediciones = [], loteId) {
   if (!loteId) return [];
   return agruparPorLote(mediciones).lotes.find(l => l.id === loteId)?.mediciones ?? [];
+}
+
+// Marked photos of a whole batch that the current filters hide. Both sides count
+// only photos that can be acted on (`elegible`), so a photo without a point never
+// shows up as "hidden" just because it was never selectable.
+export function contarOcultasPorFiltro(elegidas = [], visibles = [], marcadas = new Set(), elegible = () => true) {
+  const visiblesMarcadas = visibles.filter(m => elegible(m) && marcadas.has(m.id_medicion)).length;
+  return Math.max(0, elegidas.filter(m => elegible(m)).length - visiblesMarcadas);
 }
