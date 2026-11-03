@@ -11,7 +11,7 @@ import { NIVELES, nivelColor, nivelLabel } from '../lib/statusUtils';
 import NivelInfo from './NivelInfo';
 import DatePicker from './DatePicker';
 import { inicioDiaLocal, finDiaLocal, hoyLocalISO, fechaUltimaMedicionISO } from '../lib/fechas';
-import { agruparPorLote, formatearConteoMediciones, medicionesDeLote } from '../lib/galeriaCarpetas';
+import { agruparPorLote, contarOcultasPorFiltro, formatearConteoMediciones, medicionesDeLote } from '../lib/galeriaCarpetas';
 import TarjetaLote, { FichaDetalleLote } from './TarjetaLote';
 
 const ORDENES = [
@@ -141,7 +141,7 @@ export default function GaleriaFotos({
   const elegibles = universo.filter(m => idPuntoDe(m));
   const elegidas = elegibles.filter(m => marcadas.has(m.id_medicion));
   const ocultasPorFiltro = seleccionLoteCompleto && loteAbierto
-    ? Math.max(0, elegidas.length - visibles.filter(m => marcadas.has(m.id_medicion)).length)
+    ? contarOcultasPorFiltro(elegidas, visibles, marcadas, idPuntoDe)
     : 0;
 
   const salirDeSeleccion = () => {
