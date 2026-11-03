@@ -137,3 +137,10 @@ export function agruparPorLote(mediciones = []) {
 
   return { lotes, sueltas };
 }
+
+// Todas las mediciones de un lote tomadas de la lista SIN filtrar (los filtros de
+// nivel o fechas de la galería solo ocultan, no cambian qué contiene el lote).
+export function medicionesDeLote(mediciones = [], loteId) {
+  if (!loteId) return [];
+  return agruparPorLote(mediciones).lotes.find(l => l.id === loteId)?.mediciones ?? [];
+}

@@ -11,7 +11,7 @@ import { NIVELES, nivelColor, nivelLabel } from '../lib/statusUtils';
 import NivelInfo from './NivelInfo';
 import DatePicker from './DatePicker';
 import { inicioDiaLocal, finDiaLocal, hoyLocalISO, fechaUltimaMedicionISO } from '../lib/fechas';
-import { agruparPorLote, iniciales } from '../lib/galeriaCarpetas';
+import { agruparPorLote, iniciales, medicionesDeLote } from '../lib/galeriaCarpetas';
 import { formatFecha } from '../utils/dateFormat';
 import { CARD_TITULO_STYLE, CARD_SUBTITULO_STYLE, CARD_PILDORA_STYLE } from './cardTextStyles';
 
@@ -57,8 +57,10 @@ const etiquetaStyle = {
 //  - toolbarTarget: nodo DOM opcional en la fila del buscador para alinear
 //    conteo, orden y botón "Seleccionar" en una sola barra.
 //  - onSeleccionChange: avisa a la página cuando entra/sale del modo selección.
+//  - listaIncompleta: el punto llegó al tope de fotos que devuelve la API, así que
+//    no se puede saber qué contiene un lote completo: se bloquean las acciones de lote.
 export default function GaleriaFotos({
-  mediciones, contexto, volverA, puntoActual, toolbarTarget, onSeleccionChange,
+  mediciones, contexto, volverA, puntoActual, toolbarTarget, onSeleccionChange, listaIncompleta = false,
 }) {
   const location = useLocation();
   const { user } = useAuth();
@@ -67,6 +69,8 @@ export default function GaleriaFotos({
   const [seleccionando, setSeleccionando] = useState(false);
   const [marcadas, setMarcadas] = useState(() => new Set());
   const [dialogo, setDialogo] = useState(null); // 'mover' | 'eliminar'
+  // Las acciones de lote actúan sobre TODO el lote, no solo sobre lo que dejan ver los filtros.
+  const [seleccionLoteCompleto, setSeleccionLoteCompleto] = useState(false);
   const [resumen, setResumen] = useState(null); // { texto, errores: [...] }
   // Al volver desde la ficha de una medición, los filtros llegan por el state
   // de navegación (ver handleBack en MedicionDetailPage). Se leen una sola vez.
@@ -124,12 +128,31 @@ export default function GaleriaFotos({
     ? [...loteAbierto.mediciones].sort(COMPARADORES[orden])
     : (lotes.length > 0 && !mostrarTodas ? sueltas : filtradas);
 
-  // Solo cuentan las marcadas que siguen visibles tras los filtros: nunca las
-  // fotos escondidas dentro de una carpeta de lote que no está abierta.
-  const elegibles = visibles.filter(m => idPuntoDe(m));
+  // Lote abierto con TODAS sus fotos, sin filtros de nivel/fechas (solo datos del punto).
+  const loteCompleto = loteAbierto ? medicionesDeLote(mediciones, loteAbierto.id) : [];
+  const accionesLoteBloqueadas = listaIncompleta;
+  const tituloAccionLote = accionesLoteBloqueadas
+    ? 'Este punto tiene más fotos de las que se pueden cargar a la vez, así que no se puede garantizar el lote completo.'
+    : undefined;
+
+  // Por defecto solo cuentan las marcadas que siguen visibles tras los filtros:
+  // nunca las fotos escondidas dentro de una carpeta de lote que no está abierta.
+  // Con una acción de lote, el universo es el lote entero aunque los filtros oculten parte.
+  const universo = seleccionLoteCompleto && loteAbierto ? loteCompleto : visibles;
+  const elegibles = universo.filter(m => idPuntoDe(m));
   const elegidas = elegibles.filter(m => marcadas.has(m.id_medicion));
 
-  const salirDeSeleccion = () => { setSeleccionando(false); setMarcadas(new Set()); setDialogo(null); };
+  const salirDeSeleccion = () => {
+    setSeleccionando(false); setSeleccionLoteCompleto(false); setMarcadas(new Set()); setDialogo(null);
+  };
+  const accionDeLote = (dialogoInicial) => {
+    const idsLote = new Set(loteCompleto.filter(m => idPuntoDe(m)).map(m => m.id_medicion));
+    setSeleccionLoteCompleto(true);
+    setSeleccionando(true);
+    setMarcadas(idsLote);
+    setResumen(null);
+    setDialogo(dialogoInicial);
+  };
   const alternar = (id) => setMarcadas(prev => {
     const sig = new Set(prev);
     if (sig.has(id)) sig.delete(id); else sig.add(id);
@@ -177,9 +200,9 @@ export default function GaleriaFotos({
           {ORDENES.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
         </select>
       </div>
-      {puedeGestionar && !seleccionando && filtradas.length > 0 && (
+      {puedeGestionar && !seleccionando && elegibles.length > 0 && (
         <button
-          type="button" onClick={() => { setSeleccionando(true); setResumen(null); }}
+          type="button" onClick={() => { setSeleccionLoteCompleto(false); setSeleccionando(true); setResumen(null); }}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 11px', height: 32,
             background: 'var(--bg-card-solid)', border: '1px solid var(--border-strong)', borderRadius: 7,
@@ -338,16 +361,14 @@ export default function GaleriaFotos({
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <button
                     type="button"
-                    onClick={() => {
-                      const idsLote = new Set(loteAbierto.mediciones.filter(m => idPuntoDe(m)).map(m => m.id_medicion));
-                      setSeleccionando(true);
-                      setMarcadas(idsLote);
-                      setResumen(null);
-                    }}
+                    onClick={() => accionDeLote(null)}
+                    disabled={accionesLoteBloqueadas}
+                    title={tituloAccionLote}
                     style={{
+                      opacity: accionesLoteBloqueadas ? 0.5 : 1,
                       display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
                       background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 7,
-                      cursor: 'pointer', color: 'var(--text-primary)',
+                      cursor: accionesLoteBloqueadas ? 'not-allowed' : 'pointer', color: 'var(--text-primary)',
                       fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
                     }}
                   >
@@ -356,16 +377,14 @@ export default function GaleriaFotos({
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      const idsLote = new Set(loteAbierto.mediciones.filter(m => idPuntoDe(m)).map(m => m.id_medicion));
-                      setSeleccionando(true);
-                      setMarcadas(idsLote);
-                      setDialogo('mover');
-                    }}
+                    onClick={() => accionDeLote('mover')}
+                    disabled={accionesLoteBloqueadas}
+                    title={tituloAccionLote}
                     style={{
+                      opacity: accionesLoteBloqueadas ? 0.5 : 1,
                       display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
                       background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 7,
-                      cursor: 'pointer', color: 'var(--text-secondary)',
+                      cursor: accionesLoteBloqueadas ? 'not-allowed' : 'pointer', color: 'var(--text-secondary)',
                       fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
                     }}
                   >
@@ -374,16 +393,14 @@ export default function GaleriaFotos({
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      const idsLote = new Set(loteAbierto.mediciones.filter(m => idPuntoDe(m)).map(m => m.id_medicion));
-                      setSeleccionando(true);
-                      setMarcadas(idsLote);
-                      setDialogo('eliminar');
-                    }}
+                    onClick={() => accionDeLote('eliminar')}
+                    disabled={accionesLoteBloqueadas}
+                    title={tituloAccionLote}
                     style={{
+                      opacity: accionesLoteBloqueadas ? 0.5 : 1,
                       display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
                       background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.3)', borderRadius: 7,
-                      cursor: 'pointer', color: 'var(--accent-red)',
+                      cursor: accionesLoteBloqueadas ? 'not-allowed' : 'pointer', color: 'var(--accent-red)',
                       fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
                     }}
                   >

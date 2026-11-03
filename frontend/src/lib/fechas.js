@@ -331,3 +331,11 @@ export function etiquetaFiltroFechas(desde, hasta, { ahora = new Date(), vacio =
   const txt = formatearFechaAmigable(desde, { ahora });
   return desde === hoy ? `Hoy · ${txt}` : txt;
 }
+
+// ¿Existe un mes posterior al que se está viendo que contenga días elegibles?
+// `vista` = { anio, mes } con mes 0-11; `tope` = último día elegible (ISO).
+export function hayMesSiguiente(vista, tope) {
+  if (!esFechaISOValida(tope)) return true;
+  const [topeAnio, topeMes] = tope.split('-').map(Number);
+  return vista.anio < topeAnio || (vista.anio === topeAnio && vista.mes < topeMes - 1);
+}

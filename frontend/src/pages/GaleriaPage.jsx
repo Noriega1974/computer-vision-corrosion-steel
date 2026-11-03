@@ -290,7 +290,11 @@ export default function GaleriaPage() {
     />;
   } else if (fallo && sinDatos) {
     contenido = <ErrorEstado titulo="No se pudieron cargar las mediciones." detalle={fallo} onRetry={enPunto ? refetchPunto : refetch} />;
-  } else if (!enPunto && mediciones.length === 0 && carpetasPunto.length === 0 && !cargandoBloques) {
+  } else if (!enPunto && !cargandoBloques && (
+    (mediciones.length === 0 && carpetasPunto.length === 0)
+    // Super admin sin fotos: el nivel de empresas saldria vacio (hay puntos o empresas, pero ninguna foto).
+    || (nivelVista === 'empresas' && itemsEmpresa.length === 0)
+  )) {
     contenido = (
       <EstadoVacio
         icono={IconoSinImagen} titulo="Sin mediciones todavía"
@@ -362,6 +366,7 @@ export default function GaleriaPage() {
           mediciones={fotosDelPunto}
           volverA={volverA}
           puntoActual={idPuntoApi}
+          listaIncompleta={!!idPuntoApi && fotosDelPunto.length >= LIMITE_FOTOS_PUNTO}
           toolbarTarget={toolbarRight}
           onSeleccionChange={setSeleccionando}
         />

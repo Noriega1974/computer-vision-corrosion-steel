@@ -7,6 +7,7 @@ import {
   carpetasDePuntos,
   bloquesDeEmpresa,
   agruparPorLote,
+  medicionesDeLote,
 } from './galeriaCarpetas.js';
 
 describe('galeriaCarpetas', () => {
@@ -105,6 +106,19 @@ describe('galeriaCarpetas', () => {
     ]);
     assert.equal(lotes[0].nombre, 'Revisión');
     assert.equal(lotes[0].total, 2);
+  });
+
+  it('medicionesDeLote devuelve el lote entero de la lista sin filtrar', () => {
+    const todas = [
+      { id_medicion: 'a', lote_id: 'LOT-1', nivel_corrosion: 1, timestamp: '2026-10-01T12:00:00Z' },
+      { id_medicion: 'b', lote_id: 'LOT-1', nivel_corrosion: 3, timestamp: '2026-10-01T12:00:01Z' },
+      { id_medicion: 'c', lote_id: 'LOT-2', timestamp: '2026-10-01T12:00:02Z' },
+      { id_medicion: 'd', timestamp: '2026-10-01T12:00:03Z' },
+    ];
+    // A level filter would leave only 'b' visible, but the lote still has both photos.
+    assert.deepEqual(medicionesDeLote(todas, 'LOT-1').map(m => m.id_medicion).sort(), ['a', 'b']);
+    assert.deepEqual(medicionesDeLote(todas, 'NO-EXISTE'), []);
+    assert.deepEqual(medicionesDeLote(todas, null), []);
   });
 
   it('bloquesDeEmpresa filtra por empresa y trata "sin zona" como bloques sin empresa', () => {

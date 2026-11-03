@@ -16,6 +16,7 @@ import {
   moverFocoGrilla,
   aplicarClickRango,
   rangoAConfirmar,
+  hayMesSiguiente,
   etiquetaFiltroFechas,
 } from '../lib/fechas';
 
@@ -49,7 +50,7 @@ export default function DatePicker({
   // Fecha ISO (p. ej. la última medición) donde abre el calendario si no hay valor elegido
   mesInicial = '',
   ctaLabel = 'Filtrar fotos',
-  clearLabel = 'Limpiar filtro',
+  clearLabel,
   futureTitle = 'No puedes elegir una fecha futura',
   align = 'right',
   id,
@@ -57,6 +58,9 @@ export default function DatePicker({
   const hoyISO = hoyLocalISO();
   const tope = esFechaISOValida(maxISO) && maxISO < hoyISO ? maxISO : hoyISO;
   const esSoloUnico = !allowModeSwitch && initialMode === 'single';
+  // Single-only mode (e.g. upload date) can never be empty: clearing resets to the latest allowed day.
+  const etiquetaLimpiar = clearLabel
+    ?? (esSoloUnico ? (tope === hoyISO ? 'Restablecer a hoy' : 'Restablecer a la última fecha') : 'Limpiar filtro');
 
   const rootRef = useRef(null);
   const triggerRef = useRef(null);
@@ -151,14 +155,14 @@ export default function DatePicker({
     () =>
       construirGrillaMes(vistaMes.anio, vistaMes.mes, {
         hoyISO,
-        maxISO,
+        maxISO: tope,
         modo,
         fechaUnica: draftUnica,
         desde: draftDesde,
         hasta: draftHasta,
         hoverFecha,
       }),
-    [vistaMes.anio, vistaMes.mes, hoyISO, maxISO, modo, draftUnica, draftDesde, draftHasta, hoverFecha],
+    [vistaMes.anio, vistaMes.mes, hoyISO, tope, modo, draftUnica, draftDesde, draftHasta, hoverFecha],
   );
 
   const semanas = useMemo(() => {
@@ -195,11 +199,7 @@ export default function DatePicker({
   }, [focoISO, vistaMes]);
 
   // No permitir navegar a meses íntegramente posteriores a maxISO
-  const puedeMesSiguiente = useMemo(() => {
-    if (!esFechaISOValida(maxISO)) return true;
-    const [maxY, maxM] = maxISO.split('-').map(Number);
-    return vistaMes.anio < maxY || (vistaMes.anio === maxY && vistaMes.mes < maxM - 1);
-  }, [vistaMes, maxISO]);
+  const puedeMesSiguiente = hayMesSiguiente(vistaMes, tope);
 
   const cambiarMes = (delta) => {
     setVistaMes((prev) => {
@@ -246,7 +246,7 @@ export default function DatePicker({
   const alTeclaGrilla = (e) => {
     const iso = e.target?.dataset?.iso;
     if (!iso) return;
-    const destino = moverFocoGrilla(iso, e.key, { maxISO });
+    const destino = moverFocoGrilla(iso, e.key, { maxISO: tope });
     if (!destino) return;
     e.preventDefault();
     solicitarFoco.current = true;
@@ -358,14 +358,17 @@ export default function DatePicker({
       </button>
 
       {abierto && (
+        <>
+        {/* Fondo de la hoja inferior (solo pantallas angostas): hermano del popover, no hijo,
+            para quedar detrás de la hoja sin oscurecerla. */}
+        <div className="dp-backdrop" onClick={() => cerrar()} aria-hidden="true" />
         <div
           id={popoverId}
           className={`dp-popover ${align === 'left' ? 'dp-popover--left' : ''}`}
           role="dialog"
           aria-label="Selector de fecha"
         >
-          {/* Fondo y cierre visibles solo en pantallas angostas (hoja inferior) */}
-          <div className="dp-backdrop" onClick={() => cerrar()} aria-hidden="true" />
+          {/* Cierre visible solo en pantallas angostas (hoja inferior) */}
           <button type="button" className="dp-close" aria-label="Cerrar selector de fecha" onClick={() => cerrar()}>
             Cerrar
           </button>
@@ -547,7 +550,7 @@ export default function DatePicker({
           {/* Acciones: el día único ya se confirmó al elegirlo, solo el rango necesita Aplicar */}
           <div className="dp-footer">
             <button type="button" className="dp-btn-clear" onClick={limpiarSeleccion}>
-              {clearLabel}
+              {etiquetaLimpiar}
             </button>
             {modo === 'range' && (
               <button
@@ -561,6 +564,7 @@ export default function DatePicker({
             )}
           </div>
         </div>
+        </>
       )}
     </div>
   );

@@ -18,6 +18,7 @@ import {
   aplicarClickRango,
   rangoAConfirmar,
   etiquetaFiltroFechas,
+  hayMesSiguiente,
 } from './fechas.js';
 
 // Pin the zone BEFORE any Date is built: the "after 19:00 in Colombia" case only
@@ -225,5 +226,27 @@ describe('fechas.js — utilidades de calendario y validación local', () => {
     assert.equal(etiquetaFiltroFechas('', '2026-11-13', { ahora: ref }), 'Hasta Vie 13 nov');
     assert.equal(etiquetaFiltroFechas('2026-11-02', '2026-11-02', { ahora: ref }), 'Hoy · Lun 2 nov');
     assert.equal(etiquetaFiltroFechas('2026-11-13', '2026-11-15', { ahora: ref }), 'Vie 13 nov → Dom 15 nov');
+  });
+});
+
+describe('hayMesSiguiente', () => {
+  it('no deja pasar del mes del tope (fecha máxima anterior a hoy)', () => {
+    assert.equal(hayMesSiguiente({ anio: 2026, mes: 8 }, '2026-10-15'), true); // septiembre -> octubre
+    assert.equal(hayMesSiguiente({ anio: 2026, mes: 9 }, '2026-10-15'), false); // octubre es el último
+    assert.equal(hayMesSiguiente({ anio: 2027, mes: 0 }, '2026-10-15'), false);
+    assert.equal(hayMesSiguiente({ anio: 2025, mes: 11 }, '2026-01-02'), true); // cruce de año
+  });
+
+  it('el tope tambien acota el foco por teclado', () => {
+    assert.equal(moverFocoGrilla('2026-10-14', 'ArrowDown', { maxISO: '2026-10-15' }), '2026-10-15');
+    assert.equal(moverFocoGrilla('2026-10-14', 'PageDown', { maxISO: '2026-10-15' }), '2026-10-15');
+  });
+
+  it('la grilla deshabilita los dias posteriores al tope', () => {
+    const celdas = construirGrillaMes(2026, 9, { hoyISO: '2026-10-31', maxISO: '2026-10-15' });
+    const oct16 = celdas.find((c) => c.iso === '2026-10-16');
+    const oct15 = celdas.find((c) => c.iso === '2026-10-15');
+    assert.equal(oct16.deshabilitada, true);
+    assert.equal(oct15.deshabilitada, false);
   });
 });
