@@ -147,6 +147,25 @@ const labelStyle = {
   color: 'var(--text-faint)', marginBottom: 5,
 };
 
+// Required affiliation selector shared by the user and collaborator forms
+// (super_admin only). Deactivated companies are not offered: the backend
+// rejects them with 400.
+function CampoAfiliacion({ id, value, onChange, empresas }) {
+  return (
+    <div style={{ marginBottom: 'var(--space-3-5)' }}>
+      <label htmlFor={id} style={labelStyle}>
+        Afiliación *
+      </label>
+      <select id={id} name="empresa_id" value={value} onChange={onChange} required style={inputStyle}>
+        <option value="">Selecciona una afiliación…</option>
+        {(empresas ?? []).filter(e => e.activa !== false).map(e => (
+          <option key={e.id_empresa} value={e.id_empresa}>{e.nombre}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 // ─── Formulario de usuario ────────────────────────────────────────────────────
 // `rolesPermitidos` limita el selector de rol, al crear y al editar (según
 // CREATABLE_ROLES del usuario logueado; el backend aplica el mismo límite en
@@ -258,21 +277,7 @@ function UsuarioForm({ initial = {}, isEdit, onSubmit, saving, error, rolesPermi
         </select>
       </div>
       {mostrarEmpresa && (
-        <div style={{ marginBottom: 'var(--space-3-5)' }}>
-          <label htmlFor="usuario-empresa" style={labelStyle}>
-            Afiliación *
-          </label>
-          <select
-            id="usuario-empresa" name="empresa_id"
-            value={form.empresa_id} onChange={set('empresa_id')}
-            required style={inputStyle}
-          >
-            <option value="">Selecciona una afiliación…</option>
-            {(empresasDisponibles ?? []).map(e => (
-              <option key={e.id_empresa} value={e.id_empresa}>{e.nombre}</option>
-            ))}
-          </select>
-        </div>
+        <CampoAfiliacion id="usuario-empresa" value={form.empresa_id} onChange={set('empresa_id')} empresas={empresasDisponibles} />
       )}
       {(validationError || error) && (
         <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, color: '#dc2626', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3-5)', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -317,22 +322,29 @@ const ROLES_COLABORADOR = [
 
 // `rolesPermitidos` = roles que quien crea puede asignar (CREATABLE_ROLES): un
 // administrador no debe ofrecer un colaborador de rango igual al suyo.
-function ColaboradorForm({ onSubmit, saving, error, rolesPermitidos }) {
+// `requiereEmpresa`/`empresasDisponibles`: only super_admin has no company of its
+// own, so it must pick one (POST /colaborador answers 400 otherwise). An admin's
+// collaborator inherits the admin's company on the backend.
+function ColaboradorForm({ onSubmit, saving, error, rolesPermitidos, empresasDisponibles, requiereEmpresa }) {
   const opcionesRol = ROLES_COLABORADOR.filter(r => (rolesPermitidos ?? []).includes(r.value));
   const [form, setForm] = useState({
-    nickname: '', password: '', dias: 7,
+    nickname: '', password: '', dias: 7, empresa_id: '',
     rol: opcionesRol.some(r => r.value === 'tecnico') ? 'tecnico' : (opcionesRol[0]?.value ?? 'cliente'),
   });
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
 
   return (
-    <form onSubmit={(e) => { e.preventDefault(); onSubmit({ ...form, dias: Number(form.dias) }); }}>
+    <form onSubmit={(e) => {
+      e.preventDefault();
+      const { empresa_id, ...resto } = form;
+      onSubmit({ ...resto, dias: Number(form.dias), ...(requiereEmpresa && { empresa_id }) });
+    }}>
       <div style={{ padding: '10px 14px', background: 'rgba(156,54,16,0.08)', border: '1px solid rgba(156,54,16,0.2)', borderRadius: 8, marginBottom: 18, fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
         El acceso del colaborador se revoca automáticamente al vencer el plazo.
       </div>
       <div style={{ marginBottom: 'var(--space-3-5)' }}>
         <label htmlFor="colaborador-nickname" style={labelStyle}>
-          Nickname *
+          Usuario (alias) *
         </label>
         <input
           id="colaborador-nickname" name="nickname" autoComplete="off"
@@ -351,6 +363,9 @@ function ColaboradorForm({ onSubmit, saving, error, rolesPermitidos }) {
           ))}
         </select>
       </div>
+      {requiereEmpresa && (
+        <CampoAfiliacion id="colaborador-empresa" value={form.empresa_id} onChange={set('empresa_id')} empresas={empresasDisponibles} />
+      )}
       <div style={{ marginBottom: 'var(--space-3-5)' }}>
         <label htmlFor="colaborador-password" style={labelStyle}>
           Contraseña *
@@ -430,9 +445,9 @@ export default function UsersPage() {
     [empresas]
   );
   const nombreAfiliacionDe = (u) => {
-    if (!u.empresa_id) return '—';
+    if (!u.empresa_id) return 'Todas';
     if (miRol === 'super_admin') return empresaNombrePorId[u.empresa_id] ?? u.empresa_id;
-    return miPerfil?.empresa_nombre ?? '—';
+    return miPerfil?.empresa_nombre ?? 'Sin dato';
   };
 
   const [search, setSearch] = useState('');
@@ -618,8 +633,10 @@ export default function UsersPage() {
         {/* tecnico no lista usuarios (backend responde 403 a GET /usuarios) --
             solo puede dar de alta un cliente con el botón de arriba. */}
         {!isAdmin && (
-          <div style={{ padding: '10px 14px', background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>
-            Tu rol no tiene acceso al listado de usuarios.
+          <div style={{ padding: '12px 16px', background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-secondary)', fontSize: 'var(--text-xs)', lineHeight: 1.5 }}>
+            {puedeCrear
+              ? 'Desde aquí puedes crear cuentas de tipo Cliente para tu afiliación usando el botón «Nuevo usuario». El listado general está reservado a administradores.'
+              : 'Tu rol no tiene acceso al listado de usuarios.'}
           </div>
         )}
 
@@ -680,7 +697,7 @@ export default function UsersPage() {
                         <tr key={u.id_usuario ?? u.email} style={{ borderBottom: '1px solid var(--border)' }}>
                           <td style={{ padding: '10px 14px' }}>
                             <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                              {esColab ? u.nickname : (u.nombre ?? u.name ?? '—')}
+                              {esColab ? u.nickname : (u.nombre ?? u.name ?? 'Sin nombre')}
                             </div>
                             {esColab && (
                               <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', marginTop: 2, fontFamily: 'var(--font-data)' }}>
@@ -784,7 +801,10 @@ export default function UsersPage() {
       {/* ── Modal: Añadir colaborador ── */}
       {showColaborador && (
         <FormModal title="Añadir colaborador temporal" onClose={() => setShowColaborador(false)} saving={mutating}>
-          <ColaboradorForm onSubmit={handleCrearColaborador} saving={mutating} error={formError} rolesPermitidos={rolesCreables} />
+          <ColaboradorForm
+            onSubmit={handleCrearColaborador} saving={mutating} error={formError} rolesPermitidos={rolesCreables}
+            empresasDisponibles={empresas} requiereEmpresa={esSuperAdmin}
+          />
         </FormModal>
       )}
 

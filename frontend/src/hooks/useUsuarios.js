@@ -113,6 +113,8 @@ export function useGestionUsuarios() {
     }
   }, [refetch]);
 
+  // payload: { nickname, password, dias, rol, empresa_id? } -- empresa_id is required
+  // when the caller is a super_admin; an admin's collaborator inherits their company.
   const crearColaborador = useCallback(async (payload) => {
     setMutating(true);
     setMutError(null);
