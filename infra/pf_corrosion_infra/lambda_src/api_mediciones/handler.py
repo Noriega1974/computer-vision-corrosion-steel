@@ -20,7 +20,10 @@ Rutas:
                                       ?empresa_id=EMP-... (opcional, solo lo respeta super_admin);
                                       solo lectura, pagina todo (sin el tope de 1000)
   GET    /mediciones/recientes     → últimas N mediciones, filtrado por empresa (cualquier rol)
-                                      ?limit=N (def. 20, máx. 1000), ?resumen=1 quita campos pesados
+                                      ?limit=N (def. 20, máx. 1000), ?resumen=1 quita campos pesados,
+                                      ?desde=YYYY-MM-DD&hasta=YYYY-MM-DD acota por día local (UTC-5)
+                                      sobre el GSI; con rango el límite por defecto es 1000 y la
+                                      respuesta trae `truncado`. `limit`/`limite` no numérico → 400
   DELETE /mediciones/{id_punto}    → elimina una medición puntual (super_admin/admin/tecnico)
                                       requiere querystring ?id_medicion=MED-...
   POST   /mediciones/lote/eliminar → elimina varias (máx. 100), body {"items":[{id_punto,id_medicion}]}
@@ -278,6 +281,20 @@ def _dia_local(timestamp) -> str | None:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(TZ_LOCAL).date().isoformat()
+
+
+def _limite(valor, defecto: int, maximo: int) -> int | None:
+    """Entero acotado a 1..maximo; `defecto` si falta; None si no es numérico."""
+    if valor is None or valor == "":
+        return defecto
+    try:
+        return max(1, min(int(str(valor).strip()), maximo))
+    except ValueError:
+        return None
+
+
+ERROR_LIMITE = {"error": "El límite debe ser un número entero. Corrígelo e inténtalo de nuevo"}
+ERROR_RANGO = {"error": "El rango de fechas no es válido. Elige fechas del calendario e inténtalo de nuevo"}
 
 
 def _numero(valor) -> float | None:
@@ -690,15 +707,29 @@ def lambda_handler(event: dict, context) -> dict:
         # ── GET /mediciones/recientes ────────────────────────────────────────
         if resource == "/mediciones/recientes":
             qp = event.get("queryStringParameters") or {}
-            limite = min(int(qp.get("limit", 20)), LIMITE_RECIENTES_MAX)
+            desde, hasta = qp.get("desde"), qp.get("hasta")
+            con_rango = bool(desde or hasta)
+            # Con rango el límite por defecto es el máximo (se avisa con `truncado`).
+            limite = _limite(qp.get("limit"), LIMITE_RECIENTES_MAX if con_rango else 20, LIMITE_RECIENTES_MAX)
+            if limite is None:
+                return _respuesta(400, ERROR_LIMITE)
+            condicion = Key("tipo_registro").eq("medicion")
+            if con_rango:
+                dia_desde = _fecha_estricta(desde) if desde else None
+                dia_hasta = _fecha_estricta(hasta) if hasta else None
+                if (desde and not dia_desde) or (hasta and not dia_hasta) or (dia_desde and dia_hasta and dia_desde > dia_hasta):
+                    return _respuesta(400, ERROR_RANGO)
+                inferior = _inicio_dia_utc(dia_desde) if dia_desde else ""
+                superior = _fin_dia_utc(dia_hasta) if dia_hasta else "~"
+                condicion = condicion & Key("timestamp").between(inferior, superior)
             creador = _usuario_actual(event)
 
             # GSI tipo-timestamp-index: PK="medicion" constante, SK=timestamp DESC
             kwargs = dict(
                 IndexName="tipo-timestamp-index",
-                KeyConditionExpression=Key("tipo_registro").eq("medicion"),
+                KeyConditionExpression=condicion,
                 ScanIndexForward=False,   # más reciente primero
-                Limit=limite,
+                Limit=limite + 1 if con_rango else limite,
             )
             if not creador or creador.get("rol") != "super_admin":
                 # Ver datos de otra empresa es exclusivo de super_admin.
@@ -706,35 +737,42 @@ def lambda_handler(event: dict, context) -> dict:
                 kwargs["FilterExpression"] = Attr("empresa_id").eq(empresa_id)
             if qp.get("resumen") == "1":
                 kwargs = _proyeccion_liviana(kwargs)
-            # Limit cuenta ítems antes del filtro: se pagina hasta juntar `limite`.
-            items = _consultar(kwargs, limite)
+            # Limit cuenta ítems antes del filtro: se pagina hasta juntar `limite`
+            # (con rango, uno más para saber si hay más que el límite).
+            items = _consultar(kwargs, limite + 1 if con_rango else limite)
+            truncado = con_rango and len(items) > limite
+            items = items[:limite]
             if qp.get("resumen") == "1":
                 _sin_campos_pesados(items)
             items = _agregar_url_imagen(items)
-            return _respuesta(200, {
+            cuerpo = {
                 "total": len(items),
                 "mediciones": items,
-            })
+            }
+            if con_rango:
+                cuerpo["truncado"] = truncado
+            return _respuesta(200, cuerpo)
 
         # ── GET /mediciones/{id_punto} ───────────────────────────────────────
         elif id_punto:
             qp = event.get("queryStringParameters") or {}
-            limite = min(int(qp.get("limite", 50)), LIMITE_PUNTO_MAX)
+            desde, hasta = qp.get("desde"), qp.get("hasta")
+            con_rango = bool(desde or hasta)
+            # Con rango el límite por defecto es el máximo y se avisa si hay más.
+            limite = _limite(qp.get("limite"), LIMITE_PUNTO_MAX if con_rango else 50, LIMITE_PUNTO_MAX)
+            if limite is None:
+                return _respuesta(400, ERROR_LIMITE)
             creador = _usuario_actual(event)
             # ?id_medicion=X: la página de detalle pide UNA medición (con todos
             # sus campos) aunque sea antigua. Se filtra en DynamoDB y se pagina
             # hasta hallarla; el Limit de cada página sigue siendo el máximo.
             id_medicion = qp.get("id_medicion")
-            # ?desde / ?hasta (día local, UTC-5): una clave de rango sobre sk. Con
-            # rango el límite por defecto es el máximo y se avisa si hay más.
-            desde, hasta = qp.get("desde"), qp.get("hasta")
-            con_rango = bool(desde or hasta)
+            # ?desde / ?hasta (día local, UTC-5): una clave de rango sobre sk.
             if con_rango:
                 dia_desde = _fecha_estricta(desde) if desde else None
                 dia_hasta = _fecha_estricta(hasta) if hasta else None
                 if (desde and not dia_desde) or (hasta and not dia_hasta) or (dia_desde and dia_hasta and dia_desde > dia_hasta):
-                    return _respuesta(400, {"error": "El rango de fechas no es válido. Elige fechas del calendario e inténtalo de nuevo"})
-                limite = min(int(qp.get("limite", LIMITE_PUNTO_MAX)), LIMITE_PUNTO_MAX)
+                    return _respuesta(400, ERROR_RANGO)
             if id_medicion:
                 limite_paginas, limite = LIMITE_PUNTO_MAX, 1
             else:

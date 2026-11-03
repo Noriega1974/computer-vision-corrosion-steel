@@ -124,6 +124,7 @@ def test_super_admin_puede_acotar_a_una_zona_y_los_demas_no(h, monkeypatch):
     _poner(h, [])
     _resumen(h, anio="2026", empresa_id="EMP-9")
     assert "FilterExpression" in h.tabla.kwargs[0]
+    assert "EMP-9" in h.tabla.kwargs[0]["FilterExpression"].get_expression()["values"]
     # un admin no puede ver otra zona pasando empresa_id: su filtro sigue siendo el suyo
     monkeypatch.setattr(h, "tabla_usuarios", fakes.FakeTabla([{"rol": "admin", "empresa_id": "EMP-1"}]))
     _poner(h, [])
@@ -190,3 +191,72 @@ def test_sin_rango_no_cambia_la_respuesta(h):
     _poner(h, [_med("2026-10-26T15:00:00+00:00")], pagina=1000)
     cuerpo = json.loads(_punto(h)["body"])
     assert "truncado" not in cuerpo and h.tabla.kwargs[0]["Limit"] == 50
+
+
+@pytest.mark.parametrize("limite,esperado", [("0", 1), ("-5", 1), ("9999", 500), ("7", 7)])
+def test_rango_acota_limite_a_1_y_el_maximo(h, limite, esperado):
+    _poner(h, [], pagina=1000)
+    r = _punto(h, desde="2026-10-26", hasta="2026-10-26", limite=limite)
+    assert r["statusCode"] == 200
+    assert h.tabla.kwargs[0]["Limit"] == esperado + 1
+
+
+@pytest.mark.parametrize("qp", [{"desde": "2026-10-26", "limite": "abc"}, {"limite": "1.5"}])
+def test_limite_no_numerico_400_en_punto(h, qp):
+    _poner(h, [])
+    r = _punto(h, **qp)
+    assert r["statusCode"] == 400 and h.tabla.kwargs == []
+
+
+# ── GET /mediciones/recientes?desde&hasta ────────────────────────────────────
+
+def _recientes(h, **qp):
+    return h.lambda_handler({"httpMethod": "GET", "resource": "/mediciones/recientes",
+                             "queryStringParameters": qp,
+                             "requestContext": {"authorizer": {"claims": {"sub": "s"}}}}, None)
+
+
+def test_recientes_sin_rango_no_cambia(h):
+    _poner(h, [_med("2026-10-26T15:00:00+00:00")], pagina=1000)
+    cuerpo = json.loads(_recientes(h)["body"])
+    kw = h.tabla.kwargs[0]
+    assert "truncado" not in cuerpo and kw["Limit"] == 20 and _valores(kw) == ["medicion"]
+
+
+def test_recientes_con_rango_usa_between_en_el_gsi_y_limite_maximo(h):
+    _poner(h, [_med("2026-10-26T15:00:00+00:00")], pagina=1000)
+    cuerpo = json.loads(_recientes(h, desde="2026-10-26", hasta="2026-10-26", resumen="1")["body"])
+    kw = h.tabla.kwargs[0]
+    assert kw["IndexName"] == "tipo-timestamp-index" and kw["ScanIndexForward"] is False
+    assert _valores(kw) == ["medicion", "2026-10-26T05:00:00", "2026-10-27T04:59:59.999999+00:00"]
+    assert kw["Limit"] == h.LIMITE_RECIENTES_MAX + 1
+    assert "EMP-1" in kw["FilterExpression"].get_expression()["values"]
+    assert cuerpo["total"] == 1 and cuerpo["truncado"] is False
+
+
+def test_recientes_con_rango_marca_truncado_y_recorta(h):
+    _poner(h, [_med(f"2026-10-26T15:00:00.{i:06d}+00:00") for i in range(6)], pagina=1000)
+    cuerpo = json.loads(_recientes(h, desde="2026-10-26", limit="5")["body"])
+    assert cuerpo["total"] == 5 and cuerpo["truncado"] is True
+
+
+def test_recientes_solo_desde_o_solo_hasta(h):
+    _poner(h, [], pagina=1000)
+    _recientes(h, desde="2026-10-26")
+    assert _valores(h.tabla.kwargs[-1]) == ["medicion", "2026-10-26T05:00:00", "~"]
+    _recientes(h, hasta="2026-10-26")
+    assert _valores(h.tabla.kwargs[-1]) == ["medicion", "", "2026-10-27T04:59:59.999999+00:00"]
+
+
+def test_recientes_super_admin_sin_filtro_de_empresa(h, monkeypatch):
+    monkeypatch.setattr(h, "tabla_usuarios", fakes.FakeTabla([{"rol": "super_admin"}]))
+    _poner(h, [], pagina=1000)
+    _recientes(h, desde="2026-10-26", hasta="2026-10-26")
+    assert "FilterExpression" not in h.tabla.kwargs[0]
+
+
+@pytest.mark.parametrize("qp", [{"desde": "26-10-2026"}, {"hasta": "2026-13-40"},
+                                {"desde": "2026-10-27", "hasta": "2026-10-26"}, {"limit": "abc"}])
+def test_recientes_invalido_400(h, qp):
+    _poner(h, [])
+    assert _recientes(h, **qp)["statusCode"] == 400 and h.tabla.kwargs == []
