@@ -416,7 +416,7 @@ export default function BloquesPage() {
   const { perfil } = useUsuarioPerfil();
 
   const { bloques, loading, error, mutating, mutError, crearBloque, editarBloque, eliminarBloque, refetch } = useGestionBloques();
-  const { mediciones: medicionesResumen, loading: cargandoMediciones } = useMediciones(LIMITE_DASHBOARD, { resumen: true });
+  const { mediciones: medicionesResumen, loading: cargandoMediciones, error: errorMediciones } = useMediciones(LIMITE_DASHBOARD, { resumen: true });
   const filasSkeleton = useConteoRecordado('bloques:lista', bloques, loading);
   // `enabled=esSuperAdmin`: evita el fetch (y el 403) de /empresas para
   // admin -- solo hace falta la lista completa para el selector y la
@@ -443,8 +443,8 @@ export default function BloquesPage() {
     return mapa;
   }, [medicionesResumen]);
 
-  // The loaded window is complete only when it came back shorter than the request limit.
-  const ventanaCompleta = !cargandoMediciones && (medicionesResumen?.length ?? 0) < LIMITE_DASHBOARD;
+  // The loaded window is complete only when it loaded without error and came back shorter than the limit.
+  const ventanaCompleta = !cargandoMediciones && !errorMediciones && (medicionesResumen?.length ?? 0) < LIMITE_DASHBOARD;
   const etiquetaConteoBloque = (bloque) => etiquetaConteoBloquePuro(
     bloque?.cantidad_mediciones,
     medicionesPorBloque.get(String(bloque?.id_bloque ?? '')) ?? [],
