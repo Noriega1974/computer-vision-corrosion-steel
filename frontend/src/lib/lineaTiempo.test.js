@@ -8,6 +8,9 @@ import {
   COLOR_DIA_SIN_FOTOS,
   aniosDisponiblesLineaTiempo,
   construirBarraAnual,
+  construirBarraAnualDesdeResumen,
+  repartoVisible,
+  COLORES_BARRA_ANUAL,
 } from './lineaTiempo.js';
 
 // Local-day grouping depends on the machine zone: pin it to the product's zone.
@@ -220,5 +223,59 @@ describe('lineaTiempo.js — filtrado y agrupación cronológica', () => {
     assert.match(diaOct28.gradienteSuave, /linear-gradient\(to bottom,/);
     assert.notEqual(diaOct28.gradienteSuave, diaOct28.gradienteSegmentos);
     assert.match(diaOct28.resumenTexto, /28\/10\/2026 · 6 imágenes: 2 severa \(33%\), 2 moderada \(33%\), 2 sin corrosión \(33%\)/);
+  });
+
+  it('repartoVisible da a cada nivel presente al menos 12 % sin perder el total', () => {
+    const partes = repartoVisible([300, 0, 0, 1]);
+    assert.ok(Math.abs(partes.reduce((a, c) => a + c, 0) - 1) < 1e-9);
+    assert.equal(partes[1], 0);
+    assert.ok(Math.abs(partes[3] - 0.12) < 1e-9);
+    assert.ok(Math.abs(partes[0] - 0.88) < 1e-9);
+    // repartos sin niveles pequeños no cambian
+    assert.deepEqual(repartoVisible([1, 1, 0, 0]), [0.5, 0.5, 0, 0]);
+    assert.deepEqual(repartoVisible([0, 0, 0, 0]), [0, 0, 0, 0]);
+    // dos niveles pequeños a la vez
+    const tres = repartoVisible([1000, 1, 1, 0]);
+    assert.ok(tres[1] >= 0.12 - 1e-9 && tres[2] >= 0.12 - 1e-9);
+  });
+
+  it('una foto severa entre cientos sigue ocupando >= 12 % de la altura del día', () => {
+    const resumen = [{ fecha: '2026-10-28', total: 301, por_nivel: [300, 0, 0, 1] }];
+    const dia = construirBarraAnualDesdeResumen(resumen, 2026).dias.find((d) => d.fechaISO === '2026-10-28');
+    const severa = dia.segmentos.find((s) => s.nivel === 3);
+    assert.ok(severa.hastaPct - severa.desdePct >= 11.99);
+    assert.equal(severa.porcentajeRedondeado, 0);  // el texto conserva la proporción real
+    assert.match(dia.resumenTexto, /301 imágenes: 1 severa \(0%\), 300 sin corrosión \(100%\)/);
+  });
+
+  it('leve y moderada usan colores claramente distintos en la barra', () => {
+    assert.equal(new Set(COLORES_BARRA_ANUAL).size, 4);
+    assert.notEqual(COLORES_BARRA_ANUAL[1], COLORES_BARRA_ANUAL[2]);
+  });
+
+  it('construirBarraAnualDesdeResumen usa el resumen del servidor, filtra por nivel y descarta datos inválidos', () => {
+    const resumen = [
+      { fecha: '2026-03-05', total: 5, por_nivel: [2, 1, 1, 1] },
+      { fecha: '2026-03-06', total: 2, por_nivel: [null, 'x', -1, NaN] },
+      { fecha: '2025-12-31', total: 1, por_nivel: [1, 0, 0, 0] },
+      { fecha: '2026-04-01', total: 1 },
+    ];
+    const barra = construirBarraAnualDesdeResumen(resumen, 2026);
+    assert.equal(barra.totalDias, 365);
+    assert.equal(barra.diasConFotos, 1);
+    assert.equal(barra.totalFotosAnio, 5);
+    const soloSeveras = construirBarraAnualDesdeResumen(resumen, 2026, { nivel: '3' });
+    assert.equal(soloSeveras.totalFotosAnio, 1);
+    assert.deepEqual(soloSeveras.dias.find((d) => d.fechaISO === '2026-03-05').conteoPorNivel, [0, 0, 0, 1]);
+  });
+
+  it('construirBarraAnual omite mediciones sin nivel válido en vez de contarlas como sin corrosión', () => {
+    const barra = construirBarraAnual([
+      { nivel_corrosion: null, timestamp: '2026-10-28T14:00:00Z' },
+      { nivel_corrosion: 'abc', timestamp: '2026-10-28T14:00:00Z' },
+      { timestamp: '2026-10-28T14:00:00Z' },
+      { nivel_corrosion: 1, timestamp: '2026-10-28T14:00:00Z' },
+    ], 2026);
+    assert.equal(barra.totalFotosAnio, 1);
   });
 });

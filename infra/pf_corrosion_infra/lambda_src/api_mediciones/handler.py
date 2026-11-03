@@ -16,7 +16,8 @@ Rutas:
                                       Colombia (UTC-5); con rango el límite por defecto es el máximo
                                       (500) y la respuesta trae `truncado` (true si hay más)
   GET    /mediciones/resumen-diario → agregados por día local (UTC-5) de un año:
-                                      ?anio=YYYY (obligatorio), ?id_punto=BLQ-... (opcional);
+                                      ?anio=YYYY (obligatorio), ?id_punto=BLQ-... (opcional),
+                                      ?empresa_id=EMP-... (opcional, solo lo respeta super_admin);
                                       solo lectura, pagina todo (sin el tope de 1000)
   GET    /mediciones/recientes     → últimas N mediciones, filtrado por empresa (cualquier rol)
                                       ?limit=N (def. 20, máx. 1000), ?resumen=1 quita campos pesados
@@ -328,6 +329,9 @@ def _resumen_diario(event: dict) -> dict:
     if not es_super:
         # Ver datos de otra empresa es exclusivo de super_admin.
         kwargs["FilterExpression"] = Attr("empresa_id").eq(creador.get("empresa_id") if creador else None)
+    elif (qp.get("empresa_id") or "").strip():
+        # super_admin ve todo, pero puede acotar a una zona (?empresa_id=EMP-...).
+        kwargs["FilterExpression"] = Attr("empresa_id").eq(qp["empresa_id"].strip())
 
     items, truncado = [], False
     for pagina in range(MAX_PAGINAS_RESUMEN):
