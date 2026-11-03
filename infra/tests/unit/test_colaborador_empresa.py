@@ -83,3 +83,20 @@ def test_colaborador_super_admin_no_lleva_empresa(u, monkeypatch):
     r = u.lambda_handler(_post("super_admin", rol="super_admin"), None)
     assert r["statusCode"] == 201, r["body"]
     assert "empresa_id" not in u.tabla.escritos[0]
+
+
+@pytest.mark.parametrize("empresa_id", [123, ["EMP-1"], {"a": 1}, "", "   "])
+def test_super_admin_empresa_id_no_string_o_en_blanco_es_400_sin_tocar_cognito(u, monkeypatch, empresa_id):
+    _como(u, monkeypatch, "super_admin")
+    r = u.lambda_handler(_post("super_admin", empresa_id=empresa_id), None)
+    assert r["statusCode"] == 400
+    assert u.cognito.llamadas == [] and u.tabla.escritos == []
+
+
+@pytest.mark.parametrize("empresa_creador", [None, ""])
+def test_admin_sin_empresa_en_su_perfil_no_crea_colaborador_huerfano(u, monkeypatch, empresa_creador):
+    _como(u, monkeypatch, "admin", empresa_creador)
+    r = u.lambda_handler(_post("admin"), None)
+    assert r["statusCode"] == 400
+    assert "afiliación" in json.loads(r["body"])["error"]
+    assert u.cognito.llamadas == [] and u.tabla.escritos == []

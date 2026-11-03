@@ -2,7 +2,7 @@
 import base64
 import io
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import numpy as np
 import pytest
@@ -160,3 +160,21 @@ def test_timestamp_no_string_es_rechazado_con_400_sin_500(h, valor_no_str):
     cuerpo = json.loads(resp["body"])
     assert "no es válida" in cuerpo["error"]
     assert h.tabla_mediciones.escritos == []
+
+
+def test_fecha_de_hoy_antes_del_mediodia_utc_nunca_queda_en_el_futuro(h, reloj):
+    # 03:10 UTC: 12:00 + offset would be ~15:10 of the same day, i.e. the future.
+    reloj["ahora"] = datetime(2026, 11, 2, 3, 10, 5, 250000, tzinfo=timezone.utc)
+    resp = h.lambda_handler(_evento("2026-11-02"), None)
+    assert resp["statusCode"] == 200, resp["body"]
+    ts = datetime.fromisoformat(h.tabla_mediciones.escritos[0]["timestamp"])
+    assert ts <= reloj["ahora"]
+    assert ts.date().isoformat() == "2026-11-02"
+
+
+def test_timestamp_fecha_pasada_de_hoy_se_recorta_y_de_dias_previos_no(h):
+    ahora = datetime(2026, 11, 2, 3, 10, 5, 250000, tzinfo=timezone.utc)
+    hoy = h._timestamp_fecha_pasada(ahora.date(), ahora)
+    assert datetime.fromisoformat(hoy) == ahora
+    ayer = h._timestamp_fecha_pasada(date(2026, 11, 1), ahora)
+    assert ayer.startswith("2026-11-01T15:10:05.250000")

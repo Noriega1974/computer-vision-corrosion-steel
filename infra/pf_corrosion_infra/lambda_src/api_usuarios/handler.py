@@ -631,13 +631,15 @@ def lambda_handler(event: dict, context) -> dict:
                 empresa_id = None
             elif rol_creador == "super_admin":
                 empresa_id = body.get("empresa_id")
-                if not empresa_id:
+                if not isinstance(empresa_id, str) or not empresa_id.strip():
                     return _respuesta(400, {"error": "Selecciona la afiliación del colaborador"})
                 empresa = tabla_empresas.get_item(Key={"id_empresa": empresa_id}).get("Item")
                 if not empresa or empresa.get("activa") is False:
                     return _respuesta(400, {"error": "La afiliación seleccionada no existe o está desactivada. Actualiza la lista e inténtalo de nuevo"})
             else:
                 empresa_id = creador.get("empresa_id")
+                if not empresa_id:
+                    return _respuesta(400, {"error": "Tu cuenta no tiene una afiliación asignada, así que no puedes crear colaboradores. Pide ayuda a un administrador"})
 
             email_interno      = f"{sanitizado}@corria.app"
             cognito_username   = email_interno   # login identifier for the collaborator

@@ -733,7 +733,11 @@ def _timestamp_fecha_pasada(fecha: date, ahora: datetime) -> str:
     and two uploads for the same point and day get different sort keys."""
     segundos = (ahora.hour * 3600 + ahora.minute * 60 + ahora.second) % 43200
     base = datetime(fecha.year, fecha.month, fecha.day, 12, 0, 0, tzinfo=timezone.utc)
-    return (base + timedelta(seconds=segundos, microseconds=ahora.microsecond)).isoformat(timespec="microseconds")
+    sintetico = base + timedelta(seconds=segundos, microseconds=ahora.microsecond)
+    if fecha == ahora.astimezone(timezone.utc).date():
+        # Today before 12:00 UTC the synthesized time would be in the future.
+        sintetico = min(sintetico, ahora.astimezone(timezone.utc))
+    return sintetico.isoformat(timespec="microseconds")
 
 
 def _siguiente_timestamp(ts: str) -> str:
