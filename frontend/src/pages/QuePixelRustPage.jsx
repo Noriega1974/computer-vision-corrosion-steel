@@ -1,7 +1,16 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import NivelIcon from '../components/NivelIcon';
 import { IconoReproducir } from '../components/Iconos';
 import { NIVELES, nivelColor } from '../lib/statusUtils';
+import { VENTANA_DIAS, UMBRAL_EMPEORO_PP } from '../lib/indicadoresSistema';
+import {
+  EJEMPLO_PCT_PLACA,
+  EJEMPLO_PCT_FOTO,
+  EJEMPLO_PCT_PLACA_EN_CUADRO,
+  EJEMPLO_PCT_FONDO,
+  formatoPctGuia,
+} from '../lib/ejemploGuia';
 
 // Guía de la aplicación: qué es PixelRust, por qué existe, cómo se usa, cómo
 // se lee el resultado, qué permite cada nivel de cuenta y qué tan preciso es
@@ -17,6 +26,7 @@ const VIDEO_URL = '';
 const SECCIONES = [
   { id: 'por-que', titulo: 'Por qué existe' },
   { id: 'como-funciona', titulo: 'Cómo funciona' },
+  { id: 'como-se-calcula', titulo: 'Cómo se calcula el %' },
   { id: 'guia', titulo: 'Guía rápida de uso' },
   { id: 'resultado', titulo: 'Cómo leer el resultado' },
   { id: 'cuentas', titulo: 'Niveles de cuenta' },
@@ -95,8 +105,8 @@ const ROLES = [
 const METRICAS = [
   { nombre: 'IoU', yolo: '0,612', unet: '0,797' },
   { nombre: 'F1', yolo: '0,759', unet: '0,887' },
-  { nombre: 'Nivel ISO asignado correctamente', yolo: '91,9 %', unet: '95,9 %' },
-  { nombre: 'Fotos con corrosión en las que la detecta', yolo: '99,7 %', unet: '99,7 %' },
+  { nombre: 'Nivel ISO asignado correctamente', yolo: '91,9%', unet: '95,9%' },
+  { nombre: 'Fotos con corrosión en las que la detecta', yolo: '99,7%', unet: '99,7%' },
 ];
 
 // ── Estilos ──────────────────────────────────────────────────────────────────
@@ -187,6 +197,18 @@ function TablaConMarco({ etiqueta, children }) {
 // ── Página ───────────────────────────────────────────────────────────────────
 
 export default function QuePixelRustPage() {
+  // Las páginas se cargan con lazy(): al llegar desde otra ruta con #ancla el
+  // navegador intenta saltar antes de que exista la sección. Se desplaza aquí,
+  // ya montada la página, y también al pulsar los enlaces del índice (que son
+  // <Link> y cambian `hash` sin recargar).
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (!hash) return;
+    let id = hash.slice(1);
+    try { id = decodeURIComponent(id); } catch { /* ancla mal codificada: se usa tal cual */ }
+    document.getElementById(id)?.scrollIntoView({ block: 'start' });
+  }, [hash]);
+
   return (
     <div style={{
       maxWidth: 820, margin: '0 auto', padding: '24px 16px 72px',
@@ -224,15 +246,15 @@ export default function QuePixelRustPage() {
           }}>
             {SECCIONES.map(({ id, titulo }) => (
               <li key={id}>
-                <a
-                  href={`#${id}`}
+                <Link
+                  to={{ hash: `#${id}` }}
                   style={{
                     color: 'var(--accent-amber)', fontWeight: 600, fontSize: 15,
                     textUnderlineOffset: 3, textDecorationThickness: 1,
                   }}
                 >
                   {titulo}
-                </a>
+                </Link>
               </li>
             ))}
           </ul>
@@ -244,7 +266,7 @@ export default function QuePixelRustPage() {
         <p style={parrafo}>
           La corrosión del acero galvanizado avanza sin aviso y, sin un monitoreo constante,
           termina en reparaciones costosas o en fallas estructurales; se estima que sus pérdidas
-          equivalen a cerca del 3 % del PIB mundial cada año. Hoy se detecta, casi siempre, por
+          equivalen a cerca del 3% del PIB mundial cada año. Hoy se detecta, casi siempre, por
           inspección visual: una persona recorre la estructura y juzga a ojo cuánto se ha
           deteriorado. Ese método es subjetivo, porque depende del criterio de cada inspector; es
           lento y exige desplazarse hasta el sitio. Los sensores electrónicos de monitoreo son
@@ -289,6 +311,157 @@ export default function QuePixelRustPage() {
         <p style={parrafoSecundario}>
           La aplicación web se publica en Vercel; las fotos, los resultados y el análisis viven en AWS.
         </p>
+      </Seccion>
+
+      {/* Cómo se calcula el % (pipeline visual con fotos reales) */}
+      <Seccion id="como-se-calcula" titulo="Cómo se calcula el porcentaje de corrosión">
+        <p style={parrafo}>
+          Para evitar que el piso, el soporte o el fondo diluyan la medición, PixelRust ejecuta un
+          proceso en <strong>dos etapas de visión por computadora</strong>: primero aísla la placa
+          metálica y luego mide qué proporción de esa placa presenta corrosión.
+        </p>
+
+        {/* Tarjeta de fórmula visual */}
+        <div
+          style={{
+            background: 'var(--bg-inset)',
+            border: '1px solid var(--border-strong)',
+            borderRadius: 12,
+            padding: '14px 18px',
+            fontFamily: 'var(--font-data)',
+            fontSize: 13,
+            color: 'var(--text-primary)',
+            lineHeight: 1.55,
+          }}
+        >
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
+            Fórmula sobre la placa detectada
+          </div>
+          <strong>% de área corroída</strong> = (Píxeles con corrosión dentro de la placa ÷ Píxeles totales de la placa) × 100
+        </div>
+
+        {/* Secuencia visual en 3 pasos con imágenes reales del modelo */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: 14,
+          }}
+        >
+          {[
+            {
+              paso: '1. Foto original',
+              img: '/guia/paso1-original.jpg',
+              alt: 'Fotografía original de una lámina galvanizada con óxido, enmarcada con cinta amarilla sobre una mesa de madera, en interiores',
+              detalle: `La cámara captura tanto la lámina galvanizada (${formatoPctGuia(EJEMPLO_PCT_PLACA_EN_CUADRO)} del cuadro) como el entorno que la rodea (${formatoPctGuia(EJEMPLO_PCT_FONDO)} de fondo).`,
+            },
+            {
+              paso: '2. Placa detectada (base 100%)',
+              img: '/guia/paso2-placa.jpg',
+              alt: 'Placa aislada por el modelo separador con contorno verde esmeralda y fondo oscurecido',
+              detalle:
+                'El primer modelo recorta la lámina (contorno verde) y descarta el fondo. Solo los píxeles dentro de este borde cuentan como el 100%.',
+            },
+            {
+              paso: `3. Corrosión sobre la placa (${formatoPctGuia(EJEMPLO_PCT_PLACA)})`,
+              img: '/guia/paso3-corrosion.jpg',
+              alt: 'Máscara de segmentación de corrosión en rojo sobre la placa delimitada en verde',
+              detalle: `La red U-Net marca píxel por píxel el óxido dentro de la placa (rojo): ${formatoPctGuia(EJEMPLO_PCT_PLACA)} de la lámina, según la estimación del modelo.`,
+            },
+          ].map((item) => (
+            <figure
+              key={item.paso}
+              style={{
+                margin: 0,
+                background: 'var(--bg-card-solid)',
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+                overflow: 'hidden',
+                boxShadow: 'var(--shadow-sm)',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              <img
+                src={item.img}
+                alt={item.alt}
+                loading="lazy"
+                style={{ width: '100%', aspectRatio: '3 / 2', objectFit: 'contain', display: 'block', borderBottom: '1px solid var(--border)' }}
+              />
+              <figcaption style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+                  {item.paso}
+                </div>
+                <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, lineHeight: 1.5, color: 'var(--text-secondary)' }}>
+                  {item.detalle}
+                </div>
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+
+        {/* Sobre qué se mide y cómo encuadrar */}
+        <h3 style={h3Style}>¿Sobre qué se mide el porcentaje?</h3>
+        <p style={parrafo}>
+          PixelRust mide sobre la <strong>placa</strong> cuando logra reconocerla. Si no la reconoce,
+          mide sobre la <strong>foto completa</strong> y el resultado queda diluido por el fondo: la
+          misma corrosión parece menor porque el piso o el soporte cuentan como superficie. En ese
+          caso la aplicación lo avisa en el resultado.
+        </p>
+
+        <div
+          role="group"
+          aria-label="Mismo óxido medido sobre la placa y sobre la foto completa"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: 14,
+          }}
+        >
+          {[
+            { etiqueta: 'Sobre la placa', valor: EJEMPLO_PCT_PLACA, nota: 'Lo que PixelRust informa cuando reconoce la placa.' },
+            { etiqueta: 'Sobre la foto completa', valor: EJEMPLO_PCT_FOTO, nota: 'Lo que saldría si el fondo contara como superficie.' },
+          ].map((c) => (
+            <div
+              key={c.etiqueta}
+              style={{
+                background: 'var(--bg-card-solid)', border: '1px solid var(--border)', borderRadius: 12,
+                boxShadow: 'var(--shadow-sm)', padding: '14px 16px', fontFamily: 'var(--font-ui)',
+              }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>{c.etiqueta}</div>
+              <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', lineHeight: 1.2 }}>
+                {formatoPctGuia(c.valor)}
+              </div>
+              <div style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--text-secondary)', marginTop: 2 }}>{c.nota}</div>
+            </div>
+          ))}
+        </div>
+        <p style={parrafoSecundario}>
+          Ejemplo con la foto de arriba. Ambas cifras son estimaciones del modelo para los mismos
+          píxeles de óxido; solo cambia la superficie que se toma como 100%.
+        </p>
+
+        <h3 style={h3Style}>Cómo encuadrar la foto</h3>
+        <ul style={lista}>
+          <li>
+            <strong>Placa completa a la vista.</strong> Si las esquinas quedan cortadas, cambia la
+            superficie sobre la que se calcula el porcentaje.
+          </li>
+          <li>
+            <strong>De frente.</strong> Con la cámara paralela a la lámina la perspectiva no deforma
+            las proporciones.
+          </li>
+          <li>
+            <strong>Buena luz, sin reflejos ni sombras fuertes.</strong> Las sombras y los brillos del
+            galvanizado pueden confundirse con corrosión.
+          </li>
+          <li>
+            <strong>Cerca, pero sin cortar la placa.</strong> Una lámina muy pequeña en la imagen
+            pierde detalle y el modelo delimita peor las manchas finas.
+          </li>
+          <li>Foto nítida, sin movimiento, y sin objetos encima de la lámina.</li>
+        </ul>
       </Seccion>
 
       {/* Guía rápida */}
@@ -350,7 +523,9 @@ export default function QuePixelRustPage() {
         <p style={parrafo}>
           Dentro de un punto puedes buscar fotos por nombre o notas, ordenarlas con <Ui>Orden</Ui>{' '}
           (más recientes, más antiguas, mayor o menor corrosión), filtrarlas por <Ui>Nivel</Ui> y
-          acotarlas por fechas con <Ui>Desde</Ui> y <Ui>Hasta</Ui>. Al pulsar una foto se abre su
+          acotarlas por fecha con <Ui>Filtrar por fecha</Ui>, que permite elegir un día o un rango. Si
+          el punto tiene lotes de subida, aparecen como carpetas dentro del punto y se abren para ver
+          sus fotos. Al pulsar una foto se abre su
           ficha, con las pestañas <Ui>Original</Ui> y <Ui>Segmentación</Ui>, el botón{' '}
           <Ui>Descargar</Ui> y el botón <Ui>Ver en mapa</Ui>, que lleva al dashboard con ese punto
           seleccionado.
@@ -376,12 +551,20 @@ export default function QuePixelRustPage() {
 
         <h3 style={h3Style}>El dashboard</h3>
         <p style={parrafo}>
-          El <Ui>Dashboard</Ui> resume el estado de tus puntos. Arriba muestra cuatro indicadores:{' '}
-          <Ui>Puntos medidos</Ui>, <Ui>Mediciones</Ui>, <Ui>En estado severo</Ui> y{' '}
-          <Ui>Sin corrosión</Ui>. Debajo están la lista desplegable de zonas y puntos, el mapa de
-          Colombia, con cada punto coloreado según el nivel de su última medición, y el detalle del punto
-          elegido, con el clima de su última captura. Al final, dos gráficas: la distribución de
-          mediciones por nivel de corrosión y la cantidad de mediciones por ciudad.
+          El <Ui>Dashboard</Ui> resume el estado de tus puntos. Arriba muestra el bloque{' '}
+          <Ui>Estado general del sistema</Ui> con cuatro indicadores: <Ui>Mayor corrosión</Ui> (el
+          punto con el porcentaje más alto en su última medición), <Ui>Puntos que empeoraron</Ui>{' '}
+          (subieron al menos {UMBRAL_EMPEORO_PP} puntos porcentuales en los últimos {VENTANA_DIAS} días), <Ui>Puntos al día</Ui>{' '}
+          (porcentaje de puntos con una medición en los últimos {VENTANA_DIAS} días) y{' '}
+          <Ui>Mediciones en {VENTANA_DIAS} días</Ui> (fotos analizadas en ese período). Los tres primeros se
+          calculan con la última medición de cada punto, para que una tanda grande de fotos en un
+          mismo punto no los distorsione. Junto a los indicadores está la tarjeta{' '}
+          <Ui>Tendencia del área corroída</Ui>, que muestra la evolución del punto que elijas en el
+          mapa. Debajo hay tres paneles: la lista desplegable de zonas y puntos, el{' '}
+          <Ui>Mapa de ubicaciones</Ui>, con cada ubicación coloreada según el nivel de su última
+          medición, y el <Ui>Detalle de ubicación</Ui> del punto elegido, con el clima de su última
+          captura. Al final, el acordeón <Ui>Línea de tiempo de mediciones</Ui> se despliega para
+          ver el historial cronológico de inspecciones y lotes procesados.
         </p>
       </Seccion>
 
@@ -428,7 +611,11 @@ export default function QuePixelRustPage() {
           <li>
             El porcentaje se calcula sobre la placa cuando la aplicación la reconoce. Si no la reconoce,
             se calcula sobre la foto completa y entonces depende del encuadre y de la distancia de
-            captura. En ambos casos es una estimación relativa, no una medida del área física.
+            captura. En ambos casos es una estimación del modelo, no una medida del área física.
+            Los consejos para encuadrar están en{' '}
+            <Link to={{ hash: '#como-se-calcula' }} style={{ color: 'var(--accent-amber)', fontWeight: 600, textUnderlineOffset: 3 }}>
+              Cómo se calcula el %
+            </Link>.
           </li>
           <li>
             El modelo se entrenó solo con acero galvanizado; en otros materiales su resultado no está
@@ -442,14 +629,6 @@ export default function QuePixelRustPage() {
             El resultado apoya la decisión de mantenimiento, pero no reemplaza el criterio de un
             especialista.
           </li>
-        </ul>
-
-        <h3 style={h3Style}>Consejos para una buena foto</h3>
-        <ul style={lista}>
-          <li>Lámina completa, de frente y ocupando la mayor parte de la imagen.</li>
-          <li>Buena luz, sin reflejos ni sombras fuertes.</li>
-          <li>Foto nítida, sin movimiento ni desenfoque.</li>
-          <li>Sin objetos encima de la lámina.</li>
         </ul>
       </Seccion>
 

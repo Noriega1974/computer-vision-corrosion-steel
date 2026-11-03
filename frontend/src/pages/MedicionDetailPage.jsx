@@ -17,8 +17,10 @@ import { VISTA_INICIAL } from '../lib/zoomPan';
 import { baseArea, formatoPct } from '../lib/textUtils';
 import { comparacionAnalisis } from '../lib/analisisAnterior';
 import { tiempoRelativo } from '../lib/tiempoRelativo';
+import { tituloMedicion, publicarTituloDetalle } from '../lib/tituloDetalle';
 import NivelIcon from '../components/NivelIcon';
 import NivelInfo from '../components/NivelInfo';
+import NotaPctAproximado from '../components/NotaPctAproximado';
 import Skeleton, { SkeletonLinea } from '../components/Skeleton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { AvisoEnLinea } from '../components/Aviso';
@@ -165,18 +167,14 @@ function MedicionDetailSkeleton() {
         gap: 20, alignItems: 'start',
       }}>
         <div style={{ ...caja, borderRadius: 12, overflow: 'hidden' }}>
-          <div style={{
-            display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg-inset)',
-          }}>
-            {[0, 1].map(i => (
-              <div key={i} style={{
-                flex: 1, padding: '12px 8px', textAlign: 'center',
-                fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)',
-                borderBottom: '2px solid transparent',
-              }}>
-                <SkeletonLinea width={i === 0 ? 60 : 90} />
-              </div>
-            ))}
+          <div style={{ padding: '12px 20px 0' }}>
+            <div className="detalle-tabs">
+              {[0, 1].map(i => (
+                <div key={i} className="detalle-tab" style={{ pointerEvents: 'none' }}>
+                  <SkeletonLinea width={i === 0 ? 60 : 90} />
+                </div>
+              ))}
+            </div>
           </div>
           <div style={{ padding: 20 }}>
             <Skeleton
@@ -281,6 +279,11 @@ export default function MedicionDetailPage() {
   // conserva al cambiar entre Original y Segmentación (y se reinicia al cambiar de medición).
   const [vistaFoto, setVistaFoto] = useState(VISTA_INICIAL);
   useEffect(() => { setVistaFoto(VISTA_INICIAL); }, [idMedicion]);
+  // Readable name in the header breadcrumb (photo name, else its date).
+  useEffect(() => {
+    if (medicion) publicarTituloDetalle(tituloMedicion(medicion));
+    return () => publicarTituloDetalle('');
+  }, [medicion?.nombre, medicion?.timestamp]); // eslint-disable-line react-hooks/exhaustive-deps
   const [showClimaFlashcard, setShowClimaFlashcard] = useState(false);
   const [showMasOpciones, setShowMasOpciones] = useState(false);
   const [shareMsg, setShareMsg] = useState('');
@@ -537,8 +540,8 @@ export default function MedicionDetailPage() {
     clima.temperatura_c, clima.humedad_pct, vientoKmh, clima.precipitacion_mm,
   ].some(v => v != null);
   const zonaNombre = esSuperAdmin
-    ? (empresas.find(e => e.id_empresa === medicion.empresa_id)?.nombre ?? '—')
-    : (perfil?.empresa_nombre ?? '—');
+    ? (empresas.find(e => e.id_empresa === medicion.empresa_id)?.nombre ?? 'Sin dato')
+    : (perfil?.empresa_nombre ?? 'Sin dato');
 
   const comparacion = comparacionAnalisis(medicion);
 
@@ -575,30 +578,23 @@ export default function MedicionDetailPage() {
         {/* ── Columna izquierda: imagen con tabs Original / Segmentación + Notas ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3-5)' }}>
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
-            {/* Tabs */}
-            <div style={{
-              display: 'flex', borderBottom: '1px solid var(--border)',
-              background: 'var(--bg-inset)',
-            }}>
-              {TABS.map(tab => (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
-                  style={{
-                    flex: 1, padding: '12px 8px',
-                    background: activeTab === tab.key ? 'var(--bg-card)' : 'transparent',
-                    border: 'none',
-                    borderBottom: activeTab === tab.key ? `2px solid ${color}` : '2px solid transparent',
-                    cursor: 'pointer',
-                    fontFamily: 'var(--font-ui)', fontWeight: activeTab === tab.key ? 600 : 400,
-                    fontSize: 'var(--text-sm)',
-                    color: activeTab === tab.key ? 'var(--text-primary)' : 'var(--text-muted)',
-                    transition: 'color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), border-bottom-color var(--dur-fast) var(--ease-out)',
-                  }}
-                >
-                  {tab.label}
-                </button>
-              ))}
+            {/* Tabs: control segmentado (pista hundida + segmento activo elevado) */}
+            <div style={{ padding: '12px 20px 0' }}>
+              <div role="tablist" aria-label="Vista de la imagen" className="detalle-tabs"
+                style={{ '--tab-color': color }}>
+                {TABS.map(tab => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === tab.key}
+                    className="detalle-tab"
+                    onClick={() => setActiveTab(tab.key)}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Contenido del tab */}
@@ -667,7 +663,7 @@ export default function MedicionDetailPage() {
               {medicion.nombre || (punto.sede ?? 'Punto sin nombre')}
             </div>
             <div style={FICHA_SUBTITULO_STYLE}>
-              {medicion.nombre ? `${punto.sede || 'Punto sin nombre'} · ` : ''}{zonaNombre} · {punto.ciudad ?? '—'} · {tiempoRelativo(medicion.timestamp)}
+              {medicion.nombre ? `${punto.sede || 'Punto sin nombre'} · ` : ''}{zonaNombre} · {punto.ciudad ?? 'Sin ciudad'} · {tiempoRelativo(medicion.timestamp)}
             </div>
           </div>
 
@@ -711,10 +707,10 @@ export default function MedicionDetailPage() {
               <p style={{
                 margin: 0, fontSize: 12, lineHeight: 1.5, color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)',
               }}>
-                No se pudo reconocer la placa en esta foto. El porcentaje se calculó sobre la foto completa
-                y depende del encuadre.
+                No se pudo reconocer la placa en esta foto; el porcentaje se calculó sobre la foto completa.
               </p>
             )}
+            <NotaPctAproximado />
 
             {/* Metadatos secundarios compactos dentro de la caja central */}
             <div style={{
@@ -722,7 +718,7 @@ export default function MedicionDetailPage() {
               paddingTop: 12, marginTop: 2, borderTop: `1px solid ${color}25`,
             }}>
               <MetaItem label="Zona" value={zonaNombre} />
-              <MetaItem label="Ciudad" value={punto.ciudad ?? '—'} />
+              <MetaItem label="Ciudad" value={punto.ciudad ?? 'Sin dato'} />
               <MetaItem label="Registro" value={formatFecha(medicion.timestamp, { conHora: true })} />
               <MetaItem label="Antigüedad" value={tiempoRelativo(medicion.timestamp)} />
             </div>
@@ -853,7 +849,7 @@ export default function MedicionDetailPage() {
             {/* Ubicación y mapa: la celda se estira al alto de la columna
                 derecha (referencia + gestión) y el mapa llena ese alto. */}
             <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-              <SectionTitle>Ubicación geográfica del espécimen</SectionTitle>
+              <SectionTitle>Ubicación geográfica del punto</SectionTitle>
               <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                 <MiniMapa
                   lat={lat}
@@ -947,7 +943,7 @@ export default function MedicionDetailPage() {
 
               {/* Acciones de gestión y navegación */}
               <div>
-                <SectionTitle>Gestión del espécimen</SectionTitle>
+                <SectionTitle>Gestión de la medición</SectionTitle>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
                   {/* Renombrar la foto: solo admins (el backend lo exige). */}
                   {isAdmin && (

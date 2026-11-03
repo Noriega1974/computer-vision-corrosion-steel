@@ -1,6 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { IconoLuna, IconoMenu, IconoSol } from './Iconos';
+import { EVENTO_TITULO_DETALLE } from '../lib/tituloDetalle';
 
 // Mapa de rutas a títulos de página para el breadcrumb
 const ROUTE_TITLES = {
@@ -20,7 +21,8 @@ function buildBreadcrumb(pathname) {
   if (pathname.startsWith('/galeria/zona/')) return { title: 'Galería', sub: null };
   if (pathname.startsWith('/galeria/')) {
     const id = pathname.replace('/galeria/', '');
-    return { title: 'Galería', sub: `Medición ${id.substring(0, 12)}…` };
+    // The page publishes a readable name; until then show a neutral label, never the raw id.
+    return { title: 'Galería', sub: 'Detalle de la foto', esDetalle: true };
   }
   // Una ruta desconocida cae en NotFoundPage: mostrar el pathname crudo como
   // titulo delataba la implementacion en vez de explicar que paso.
@@ -32,7 +34,15 @@ function buildBreadcrumb(pathname) {
 
 export default function PageHeader({ onMenuToggle, isMobile, darkMode, onToggleDark }) {
   const location = useLocation();
-  const { title, sub } = buildBreadcrumb(location.pathname);
+  const { title, sub: subBase, esDetalle } = buildBreadcrumb(location.pathname);
+  const [tituloDetalle, setTituloDetalle] = useState('');
+  useEffect(() => {
+    const alTitulo = (e) => setTituloDetalle(e.detail || '');
+    window.addEventListener(EVENTO_TITULO_DETALLE, alTitulo);
+    return () => window.removeEventListener(EVENTO_TITULO_DETALLE, alTitulo);
+  }, []);
+  useEffect(() => { if (!esDetalle) setTituloDetalle(''); }, [esDetalle, location.pathname]);
+  const sub = esDetalle && tituloDetalle ? tituloDetalle : subBase;
 
   // Todas las pantallas compartian el mismo <title> estatico, asi que con
   // varias pestanas abiertas eran indistinguibles.

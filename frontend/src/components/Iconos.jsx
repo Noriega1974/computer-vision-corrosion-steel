@@ -406,17 +406,6 @@ export function IconoModeloIA(props) {
   );
 }
 
-export function IconoGrafico(props) {
-  return (
-    <Base {...props}>
-      <path d="M4 4v16h16"/>
-      <path d="M9 16v-4"/>
-      <path d="M13 16V8"/>
-      <path d="M17 16v-6"/>
-    </Base>
-  );
-}
-
 export function IconoTemperatura(props) {
   return (
     <Base {...props}>
@@ -613,6 +602,22 @@ export function IconoQuitar(props) {
   return (
     <Base {...props}>
       <path d="M5 12h14"/>
+    </Base>
+  );
+}
+
+export function IconoCalendario(props) {
+  return (
+    <Base {...props}>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/>
+      <path d="M8 3.5v3"/>
+      <path d="M16 3.5v3"/>
+      <path d="M3.5 9.5h17"/>
+      <path d="M8.5 13.5h.01"/>
+      <path d="M12 13.5h.01"/>
+      <path d="M15.5 13.5h.01"/>
+      <path d="M8.5 17h.01"/>
+      <path d="M12 17h.01"/>
     </Base>
   );
 }
