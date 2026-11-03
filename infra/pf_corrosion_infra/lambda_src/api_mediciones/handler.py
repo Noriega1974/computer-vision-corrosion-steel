@@ -11,7 +11,13 @@ la medición; a este handler no le importa, solo lo usa como clave.
 Rutas:
   GET    /mediciones/{id_punto}    → historial de un punto, filtrado por empresa (cualquier rol)
                                       ?limite=N (def. 50, máx. 500), ?resumen=1 quita campos pesados,
-                                      ?id_medicion=X devuelve solo esa medicion (completa)
+                                      ?id_medicion=X devuelve solo esa medicion (completa),
+                                      ?desde=YYYY-MM-DD&hasta=YYYY-MM-DD acota por día local de
+                                      Colombia (UTC-5); con rango el límite por defecto es el máximo
+                                      (500) y la respuesta trae `truncado` (true si hay más)
+  GET    /mediciones/resumen-diario → agregados por día local (UTC-5) de un año:
+                                      ?anio=YYYY (obligatorio), ?id_punto=BLQ-... (opcional);
+                                      solo lectura, pagina todo (sin el tope de 1000)
   GET    /mediciones/recientes     → últimas N mediciones, filtrado por empresa (cualquier rol)
                                       ?limit=N (def. 20, máx. 1000), ?resumen=1 quita campos pesados
   DELETE /mediciones/{id_punto}    → elimina una medición puntual (super_admin/admin/tecnico)
@@ -35,6 +41,7 @@ import logging
 import os
 import re
 import sys
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import boto3
@@ -71,6 +78,14 @@ CAMPOS_PESADOS = ("mascaras", "detecciones", "inferencia_local", "clima", "conto
 # compartido entre lambdas, así que se replica.
 NOMBRE_MAX = 80
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+# Colombia no tiene horario de verano: el día local es siempre UTC-5.
+TZ_LOCAL = timezone(timedelta(hours=-5))
+_FECHA_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+# Primer año con datos (el proyecto arrancó en 2026) y tope de páginas del resumen
+# diario (cada página lee hasta 1 MB; protege el costo si el filtro descarta casi todo).
+ANIO_MIN = 2026
+MAX_PAGINAS_RESUMEN = 200
 
 dynamodb = boto3.resource("dynamodb", region_name=REGION)
 tabla = dynamodb.Table(TABLA_MEDICIONES)
@@ -224,6 +239,142 @@ def _sin_campos_pesados(items: list) -> list:
         for campo in CAMPOS_PESADOS:
             item.pop(campo, None)
     return items
+
+
+# ── Días locales (UTC-5) ─────────────────────────────────────────────────────
+
+def _fecha_estricta(valor) -> date | None:
+    """YYYY-MM-DD válida o None."""
+    if not isinstance(valor, str) or not _FECHA_RE.fullmatch(valor):
+        return None
+    try:
+        return date.fromisoformat(valor)
+    except ValueError:
+        return None
+
+
+def _inicio_dia_utc(dia: date) -> str:
+    """Primer instante (UTC, ISO sin zona: ordena igual que los timestamps
+    guardados) del día local `dia`."""
+    return datetime(dia.year, dia.month, dia.day, tzinfo=TZ_LOCAL).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _fin_dia_utc(dia: date) -> str:
+    """Último instante del día local `dia` (cota superior inclusiva para BETWEEN)."""
+    siguiente = datetime(dia.year, dia.month, dia.day, tzinfo=TZ_LOCAL) + timedelta(days=1)
+    return (siguiente.astimezone(timezone.utc) - timedelta(microseconds=1)).strftime("%Y-%m-%dT%H:%M:%S.%f") + "+00:00"
+
+
+def _dia_local(timestamp) -> str | None:
+    """'YYYY-MM-DD' del día local (UTC-5) de un timestamp ISO; None si no se
+    puede interpretar. Sin zona horaria se asume UTC (así se guarda)."""
+    if not isinstance(timestamp, str):
+        return None
+    try:
+        dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(TZ_LOCAL).date().isoformat()
+
+
+def _numero(valor) -> float | None:
+    """float finito o None (los % se guardan como str en DynamoDB)."""
+    try:
+        n = float(valor)
+    except (TypeError, ValueError):
+        return None
+    return n if n == n and n not in (float("inf"), float("-inf")) else None
+
+
+def _nivel(valor) -> int | None:
+    n = _numero(valor)
+    return int(n) if n is not None and n in (0, 1, 2, 3) else None
+
+
+CAMPOS_RESUMEN = ("id_punto", "sk", "timestamp", "nivel_corrosion", "area_corroida_pct", "lote_id", "empresa_id")
+
+
+def _resumen_diario(event: dict) -> dict:
+    """GET /mediciones/resumen-diario?anio=YYYY[&id_punto=...]: agregados por día
+    local para pintar la barra anual y las cajas de día. Solo lectura. Con
+    id_punto consulta la clave primaria (rango de sk); sin él, el GSI
+    tipo-timestamp-index. Misma regla de empresa que los demás listados."""
+    qp = event.get("queryStringParameters") or {}
+    try:
+        anio = int(qp.get("anio", ""))
+    except (TypeError, ValueError):
+        anio = 0
+    if not (ANIO_MIN <= anio <= 9999):
+        return _respuesta(400, {"error": f"Elige un año válido (desde {ANIO_MIN}) e inténtalo de nuevo"})
+    id_punto = (qp.get("id_punto") or "").strip() or None
+
+    creador = _usuario_actual(event)
+    es_super = bool(creador) and creador.get("rol") == "super_admin"
+
+    inicio = _inicio_dia_utc(date(anio, 1, 1))
+    fin = _fin_dia_utc(date(anio, 12, 31))
+    nombres = {f"#c{i}": c for i, c in enumerate(CAMPOS_RESUMEN)}
+    kwargs = {
+        "ProjectionExpression": ", ".join(nombres),
+        "ExpressionAttributeNames": nombres,
+    }
+    if id_punto:
+        kwargs["KeyConditionExpression"] = Key("id_punto").eq(id_punto) & Key("sk").between(f"{SK_MEDICION_PREFIJO}{inicio}", f"{SK_MEDICION_PREFIJO}{fin}")
+    else:
+        kwargs["IndexName"] = "tipo-timestamp-index"
+        kwargs["KeyConditionExpression"] = Key("tipo_registro").eq("medicion") & Key("timestamp").between(inicio, fin)
+    if not es_super:
+        # Ver datos de otra empresa es exclusivo de super_admin.
+        kwargs["FilterExpression"] = Attr("empresa_id").eq(creador.get("empresa_id") if creador else None)
+
+    items, truncado = [], False
+    for pagina in range(MAX_PAGINAS_RESUMEN):
+        resp = tabla.query(**kwargs)
+        items.extend(resp.get("Items", []))
+        ultima = resp.get("LastEvaluatedKey")
+        if not ultima:
+            break
+        if pagina == MAX_PAGINAS_RESUMEN - 1:
+            truncado = True
+        kwargs = {**kwargs, "ExclusiveStartKey": ultima}
+
+    dias: dict = {}
+    lotes_total, imagenes, en_lotes = set(), 0, 0
+    for it in items:
+        dia = _dia_local(it.get("timestamp"))
+        if not dia or not dia.startswith(f"{anio:04d}-"):
+            continue
+        d = dias.setdefault(dia, {"fecha": dia, "total": 0, "por_nivel": [0, 0, 0, 0], "_lotes": {}, "peor_nivel": None, "max_pct": None})
+        d["total"] += 1
+        imagenes += 1
+        nivel = _nivel(it.get("nivel_corrosion"))
+        if nivel is not None:
+            d["por_nivel"][nivel] += 1
+            d["peor_nivel"] = nivel if d["peor_nivel"] is None else max(d["peor_nivel"], nivel)
+        pct = _numero(it.get("area_corroida_pct"))
+        if pct is not None:
+            d["max_pct"] = pct if d["max_pct"] is None else max(d["max_pct"], pct)
+        lote = it.get("lote_id")
+        if lote:
+            d["_lotes"][lote] = d["_lotes"].get(lote, 0) + 1
+            lotes_total.add(lote)
+            en_lotes += 1
+
+    salida = []
+    for dia in sorted(dias):
+        d = dias[dia]
+        lotes = d.pop("_lotes")
+        d["lotes"] = {"count": len(lotes), "imagenes": sum(lotes.values())}
+        salida.append(d)
+    return _respuesta(200, {
+        "anio": anio,
+        "id_punto": id_punto,
+        "dias": salida,
+        "totales": {"imagenes": imagenes, "lotes": len(lotes_total), "imagenes_en_lotes": en_lotes},
+        "truncado": truncado,
+    })
 
 
 ADVERTENCIA_S3 = "La medición se eliminó, pero una de sus imágenes no se pudo borrar del almacenamiento."
@@ -528,6 +679,10 @@ def lambda_handler(event: dict, context) -> dict:
         if http_method == "PATCH" and id_punto:
             return _renombrar_medicion(event, id_punto)
 
+        # ── GET /mediciones/resumen-diario ───────────────────────────────────
+        if resource == "/mediciones/resumen-diario":
+            return _resumen_diario(event)
+
         # ── GET /mediciones/recientes ────────────────────────────────────────
         if resource == "/mediciones/recientes":
             qp = event.get("queryStringParameters") or {}
@@ -566,13 +721,28 @@ def lambda_handler(event: dict, context) -> dict:
             # sus campos) aunque sea antigua. Se filtra en DynamoDB y se pagina
             # hasta hallarla; el Limit de cada página sigue siendo el máximo.
             id_medicion = qp.get("id_medicion")
+            # ?desde / ?hasta (día local, UTC-5): una clave de rango sobre sk. Con
+            # rango el límite por defecto es el máximo y se avisa si hay más.
+            desde, hasta = qp.get("desde"), qp.get("hasta")
+            con_rango = bool(desde or hasta)
+            if con_rango:
+                dia_desde = _fecha_estricta(desde) if desde else None
+                dia_hasta = _fecha_estricta(hasta) if hasta else None
+                if (desde and not dia_desde) or (hasta and not dia_hasta) or (dia_desde and dia_hasta and dia_desde > dia_hasta):
+                    return _respuesta(400, {"error": "El rango de fechas no es válido. Elige fechas del calendario e inténtalo de nuevo"})
+                limite = min(int(qp.get("limite", LIMITE_PUNTO_MAX)), LIMITE_PUNTO_MAX)
             if id_medicion:
                 limite_paginas, limite = LIMITE_PUNTO_MAX, 1
             else:
-                limite_paginas = limite
+                limite_paginas = limite + 1 if con_rango else limite
 
+            condicion_sk = Key("sk").begins_with(SK_MEDICION_PREFIJO)
+            if con_rango:
+                inferior = f"{SK_MEDICION_PREFIJO}{_inicio_dia_utc(dia_desde)}" if dia_desde else SK_MEDICION_PREFIJO
+                superior = f"{SK_MEDICION_PREFIJO}{_fin_dia_utc(dia_hasta)}" if dia_hasta else f"{SK_MEDICION_PREFIJO}~"
+                condicion_sk = Key("sk").between(inferior, superior)
             kwargs = dict(
-                KeyConditionExpression=Key("id_punto").eq(id_punto) & Key("sk").begins_with(SK_MEDICION_PREFIJO),
+                KeyConditionExpression=Key("id_punto").eq(id_punto) & condicion_sk,
                 ScanIndexForward=False,   # más reciente primero
                 Limit=limite_paginas,
             )
@@ -587,15 +757,21 @@ def lambda_handler(event: dict, context) -> dict:
                 kwargs["FilterExpression"] = filtro
             if qp.get("resumen") == "1":
                 kwargs = _proyeccion_liviana(kwargs)
-            items = _consultar(kwargs, limite)
+            # Con rango se pide uno de más para saber si hay más que el límite.
+            items = _consultar(kwargs, limite + 1 if con_rango and not id_medicion else limite)
+            truncado = con_rango and len(items) > limite
+            items = items[:limite]
             if qp.get("resumen") == "1":
                 _sin_campos_pesados(items)
             items = _agregar_url_imagen(items)
-            return _respuesta(200, {
+            cuerpo = {
                 "id_punto": id_punto,
                 "total": len(items),
                 "mediciones": items,
-            })
+            }
+            if con_rango:
+                cuerpo["truncado"] = truncado
+            return _respuesta(200, cuerpo)
 
         return _respuesta(400, {"error": "Esta acción no está disponible. Recarga la página e inténtalo de nuevo"})
 
