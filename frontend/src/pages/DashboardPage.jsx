@@ -196,11 +196,14 @@ export default function DashboardPage() {
             completo (antes de esto compartía fila con Mediciones por
             nivel, ahora Indicadores va solo y quedaba con mucho espacio
             vacío sin usar). Ver KPIBar.jsx.
+            2026-11-06: al mostrar etiqueta/valor/detalle apiladas (antes
+            una sola línea) esta sección le quitó alto al mapa de abajo
+            -- padding más chico acá para devolverle ese alto.
             ======================================================== */}
 
         <section
           className="dashboard-section"
-          style={{ padding: '18px 24px', flexShrink: 0 }}
+          style={{ padding: '12px 24px', flexShrink: 0 }}
         >
           <KPIBar />
         </section>
@@ -223,7 +226,7 @@ export default function DashboardPage() {
             gridTemplateColumns: 'minmax(250px, 0.85fr) minmax(0, 2.1fr) minmax(320px, 1.05fr)',
             gap: 10,
             flex: 1,
-            minHeight: 320,
+            minHeight: 360,
           }}
         >
           {/* ======================================================

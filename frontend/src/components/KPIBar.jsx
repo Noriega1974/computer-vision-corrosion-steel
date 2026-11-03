@@ -31,8 +31,8 @@ function Metrica({ label, value, sub, loading, isFirst }) {
         flexDirection: 'column',
         alignItems: 'center',
         textAlign: 'center',
-        gap: 3,
-        padding: '2px 16px',
+        gap: 2,
+        padding: '0 16px',
         borderLeft: isFirst ? 'none' : '1px solid var(--border)',
       }}
     >
