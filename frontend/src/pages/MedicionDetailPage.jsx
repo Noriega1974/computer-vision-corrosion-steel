@@ -281,9 +281,13 @@ export default function MedicionDetailPage() {
   useEffect(() => { setVistaFoto(VISTA_INICIAL); }, [idMedicion]);
   // Readable name in the header breadcrumb (photo name, else its date).
   useEffect(() => {
-    if (medicion) publicarTituloDetalle(tituloMedicion(medicion));
+    // While the next photo loads, `medicion` can still be the previous one: only
+    // publish its title when it is the one the URL asks for (cleanup clears it on id change).
+    if (medicion && String(medicion.id_medicion ?? idMedicion) === String(idMedicion)) {
+      publicarTituloDetalle(tituloMedicion(medicion));
+    }
     return () => publicarTituloDetalle('');
-  }, [medicion?.nombre, medicion?.timestamp]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [idMedicion, medicion?.id_medicion, medicion?.nombre, medicion?.timestamp]); // eslint-disable-line react-hooks/exhaustive-deps
   const [showClimaFlashcard, setShowClimaFlashcard] = useState(false);
   const [showMasOpciones, setShowMasOpciones] = useState(false);
   const [shareMsg, setShareMsg] = useState('');

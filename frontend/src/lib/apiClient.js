@@ -1,25 +1,7 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
+import { parseNumericStrings } from './numericStrings.js';
 
 const BASE_URL = import.meta.env.VITE_API_URL || '';
-
-// Convierte recursivamente strings numéricos puros a Number.
-// Necesario porque DynamoDB serializa Decimal como string ("0.0", "3", etc.).
-// La regex es estricta: solo matchea números limpios, nunca fechas ISO ni UUIDs.
-function parseNumericStrings(obj) {
-  if (obj === null || obj === undefined) return obj;
-  if (Array.isArray(obj)) return obj.map(parseNumericStrings);
-  if (typeof obj === 'object') {
-    const result = {};
-    for (const [k, v] of Object.entries(obj)) {
-      result[k] = parseNumericStrings(v);
-    }
-    return result;
-  }
-  if (typeof obj === 'string' && /^-?\d+(\.\d+)?$/.test(obj)) {
-    return Number(obj);
-  }
-  return obj;
-}
 
 // Obtiene el idToken actual de Cognito para inyectarlo en cada request
 async function getIdToken() {

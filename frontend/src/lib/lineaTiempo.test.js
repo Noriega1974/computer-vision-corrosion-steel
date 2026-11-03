@@ -69,6 +69,16 @@ describe('lineaTiempo.js — filtrado y agrupación cronológica', () => {
     assert.equal(filtrarMedicionesLineaTiempo(muestra, { busqueda: 'inspeccion mensual' }).length, 2);
   });
 
+  it('compara ids como texto: el cliente API convierte ids numericos a numero', () => {
+    const numericas = [
+      { id_medicion: 'a', bloque_id: 12, empresa_id: 7, timestamp: '2026-11-02T10:00:00Z' },
+      { id_medicion: 'b', id_punto: 13, empresa_id: 8, timestamp: '2026-11-02T11:00:00Z' },
+    ];
+    assert.equal(filtrarMedicionesLineaTiempo(numericas, { empresaId: '7' }).length, 1);
+    assert.equal(filtrarMedicionesLineaTiempo(numericas, { bloqueId: '13' }).length, 1);
+    assert.equal(filtrarMedicionesLineaTiempo(numericas, { bloqueId: '12', empresaId: '8' }).length, 0);
+  });
+
   it('agrupa por día local de más reciente a más antiguo y colapsa lotes del mismo día', () => {
     const ref = new Date(2026, 10, 2, 18, 0, 0); // 2026-11-02 local
     const dias = agruparEventosPorDia(muestra, { ahora: ref });

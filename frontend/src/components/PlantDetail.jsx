@@ -267,8 +267,8 @@ function MedicionRow({ medicion, idPunto }) {
     return <div className="historial-fila">{contenido}</div>;
   }
   const destino = idBloque
-    ? `/galeria/${medicion.id_medicion}?punto=${encodeURIComponent(idBloque)}`
-    : `/galeria/${medicion.id_medicion}`;
+    ? `/galeria/${encodeURIComponent(medicion.id_medicion)}?punto=${encodeURIComponent(idBloque)}`
+    : `/galeria/${encodeURIComponent(medicion.id_medicion)}`;
   return (
     <Link
       to={destino}

@@ -32,7 +32,7 @@ export function calcularIndicadores(mediciones = [], ahora = Date.now()) {
   let puntosAlDia = 0;
 
   for (const [, lista] of porPunto) {
-    const [ultima, anterior] = lista;
+    const [ultima] = lista;
     const pctUltima = pct(ultima);
     const reciente = tiempo(ultima) >= desde;
 
@@ -40,7 +40,10 @@ export function calcularIndicadores(mediciones = [], ahora = Date.now()) {
     if (pctUltima !== null && (!mayor || pctUltima > mayor.pct)) {
       mayor = { pct: pctUltima, punto: ultima.bloque_nombre ?? null, nivel: ultima.nivel_corrosion ?? null };
     }
-    const pctAnterior = pct(anterior);
+    // "Worse in the last 30 days": the baseline must be inside the window too,
+    // otherwise a rise measured against an old photo would be mislabeled.
+    const anterior = lista.slice(1).find(x => tiempo(x) >= desde && pct(x) !== null);
+    const pctAnterior = anterior ? pct(anterior) : null;
     if (reciente && pctUltima !== null && pctAnterior !== null
         && pctUltima - pctAnterior >= UMBRAL_EMPEORO_PP) {
       puntosEmpeoraron++;

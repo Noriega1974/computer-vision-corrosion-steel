@@ -47,9 +47,9 @@ export function filtrarMedicionesLineaTiempo(
 
   return mediciones.filter((m) => {
     if (!m) return false;
-    if (empresaId && empresaId !== 'all' && m.empresa_id !== empresaId) return false;
+    if (empresaId && empresaId !== 'all' && String(m.empresa_id) !== String(empresaId)) return false;
     const idBloque = m.bloque_id || m.id_punto;
-    if (bloqueId && bloqueId !== 'all' && idBloque !== bloqueId) return false;
+    if (bloqueId && bloqueId !== 'all' && String(idBloque) !== String(bloqueId)) return false;
     if (nivel !== undefined && nivel !== null && nivel !== '' && nivel !== 'all') {
       if (nivelNum(m) !== Number(nivel)) return false;
     }

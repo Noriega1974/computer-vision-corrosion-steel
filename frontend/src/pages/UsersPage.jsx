@@ -148,9 +148,11 @@ const labelStyle = {
 };
 
 // Required affiliation selector shared by the user and collaborator forms
-// (super_admin only). Deactivated companies are not offered: the backend
-// rejects them with 400.
+// (super_admin only). Deactivated companies are not offered for a new choice
+// (the backend rejects them with 400), except the user's current one, which is
+// kept as "(inactiva)" so the form can still be saved while editing.
 function CampoAfiliacion({ id, value, onChange, empresas }) {
+  const opciones = (empresas ?? []).filter(e => e.activa !== false || e.id_empresa === value);
   return (
     <div style={{ marginBottom: 'var(--space-3-5)' }}>
       <label htmlFor={id} style={labelStyle}>
@@ -158,8 +160,10 @@ function CampoAfiliacion({ id, value, onChange, empresas }) {
       </label>
       <select id={id} name="empresa_id" value={value} onChange={onChange} required style={inputStyle}>
         <option value="">Selecciona una afiliación…</option>
-        {(empresas ?? []).filter(e => e.activa !== false).map(e => (
-          <option key={e.id_empresa} value={e.id_empresa}>{e.nombre}</option>
+        {opciones.map(e => (
+          <option key={e.id_empresa} value={e.id_empresa}>
+            {e.activa === false ? `${e.nombre} (inactiva)` : e.nombre}
+          </option>
         ))}
       </select>
     </div>
@@ -445,7 +449,7 @@ export default function UsersPage() {
     [empresas]
   );
   const nombreAfiliacionDe = (u) => {
-    if (!u.empresa_id) return 'Todas';
+    if (!u.empresa_id) return (u.rol ?? u.role) === 'super_admin' ? 'Todas' : 'Sin afiliación';
     if (miRol === 'super_admin') return empresaNombrePorId[u.empresa_id] ?? u.empresa_id;
     return miPerfil?.empresa_nombre ?? 'Sin dato';
   };

@@ -196,6 +196,12 @@ function TablaConMarco({ etiqueta, children }) {
 
 // ── Página ───────────────────────────────────────────────────────────────────
 
+function desplazarAAncla(hash) {
+  let id = hash.slice(1);
+  try { id = decodeURIComponent(id); } catch { /* ancla mal codificada: se usa tal cual */ }
+  document.getElementById(id)?.scrollIntoView({ block: 'start' });
+}
+
 export default function QuePixelRustPage() {
   // Las páginas se cargan con lazy(): al llegar desde otra ruta con #ancla el
   // navegador intenta saltar antes de que exista la sección. Se desplaza aquí,
@@ -203,11 +209,13 @@ export default function QuePixelRustPage() {
   // <Link> y cambian `hash` sin recargar).
   const { hash } = useLocation();
   useEffect(() => {
-    if (!hash) return;
-    let id = hash.slice(1);
-    try { id = decodeURIComponent(id); } catch { /* ancla mal codificada: se usa tal cual */ }
-    document.getElementById(id)?.scrollIntoView({ block: 'start' });
+    if (hash) desplazarAAncla(hash);
   }, [hash]);
+  // Pulsar un enlace cuyo hash ya es el actual no cambia `hash`, así que el
+  // efecto no corre: se desplaza aquí para que el enlace siempre responda.
+  const alPulsarAncla = (destino) => () => {
+    if (destino === hash) desplazarAAncla(destino);
+  };
 
   return (
     <div style={{
@@ -248,6 +256,7 @@ export default function QuePixelRustPage() {
               <li key={id}>
                 <Link
                   to={{ hash: `#${id}` }}
+                  onClick={alPulsarAncla(`#${id}`)}
                   style={{
                     color: 'var(--accent-amber)', fontWeight: 600, fontSize: 15,
                     textUnderlineOffset: 3, textDecorationThickness: 1,
@@ -613,7 +622,7 @@ export default function QuePixelRustPage() {
             se calcula sobre la foto completa y entonces depende del encuadre y de la distancia de
             captura. En ambos casos es una estimación del modelo, no una medida del área física.
             Los consejos para encuadrar están en{' '}
-            <Link to={{ hash: '#como-se-calcula' }} style={{ color: 'var(--accent-amber)', fontWeight: 600, textUnderlineOffset: 3 }}>
+            <Link to={{ hash: '#como-se-calcula' }} onClick={alPulsarAncla('#como-se-calcula')} style={{ color: 'var(--accent-amber)', fontWeight: 600, textUnderlineOffset: 3 }}>
               Cómo se calcula el %
             </Link>.
           </li>

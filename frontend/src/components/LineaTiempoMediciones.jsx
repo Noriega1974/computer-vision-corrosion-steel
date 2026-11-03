@@ -397,7 +397,7 @@ export default function LineaTiempoMediciones() {
 
   const bloquesDisponibles = useMemo(() => {
     if (!esSuperAdmin || empresaId === 'all') return bloques;
-    return bloques.filter((b) => b.empresa_id === empresaId);
+    return bloques.filter((b) => String(b.empresa_id) === String(empresaId));
   }, [bloques, esSuperAdmin, empresaId]);
 
   const medicionesFiltradas = useMemo(
