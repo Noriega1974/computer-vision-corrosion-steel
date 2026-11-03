@@ -240,3 +240,57 @@ def test_sin_nombre_sigue_funcionando(h, monkeypatch, tmp_path):
     _poner_unet(h, monkeypatch, tmp_path)
     cuerpo = _ok(h.lambda_handler(_evento(_foto()), None))
     assert cuerpo["nivel_corrosion"] == 2 and "nombre" not in cuerpo
+
+
+# ── Idempotencia del POST /medicion con imagen_key ───────────────────────────
+
+def _sincronizar(h):
+    """FakeTabla guarda lo escrito en `escritos` y lee de `items`: igualarlos
+    (la última escritura de cada clave gana, como en DynamoDB)."""
+    ultimos = {(i["id_punto"], i["sk"]): i for i in h.tabla_mediciones.escritos}
+    h.tabla_mediciones.items = list(ultimos.values())
+
+
+def _marcadores(h):
+    ultimos = {(i["id_punto"], i["sk"]): i for i in h.tabla_mediciones.escritos if i["id_punto"].startswith("IDEM#")}
+    return list(ultimos.values())
+
+
+def test_reintento_tras_exito_devuelve_la_misma_medicion_sin_duplicar(h, monkeypatch, tmp_path):
+    _poner_unet(h, monkeypatch, tmp_path)
+    h.s3.put_object("bucket-de-prueba", CLAVE, _foto())
+    primera = _ok(h.lambda_handler(_evento_clave(CLAVE), None))
+    assert [m["estado"] for m in _marcadores(h)] == ["listo"]
+    _sincronizar(h)
+    escritos = len(h.tabla_mediciones.escritos)
+
+    segunda = _ok(h.lambda_handler(_evento_clave(CLAVE), None))  # el temporal ya se borró
+    assert segunda["id_medicion"] == primera["id_medicion"]
+    assert segunda["bloque_info"]["id_bloque"] == "BLQ-1"
+    assert len(h.tabla_mediciones.escritos) == escritos
+
+
+def test_reintento_mientras_corre_el_primero_es_409(h, monkeypatch, tmp_path):
+    _poner_unet(h, monkeypatch, tmp_path)
+    h.s3.put_object("bucket-de-prueba", CLAVE, _foto())
+    h.tabla_mediciones.items = [{"id_punto": f"IDEM#{CLAVE}", "sk": "IDEM", "estado": "procesando", "inicio": int(__import__("time").time())}]
+    resp = h.lambda_handler(_evento_clave(CLAVE), None)
+    assert resp["statusCode"] == 409
+    assert _marcadores(h) == [] and ("bucket-de-prueba", CLAVE) in h.s3.objetos
+
+
+def test_si_el_analisis_falla_se_libera_el_reclamo_para_reintentar(h, monkeypatch, tmp_path):
+    _poner_unet(h, monkeypatch, tmp_path)
+    h.s3.put_object("bucket-de-prueba", CLAVE, _foto())
+    original = h._inferir
+    monkeypatch.setattr(h, "_inferir", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    assert h.lambda_handler(_evento_clave(CLAVE), None)["statusCode"] == 500
+    assert _marcadores(h) == []
+    monkeypatch.setattr(h, "_inferir", original)
+    assert _ok(h.lambda_handler(_evento_clave(CLAVE), None))["nivel_corrosion"] == 2
+
+
+def test_base64_no_deja_marcador(h, monkeypatch, tmp_path):
+    _poner_unet(h, monkeypatch, tmp_path)
+    _ok(h.lambda_handler(_evento(_foto()), None))
+    assert _marcadores(h) == []
