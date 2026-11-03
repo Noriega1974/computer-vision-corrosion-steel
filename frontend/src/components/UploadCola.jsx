@@ -4,6 +4,7 @@ import NivelIcon from './NivelIcon';
 import { nivelColor, nivelLabel } from '../lib/statusUtils';
 import { formatoPct, etiquetaBase } from '../lib/textUtils';
 import { LOTE_MAX, NOMBRE_MAX } from '../hooks/useUploadLote';
+import NotaPctAproximado from './NotaPctAproximado';
 
 const visuallyHidden = {
   position: 'absolute', width: 1, height: 1, overflow: 'hidden',
@@ -67,7 +68,10 @@ function EstadoFila({ it, ocupado, onReintentar }) {
 
 // Queue for a multi-photo upload. A list of rows (thumbnail, name, GPS badge,
 // text status); the polite live region announces only per-row completion.
-export default function UploadCola({ lote, onQuitar, onReintentar, onAgregar, onVerGaleria, onSubirMas }) {
+export default function UploadCola({
+  lote, nombreLote, onNombreLoteChange, placeholderLote,
+  onQuitar, onReintentar, onAgregar, onVerGaleria, onSubirMas,
+}) {
   const { items, running, anuncio, iniciado, terminado, listos, errores } = lote;
   const resumenRef = useRef(null);
   const inputRef = useRef(null);
@@ -95,8 +99,42 @@ export default function UploadCola({ lote, onQuitar, onReintentar, onAgregar, on
         </div>
       )}
 
+      {onNombreLoteChange && (
+        <div style={{
+          marginBottom: 'var(--space-3)', padding: '12px 14px',
+          background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 9,
+        }}>
+          <label htmlFor="upload-nombre-lote" style={{
+            display: 'block', fontFamily: 'var(--font-data)', fontSize: 'var(--text-2xs)',
+            fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.1em',
+            textTransform: 'uppercase', marginBottom: 6,
+          }}>
+            Nombre del lote
+          </label>
+          <input
+            id="upload-nombre-lote"
+            name="nombre-lote"
+            type="text"
+            value={nombreLote ?? ''}
+            onChange={(e) => onNombreLoteChange(e.target.value)}
+            disabled={iniciado}
+            maxLength={NOMBRE_MAX}
+            autoComplete="off"
+            placeholder={placeholderLote || 'Ej. Inspección mensual torre norte'}
+            style={{
+              width: '100%', padding: '9px 12px', background: 'var(--bg-card)',
+              border: '1px solid var(--border)', borderRadius: 7, color: 'var(--text-primary)',
+              fontFamily: 'var(--font-ui)', fontSize: 14, boxSizing: 'border-box',
+            }}
+          />
+          <div style={{ marginTop: 5, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
+            Todas las imágenes de esta tanda se agruparán en una carpeta con este nombre dentro del punto. Cada archivo conserva su nombre original.
+          </div>
+        </div>
+      )}
+
       <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-        {items.map((it, i) => (
+        {items.map((it) => (
           <li key={it.id} style={{
             display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-start', flexWrap: 'wrap',
             padding: 10, background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 8,
@@ -104,25 +142,16 @@ export default function UploadCola({ lote, onQuitar, onReintentar, onAgregar, on
             <img src={it.previewUrl} alt="" width={56} height={56}
               style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
             <div style={{ flex: '1 1 200px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {it.estado === 'cola' && !iniciado ? (
-                <>
-                  <label htmlFor={`cola-nombre-${it.id}`} style={visuallyHidden}>Nombre de la imagen {i + 1}</label>
-                  <input
-                    id={`cola-nombre-${it.id}`} type="text" value={it.nombre} maxLength={NOMBRE_MAX}
-                    autoComplete="off" placeholder="Nombre de la foto"
-                    onChange={(e) => lote.renombrar(it.id, e.target.value)}
-                    style={{
-                      width: '100%', padding: '8px 10px', background: 'var(--bg-card)',
-                      border: '1px solid var(--border)', borderRadius: 7, color: 'var(--text-primary)',
-                      fontFamily: 'var(--font-ui)', fontSize: 14,
-                    }}
-                  />
-                </>
-              ) : (
-                <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', padding: '3px 9px',
+                  background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 6,
+                  fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 'var(--text-xs)',
+                  color: 'var(--text-primary)', overflowWrap: 'anywhere',
+                }}>
                   {it.nombre || it.file.name}
-                </div>
-              )}
+                </span>
+              </div>
               {it.gps && (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--text-2xs)', color: 'var(--accent-green)' }}>
                   <IconoUbicacion size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
@@ -143,6 +172,10 @@ export default function UploadCola({ lote, onQuitar, onReintentar, onAgregar, on
           </li>
         ))}
       </ul>
+
+      {listos > 0 && (
+        <NotaPctAproximado style={{ marginTop: 'var(--space-3)' }} />
+      )}
 
       {!iniciado && items.length < LOTE_MAX && (
         <div style={{ marginTop: 'var(--space-3)' }}>

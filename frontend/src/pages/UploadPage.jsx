@@ -1,17 +1,20 @@
 import { AvisoEnLinea } from '../components/Aviso';
 import React, { useState, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { IconoAgregarImagen, IconoCamara, IconoCheck, IconoUbicacion, IconoVolver } from '../components/Iconos';
+import { Link, useNavigate } from 'react-router-dom';
+import { IconoAgregarImagen, IconoCamara, IconoCheck, IconoEnfocar, IconoUbicacion, IconoVolver } from '../components/Iconos';
 import exifr from 'exifr';
 import { useBloques } from '../hooks/useBloques';
 import { useUploadMedicion, MAX_FOTO_MB } from '../hooks/useUploadMedicion';
-import { useUploadLote, clasificarArchivos, LOTE_MAX } from '../hooks/useUploadLote';
+import { useUploadLote, clasificarArchivos, generarLoteId, LOTE_MAX } from '../hooks/useUploadLote';
 import UploadCola from '../components/UploadCola';
 import { nivelColor, nivelBg, nivelLabel } from '../lib/statusUtils';
 import SearchableSelect from '../components/SearchableSelect';
 import NivelIcon from '../components/NivelIcon';
 import NivelInfo from '../components/NivelInfo';
+import NotaPctAproximado from '../components/NotaPctAproximado';
+import DatePicker from '../components/DatePicker';
 import { formatoPct, etiquetaBase } from '../lib/textUtils';
+import { hoyLocalISO, esFechaISOValida, esFechaFutura } from '../lib/fechas';
 
 // ─── Componente: resultado del análisis ─────────────────────────────────────
 const NOMBRE_MAX = 80;
@@ -40,7 +43,7 @@ function ResultadoAnalisis({ result, onReset, onDashboard }) {
         )}
         <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--text-muted)', marginTop: result.nombre ? -10 : 0, display: 'flex', alignItems: 'center', gap: 6 }}>
           <IconoUbicacion size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
-          <span>{bloque.nombre ?? '—'}{bloque.ciudad ? ` · ${bloque.ciudad}` : ''}</span>
+          <span>{bloque.nombre ?? 'Sin nombre'}{bloque.ciudad ? ` · ${bloque.ciudad}` : ''}</span>
         </div>
 
         <div style={{
@@ -59,6 +62,7 @@ function ResultadoAnalisis({ result, onReset, onDashboard }) {
           <div style={{ fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 52, color, letterSpacing: '-0.02em', lineHeight: 1.1, marginTop: 10 }}>
             {formatoPct(areaPct)}
           </div>
+          <NotaPctAproximado align="center" style={{ marginTop: 6 }} />
           <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', marginTop: 6, letterSpacing: '0.08em', fontWeight: 600 }}>
             ÁREA CORROÍDA {etiquetaBase(result).toUpperCase()}
           </div>
@@ -132,12 +136,15 @@ export default function UploadPage() {
   const lote = useUploadLote();
   const modoLote = lote.items.length > 0;
   const [avisoArchivos, setAvisoArchivos] = useState(null);  // {rechazados: string[], excedidos: number}
+  const [nombreLote, setNombreLote] = useState('');
+  const [loteIdActivo, setLoteIdActivo] = useState(null);
 
   // Detalles opcionales
   const [nombre, setNombre] = useState('');           // nombre de la foto (para buscarla luego)
   const [notas, setNotas] = useState('');
   const [esMedicionPasada, setEsMedicionPasada] = useState(false);
-  const [fechaMedicion, setFechaMedicion] = useState(() => new Date().toISOString().slice(0, 10));
+  const [fechaMedicion, setFechaMedicion] = useState(() => hoyLocalISO());
+  const fechaInvalida = esMedicionPasada && (!esFechaISOValida(fechaMedicion) || esFechaFutura(fechaMedicion));
 
   // El combobox de puntos trabaja con strings (mismo componente que usan
   // BloquesPage/GaleriaPage para búsquedas, no un <select> suelto): arma una
@@ -217,13 +224,15 @@ export default function UploadPage() {
     }
   }, [lote, procesarImagen]);
 
-  const faltaAlgo = modoLote ? !bloqueSeleccionado : (!imagen || !bloqueSeleccionado);
+  const faltaAlgo = (modoLote ? !bloqueSeleccionado : (!imagen || !bloqueSeleccionado)) || fechaInvalida;
 
   // Body of one /medicion request in batch mode: shared fields plus the row's
-  // own name and EXIF GPS.
-  const construirBodyLote = (it) => ({
+  // own name and EXIF GPS, and the batch folder identity (lote_id + lote_nombre).
+  const construirBodyLote = (it, idLote = loteIdActivo, nombreLoteFinal = (nombreLote.trim() || `Lote ${hoyLocalISO()}`)) => ({
     fuente: 'movil',
     bloque_id: bloqueSeleccionado.id_bloque,
+    ...(idLote && { lote_id: idLote }),
+    ...(nombreLoteFinal && { lote_nombre: nombreLoteFinal }),
     ...(it.nombre.trim() && { nombre: it.nombre.trim() }),
     ...(notas && { notas }),
     ...(it.gps && { latitud_real: it.gps.latitude, longitud_real: it.gps.longitude }),
@@ -244,10 +253,24 @@ export default function UploadPage() {
   // `ubicacion` ni pide lat/lng.
   async function handleSubmit(e) {
     e.preventDefault();
+    if (esMedicionPasada) {
+      if (!esFechaISOValida(fechaMedicion)) {
+        setErrorLocal('La fecha de la medición no es válida. Elige una fecha del calendario.');
+        return;
+      }
+      if (esFechaFutura(fechaMedicion)) {
+        setErrorLocal('La fecha de la medición no puede ser futura. Elige la fecha de hoy o una anterior.');
+        return;
+      }
+    }
     if (modoLote) {
       if (!bloqueSeleccionado || lote.running) return;
       setErrorLocal(null);
-      lote.iniciar(construirBodyLote);
+      const loteId = loteIdActivo || generarLoteId();
+      const nombreLoteFinal = nombreLote.trim() || `Lote ${hoyLocalISO()}`;
+      setLoteIdActivo(loteId);
+      if (!nombreLote.trim()) setNombreLote(nombreLoteFinal);
+      lote.iniciar((it) => construirBodyLote(it, loteId, nombreLoteFinal));
       return;
     }
     // Defensive guard: the submit button is disabled until both exist.
@@ -286,7 +309,15 @@ export default function UploadPage() {
       <div style={{ minHeight: '100vh', background: 'var(--bg-page)', padding: '32px 20px' }}>
         <ResultadoAnalisis
           result={result}
-          onReset={() => { reset(); setImagen(null); setNombre(''); setPreview(null); setExifGps(null); }}
+          onReset={() => {
+            reset();
+            setImagen(null);
+            setNombre('');
+            setPreview(null);
+            setExifGps(null);
+            setEsMedicionPasada(false);
+            setFechaMedicion(hoyLocalISO());
+          }}
           onDashboard={irAGaleria}
         />
       </div>
@@ -319,14 +350,47 @@ export default function UploadPage() {
 
           {/* ─── SECCIÓN 1: Imagen ─── */}
           <Section title={modoLote ? '1. Imágenes' : '1. Imagen'} accent="var(--accent-amber)">
+            <div
+              role="note"
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 10,
+                padding: '11px 14px',
+                marginBottom: 'var(--space-3)',
+                background: 'var(--bg-inset)',
+                border: '1px solid var(--border)',
+                borderRadius: 9,
+                fontFamily: 'var(--font-ui)',
+              }}
+            >
+              <IconoEnfocar size={18} color="var(--accent-amber)" style={{ marginTop: 1 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.35 }}>
+                  El porcentaje se calcula sobre la placa
+                </div>
+                <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.45 }}>
+                  Que se vea completa · De frente · Con buena luz y sin reflejos · Enfocada.{' '}
+                  <Link
+                    to="/que-es-pixelrust#como-se-calcula"
+                    style={{ color: 'var(--accent-amber)', fontWeight: 600, textUnderlineOffset: 3 }}
+                  >
+                    Ver cómo se calcula →
+                  </Link>
+                </div>
+              </div>
+            </div>
             {modoLote ? (
               <UploadCola
                 lote={lote}
+                nombreLote={nombreLote}
+                onNombreLoteChange={setNombreLote}
+                placeholderLote={`Ej. Inspección mensual torre norte (por defecto: Lote ${hoyLocalISO()})`}
                 onQuitar={quitarDeLote}
-                onReintentar={(id) => lote.reintentar(id, construirBodyLote)}
+                onReintentar={(id) => lote.reintentar(id, (it) => construirBodyLote(it))}
                 onAgregar={procesarArchivos}
                 onVerGaleria={irAGaleria}
-                onSubirMas={() => { lote.limpiar(); setAvisoArchivos(null); setErrorLocal(null); }}
+                onSubirMas={() => { lote.limpiar(); setNombreLote(''); setLoteIdActivo(null); setAvisoArchivos(null); setErrorLocal(null); }}
               />
             ) : !preview ? (
               // Era un <div onClick>: se podia usar con el mouse pero no con el
@@ -361,9 +425,6 @@ export default function UploadPage() {
                   Arrastra una o varias imágenes aquí o haz clic para seleccionar
                 </div>
                 <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>JPG o PNG · Máximo 50 MB cada una · Hasta {LOTE_MAX} por tanda</div>
-                <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', marginTop: 'var(--space-1)' }}>
-                  Para un mejor resultado, encuadra la placa completa, con poco fondo y de frente.
-                </div>
                 <input
                   id="file-input" name="imagen" type="file" multiple
                   accept="image/jpeg,image/png" tabIndex={-1}
@@ -451,7 +512,7 @@ export default function UploadPage() {
                 display: 'flex', alignItems: 'center', gap: 6,
               }}>
                 <IconoCheck size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
-                <span>Punto seleccionado: <strong>{bloqueSeleccionado.nombre}</strong>{bloqueSeleccionado.ciudad ? ` — ${bloqueSeleccionado.ciudad}` : ''}</span>
+                <span>Punto seleccionado: <strong>{bloqueSeleccionado.nombre}</strong>{bloqueSeleccionado.ciudad ? ` · ${bloqueSeleccionado.ciudad}` : ''}</span>
               </div>
             )}
             {bloques.length === 0 && (
@@ -475,12 +536,13 @@ export default function UploadPage() {
                   key={String(val)}
                   type="button"
                   onClick={() => setEsMedicionPasada(val)}
+                  aria-pressed={esMedicionPasada === val}
                   style={{
                     flex: 1, padding: '10px 8px', borderRadius: 8,
-                    border: `1px solid ${esMedicionPasada === val ? 'var(--accent-amber)' : 'var(--border)'}`,
-                    background: esMedicionPasada === val ? 'rgba(156,54,16,0.1)' : 'var(--bg-inset)',
+                    border: `${esMedicionPasada === val ? 2 : 1}px solid ${esMedicionPasada === val ? 'var(--accent-amber)' : 'var(--border)'}`,
+                    background: esMedicionPasada === val ? 'color-mix(in srgb, var(--accent-amber) 16%, var(--bg-card-solid))' : 'var(--bg-inset)',
                     color: esMedicionPasada === val ? 'var(--accent-amber)' : 'var(--text-muted)',
-                    fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)', cursor: 'pointer',
+                    fontFamily: 'var(--font-ui)', fontWeight: esMedicionPasada === val ? 700 : 600, fontSize: 'var(--text-sm)', cursor: 'pointer',
                     transition: 'color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out)',
                   }}
                 >
@@ -491,15 +553,22 @@ export default function UploadPage() {
             {esMedicionPasada && (
               <div>
                 <label htmlFor="upload-fecha" style={labelStyle}>Fecha de la medición</label>
-                <input
+                <DatePicker
                   id="upload-fecha"
-                  name="fecha-medicion"
-                  type="date"
+                  mode="single"
+                  allowModeSwitch={false}
                   value={fechaMedicion}
-                  max={new Date().toISOString().slice(0, 10)}
-                  onChange={e => setFechaMedicion(e.target.value)}
-                  style={inputStyle}
+                  onChange={setFechaMedicion}
+                  maxISO={hoyLocalISO()}
+                  clearLabel="Restablecer a hoy"
+                  futureTitle="No puedes elegir una fecha futura"
+                  align="left"
                 />
+                {fechaInvalida && (
+                  <div role="alert" style={{ marginTop: 6, fontSize: 'var(--text-xs)', color: 'var(--accent-red)', fontFamily: 'var(--font-ui)' }}>
+                    La fecha de la medición no puede ser futura ni inválida. Elige la fecha de hoy o una anterior.
+                  </div>
+                )}
               </div>
             )}
           </Section>
@@ -567,7 +636,9 @@ export default function UploadPage() {
 
           {faltaAlgo && !uploading && (
             <p id="upload-falta" style={{ margin: 'var(--space-2) 0 0', fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
-              Falta: elegir {modoLote ? 'el punto' : !imagen && !bloqueSeleccionado ? 'la foto y el punto' : !imagen ? 'la foto' : 'el punto'}
+              {fechaInvalida
+                ? 'Falta: elegir una fecha de medición válida (hoy o anterior)'
+                : `Falta: elegir ${modoLote ? 'el punto' : !imagen && !bloqueSeleccionado ? 'la foto y el punto' : !imagen ? 'la foto' : 'el punto'}`}
             </p>
           )}
           </>)}

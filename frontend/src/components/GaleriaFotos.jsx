@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
-import { IconoCasillaMarcada, IconoSinResultados } from './Iconos';
+import { IconoCasillaMarcada, IconoEliminar, IconoMoverACarpeta, IconoSinResultados, IconoVolver } from './Iconos';
 import MedicionCard from './MedicionCard';
 import BarraSeleccion from './BarraSeleccion';
 import { EliminarLoteDialog, MoverLoteDialog } from './LoteDialogs';
@@ -9,6 +9,11 @@ import { useAuth } from '../auth/AuthContext';
 import { useAccionesLote } from '../hooks/useAccionesLote';
 import { NIVELES, nivelColor, nivelLabel } from '../lib/statusUtils';
 import NivelInfo from './NivelInfo';
+import DatePicker from './DatePicker';
+import { inicioDiaLocal, finDiaLocal, hoyLocalISO, fechaUltimaMedicionISO } from '../lib/fechas';
+import { agruparPorLote, iniciales } from '../lib/galeriaCarpetas';
+import { formatFecha } from '../utils/dateFormat';
+import { CARD_TITULO_STYLE, CARD_SUBTITULO_STYLE, CARD_PILDORA_STYLE } from './cardTextStyles';
 
 const ORDENES = [
   { key: 'recientes', label: 'Más recientes' },
@@ -70,6 +75,19 @@ export default function GaleriaFotos({
   const [fechaInicio, setFechaInicio] = useState(restored.fechaInicio ?? '');
   const [fechaFin, setFechaFin] = useState(restored.fechaFin ?? '');
   const [orden, setOrden] = useState(restored.orden ?? 'recientes');
+  const [loteAbiertoId, setLoteAbiertoId] = useState(restored.loteAbiertoId ?? null);
+  const [mostrarTodas, setMostrarTodas] = useState(false);
+
+  // Reset the open batch only when the viewed point changes, not on mount, so a
+  // batch folder restored from the navigation state (coming back from a photo
+  // detail) stays open.
+  const puntoPrevio = useRef(puntoActual);
+  useEffect(() => {
+    if (puntoPrevio.current === puntoActual) return;
+    puntoPrevio.current = puntoActual;
+    setLoteAbiertoId(null);
+    setMostrarTodas(false);
+  }, [puntoActual]);
 
   useEffect(() => {
     onSeleccionChange?.(seleccionando);
@@ -77,16 +95,37 @@ export default function GaleriaFotos({
   }, [seleccionando, onSeleccionChange]);
 
   const hayFiltros = nivelFilter !== 'all' || fechaInicio || fechaFin;
-  const visibles = mediciones
+  const medicionesPorNivel = mediciones.filter(
+    m => nivelFilter === 'all' || (m.nivel_corrosion ?? 0) === Number(nivelFilter),
+  );
+  const limiteInicio = fechaInicio ? inicioDiaLocal(fechaInicio) : null;
+  const limiteFin = fechaFin ? finDiaLocal(fechaFin) : null;
+  const filtradas = medicionesPorNivel
     .filter(m => {
-      if (nivelFilter !== 'all' && (m.nivel_corrosion ?? 0) !== Number(nivelFilter)) return false;
-      if (fechaInicio && new Date(m.timestamp) < new Date(fechaInicio)) return false;
-      if (fechaFin && new Date(m.timestamp) > new Date(fechaFin + 'T23:59:59')) return false;
+      const ts = new Date(m.timestamp);
+      if (limiteInicio && ts < limiteInicio) return false;
+      if (limiteFin && ts > limiteFin) return false;
       return true;
     })
     .sort(COMPARADORES[orden]);
 
-  // Solo cuentan las marcadas que siguen visibles tras los filtros.
+  const agrupado = puntoActual ? agruparPorLote(filtradas) : { lotes: [], sueltas: filtradas };
+  const lotes = agrupado.lotes;
+  const sueltas = [...agrupado.sueltas].sort(COMPARADORES[orden]);
+  const loteAbierto = loteAbiertoId ? lotes.find(l => l.id === loteAbiertoId) ?? null : null;
+
+  useEffect(() => {
+    if (loteAbiertoId && !loteAbierto) {
+      setLoteAbiertoId(null);
+    }
+  }, [loteAbiertoId, loteAbierto]);
+
+  const visibles = loteAbierto
+    ? [...loteAbierto.mediciones].sort(COMPARADORES[orden])
+    : (lotes.length > 0 && !mostrarTodas ? sueltas : filtradas);
+
+  // Solo cuentan las marcadas que siguen visibles tras los filtros: nunca las
+  // fotos escondidas dentro de una carpeta de lote que no está abierta.
   const elegibles = visibles.filter(m => idPuntoDe(m));
   const elegidas = elegibles.filter(m => marcadas.has(m.id_medicion));
 
@@ -129,8 +168,8 @@ export default function GaleriaFotos({
   const controlesBarra = (
     <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
       <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-        {visibles.length} {visibles.length === 1 ? 'foto' : 'fotos'}
-        {visibles.length !== mediciones.length ? ` de ${mediciones.length}` : ''}
+        {filtradas.length} {filtradas.length === 1 ? 'foto' : 'fotos'}
+        {filtradas.length !== mediciones.length ? ` de ${mediciones.length}` : ''}
       </span>
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
         <label htmlFor="galeria-orden" style={etiquetaStyle}>ORDEN:</label>
@@ -138,7 +177,7 @@ export default function GaleriaFotos({
           {ORDENES.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
         </select>
       </div>
-      {puedeGestionar && !seleccionando && visibles.length > 0 && (
+      {puedeGestionar && !seleccionando && filtradas.length > 0 && (
         <button
           type="button" onClick={() => { setSeleccionando(true); setResumen(null); }}
           style={{
@@ -198,10 +237,24 @@ export default function GaleriaFotos({
         <div style={{
           display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginLeft: 'auto',
         }}>
-          <label htmlFor="galeria-desde" style={etiquetaStyle}>DESDE:</label>
-          <input id="galeria-desde" type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} style={controlStyle} />
-          <label htmlFor="galeria-hasta" style={etiquetaStyle}>HASTA:</label>
-          <input id="galeria-hasta" type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} style={controlStyle} />
+          <span style={etiquetaStyle}>FECHA:</span>
+          <DatePicker
+            id="galeria-fechas"
+            mode="range"
+            allowModeSwitch={true}
+            fechaInicio={fechaInicio}
+            fechaFin={fechaFin}
+            onChangeRango={(ini, fin) => {
+              setFechaInicio(ini);
+              setFechaFin(fin);
+            }}
+            maxISO={hoyLocalISO()}
+            inspecciones={medicionesPorNivel}
+            mesInicial={fechaUltimaMedicionISO(mediciones)}
+            ctaLabel="Filtrar fotos"
+            clearLabel="Limpiar filtro"
+            futureTitle="No hay fotos en fechas futuras"
+          />
           {hayFiltros && (
             <button
               type="button"
@@ -241,7 +294,7 @@ export default function GaleriaFotos({
         </div>
       )}
 
-      {visibles.length === 0 ? (
+      {filtradas.length === 0 ? (
         <div style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-3)',
           textAlign: 'center', padding: '40px 20px',
@@ -251,24 +304,225 @@ export default function GaleriaFotos({
           No hay fotos que coincidan con los filtros seleccionados.
         </div>
       ) : (
-        <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-          gap: 'var(--space-4)',
-        }}>
-          {visibles.map(m => (
-            <MedicionCard
-              key={m.id_medicion}
-              medicion={m}
-              contexto={contexto?.(m)}
-              to={m.bloque_id ? `/galeria/${m.id_medicion}?punto=${encodeURIComponent(m.bloque_id)}` : `/galeria/${m.id_medicion}`}
-              state={{ filters: { nivelFilter, fechaInicio, fechaFin, orden }, volver: volverA }}
-              seleccion={seleccionando && idPuntoDe(m) ? {
-                marcada: marcadas.has(m.id_medicion),
-                onToggle: () => alternar(m.id_medicion),
-              } : undefined}
-            />
-          ))}
-        </div>
+        <>
+          {loteAbierto && (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              flexWrap: 'wrap', gap: 10, padding: '12px 14px', marginBottom: 14,
+              background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => { setLoteAbiertoId(null); salirDeSeleccion(); }}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+                    background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 999,
+                    cursor: 'pointer', color: 'var(--text-secondary)',
+                    fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
+                  }}
+                >
+                  ← Todos los lotes del punto
+                </button>
+                <div>
+                  <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
+                    {loteAbierto.nombre}
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-ui)', fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>
+                    {loteAbierto.total} {loteAbierto.total === 1 ? 'foto' : 'fotos'}
+                    {loteAbierto.ultimaFecha ? ` · Última ${formatFecha(loteAbierto.ultimaFecha)}` : ''}
+                  </div>
+                </div>
+              </div>
+              {puedeGestionar && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const idsLote = new Set(loteAbierto.mediciones.filter(m => idPuntoDe(m)).map(m => m.id_medicion));
+                      setSeleccionando(true);
+                      setMarcadas(idsLote);
+                      setResumen(null);
+                    }}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+                      background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 7,
+                      cursor: 'pointer', color: 'var(--text-primary)',
+                      fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
+                    }}
+                  >
+                    <IconoCasillaMarcada size={14} aria-hidden="true" />
+                    Seleccionar lote completo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const idsLote = new Set(loteAbierto.mediciones.filter(m => idPuntoDe(m)).map(m => m.id_medicion));
+                      setSeleccionando(true);
+                      setMarcadas(idsLote);
+                      setDialogo('mover');
+                    }}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+                      background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 7,
+                      cursor: 'pointer', color: 'var(--text-secondary)',
+                      fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
+                    }}
+                  >
+                    <IconoMoverACarpeta size={14} aria-hidden="true" />
+                    Mover lote
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const idsLote = new Set(loteAbierto.mediciones.filter(m => idPuntoDe(m)).map(m => m.id_medicion));
+                      setSeleccionando(true);
+                      setMarcadas(idsLote);
+                      setDialogo('eliminar');
+                    }}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+                      background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.3)', borderRadius: 7,
+                      cursor: 'pointer', color: 'var(--accent-red)',
+                      fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
+                    }}
+                  >
+                    <IconoEliminar size={14} aria-hidden="true" />
+                    Eliminar lote
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {!loteAbierto && lotes.length > 0 && (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                flexWrap: 'wrap', gap: 8, marginBottom: 10,
+              }}>
+                <div style={{
+                  fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 'var(--text-xs)',
+                  color: 'var(--text-muted)', letterSpacing: '0.1em', textTransform: 'uppercase',
+                }}>
+                  Carpetas por lote ({lotes.length})
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMostrarTodas(prev => !prev)}
+                  style={{
+                    padding: '4px 10px', borderRadius: 999,
+                    border: `1px solid ${mostrarTodas ? 'var(--accent-amber)' : 'var(--border)'}`,
+                    background: mostrarTodas ? 'rgba(156,54,16,0.1)' : 'var(--bg-inset)',
+                    color: mostrarTodas ? 'var(--accent-amber)' : 'var(--text-secondary)',
+                    fontFamily: 'var(--font-ui)', fontSize: 'var(--text-2xs)', fontWeight: 600, cursor: 'pointer',
+                  }}
+                >
+                  {mostrarTodas ? 'Ver solo fotos individuales abajo' : 'Todas las fotos'}
+                </button>
+              </div>
+
+              <div style={{
+                display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                gap: 'var(--space-4)',
+              }}>
+                {lotes.map(lote => (
+                  <button
+                    key={lote.id}
+                    type="button"
+                    onClick={() => { setLoteAbiertoId(lote.id); salirDeSeleccion(); }}
+                    className="medicion-card"
+                    style={{
+                      display: 'flex', flexDirection: 'column', gap: 10, padding: 14,
+                      textAlign: 'left', cursor: 'pointer', color: 'inherit',
+                      background: 'var(--bg-card)', border: '1px solid var(--border)',
+                      borderRadius: 14, overflow: 'hidden', boxShadow: 'var(--shadow-sm)',
+                    }}
+                  >
+                    <div>
+                      <div style={{ ...CARD_TITULO_STYLE, color: 'var(--text-primary)' }}>
+                        {lote.nombre}
+                      </div>
+                      <div style={{
+                        ...CARD_SUBTITULO_STYLE, color: 'var(--text-muted)',
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      }}>
+                        {lote.ultimaFecha ? `Última foto ${formatFecha(lote.ultimaFecha)}` : 'Carpeta de lote'}
+                      </div>
+                    </div>
+
+                    <div style={{
+                      height: 140, width: '100%', background: 'var(--bg-inset)', borderRadius: 10,
+                      border: '1px solid var(--border)', overflow: 'hidden',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {lote.preview ? (
+                        <img
+                          src={lote.preview}
+                          alt=""
+                          loading="lazy"
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        />
+                      ) : (
+                        <div aria-hidden="true" style={{
+                          width: 72, height: 72, borderRadius: '50%', background: 'var(--bg-card-solid)',
+                          border: '1px solid var(--border-strong)', color: 'var(--text-secondary)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 24,
+                        }}>
+                          {iniciales(lote.nombre)}
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, width: '100%', marginTop: 2 }}>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)', fontWeight: 600 }}>
+                        {lote.total} {lote.total === 1 ? 'foto' : 'fotos'}
+                      </div>
+                      <span style={{
+                        ...CARD_PILDORA_STYLE,
+                        background: 'var(--text-primary)', color: 'var(--bg-card-solid)',
+                      }}>
+                        Abrir lote
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!loteAbierto && lotes.length > 0 && visibles.length > 0 && (
+            <div style={{
+              fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 'var(--text-xs)',
+              color: 'var(--text-muted)', letterSpacing: '0.1em', textTransform: 'uppercase',
+              marginBottom: 10,
+            }}>
+              {mostrarTodas ? `Todas las fotos (${visibles.length})` : `Fotos individuales (${visibles.length})`}
+            </div>
+          )}
+
+          {visibles.length > 0 && (
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+              gap: 'var(--space-4)',
+            }}>
+              {visibles.map(m => (
+                <MedicionCard
+                  key={m.id_medicion}
+                  medicion={m}
+                  contexto={contexto?.(m)}
+                  to={m.bloque_id ? `/galeria/${m.id_medicion}?punto=${encodeURIComponent(m.bloque_id)}` : `/galeria/${m.id_medicion}`}
+                  state={{ filters: { nivelFilter, fechaInicio, fechaFin, orden, loteAbiertoId }, volver: volverA }}
+                  seleccion={seleccionando && idPuntoDe(m) ? {
+                    marcada: marcadas.has(m.id_medicion),
+                    onToggle: () => alternar(m.id_medicion),
+                  } : undefined}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {seleccionando && (

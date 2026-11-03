@@ -556,14 +556,14 @@ export default function BloquesPage() {
                   : bloques.map(b => (
                       <tr key={b.id_bloque} style={{ borderBottom: '1px solid var(--border)' }}>
                         <td style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--text-primary)' }}>{b.nombre}</td>
-                        <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>{b.descripcion || '—'}</td>
+                        <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>{b.descripcion || <span style={{ color: 'var(--text-faint)' }}>Sin descripción</span>}</td>
                         {esSuperAdmin && (
                           <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>
-                            {empresaNombrePorId[b.empresa_id] ?? '—'}
+                            {empresaNombrePorId[b.empresa_id] ?? 'Sin dato'}
                           </td>
                         )}
                         <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>
-                          {b.ciudad ? `${b.ciudad}${b.departamento ? ` · ${b.departamento}` : ''}` : '—'}
+                          {b.ciudad ? `${b.ciudad}${b.departamento ? ` · ${b.departamento}` : ''}` : 'Sin dato'}
                         </td>
                         <td style={{ padding: '10px 14px', color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>
                           {b.cantidad_mediciones ?? 0}
