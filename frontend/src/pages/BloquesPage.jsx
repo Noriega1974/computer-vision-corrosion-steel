@@ -3,11 +3,11 @@ import ErrorEstado from '../components/ErrorEstado';
 import React, { useState, useEffect, useMemo } from 'react';
 import { IconoActivar, IconoAgregar, IconoCerrar, IconoCheck, IconoEditar, IconoEliminar, IconoEmpresa, IconoError, IconoFlechaAbajo, IconoUbicacion } from '../components/Iconos';
 import { useGestionBloques } from '../hooks/useBloques';
-import { useMediciones } from '../hooks/useMediciones';
+import { useMediciones, LIMITE_DASHBOARD } from '../hooks/useMediciones';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
-import { formatearConteoMediciones } from '../lib/galeriaCarpetas';
+import { etiquetaConteoBloque as etiquetaConteoBloquePuro } from '../lib/galeriaCarpetas';
 import SearchableSelect from '../components/SearchableSelect';
 import ImagenUploader from '../components/ImagenUploader';
 import { aplicarCambioImagen } from '../lib/imagenesApi';
@@ -416,7 +416,7 @@ export default function BloquesPage() {
   const { perfil } = useUsuarioPerfil();
 
   const { bloques, loading, error, mutating, mutError, crearBloque, editarBloque, eliminarBloque, refetch } = useGestionBloques();
-  const { mediciones: medicionesResumen } = useMediciones(1000, { resumen: true });
+  const { mediciones: medicionesResumen, loading: cargandoMediciones } = useMediciones(LIMITE_DASHBOARD, { resumen: true });
   const filasSkeleton = useConteoRecordado('bloques:lista', bloques, loading);
   // `enabled=esSuperAdmin`: evita el fetch (y el 403) de /empresas para
   // admin -- solo hace falta la lista completa para el selector y la
@@ -443,14 +443,13 @@ export default function BloquesPage() {
     return mapa;
   }, [medicionesResumen]);
 
-  const etiquetaConteoBloque = (bloque) => {
-    const clave = String(bloque?.id_bloque ?? '');
-    const meds = medicionesPorBloque.get(clave);
-    if (meds && meds.length > 0) return formatearConteoMediciones(meds);
-    const cant = bloque?.cantidad_mediciones ?? 0;
-    if (cant === 0) return formatearConteoMediciones([]);
-    return `${cant} ${cant === 1 ? 'imagen' : 'imágenes'} · 0 lotes con 0 imágenes`;
-  };
+  // The loaded window is complete only when it came back shorter than the request limit.
+  const ventanaCompleta = !cargandoMediciones && (medicionesResumen?.length ?? 0) < LIMITE_DASHBOARD;
+  const etiquetaConteoBloque = (bloque) => etiquetaConteoBloquePuro(
+    bloque?.cantidad_mediciones,
+    medicionesPorBloque.get(String(bloque?.id_bloque ?? '')) ?? [],
+    ventanaCompleta,
+  );
 
   const [showCreate, setShowCreate] = useState(false);
   const [editBloque, setEditBloque] = useState(null);

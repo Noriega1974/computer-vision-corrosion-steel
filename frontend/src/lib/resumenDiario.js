@@ -37,9 +37,9 @@ export function combinarResumenes(respuestas = []) {
 
 const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
 
-// "N imágenes · x lotes con y imágenes" (the lots part only when there are lots).
+// "N imágenes · x lotes con y imágenes" (same wording as formatearConteoMediciones).
 export function textoImagenesYLotes(total, lotes) {
-  const base = plural(total, 'imagen', 'imágenes');
-  if (!lotes?.count) return base;
-  return `${base} · ${plural(lotes.count, 'lote', 'lotes')} con ${plural(lotes.imagenes, 'imagen', 'imágenes')}`;
+  const count = Number(lotes?.count) || 0;
+  const imagenes = Number(lotes?.imagenes) || 0;
+  return `${plural(total, 'imagen', 'imágenes')} · ${plural(count, 'lote', 'lotes')} con ${plural(imagenes, 'imagen', 'imágenes')}`;
 }
