@@ -38,8 +38,8 @@ export default function PlantDetail({ punto }) {
   const { mediciones: ultimas, loading: cargandoUltima, error: errorUltima } = useMedicionesPunto(idPunto, { limite: 1 });
   const anios = useMemo(() => aniosDesde(new Date().getFullYear()), []);
   const resumen = useResumenDiario({ anios, idPunto, habilitado: Boolean(idPunto) });
-  const loading = resumen.loading || cargandoUltima;
-  const error = resumen.error || errorUltima;
+  // El resumen diario (conteos e historial) y la última medición (área, clima) se
+  // cargan y fallan por separado: un fallo no reemplaza el contenido del otro.
   const filasSkeleton = useConteoRecordado(`dashboard:historial:${idPunto}`, resumen.dias, resumen.loading, 4);
   const [diaSeleccionado, setDiaSeleccionado] = useState(null);
   const [loteSeleccionado, setLoteSeleccionado] = useState(null);
@@ -186,22 +186,28 @@ export default function PlantDetail({ punto }) {
         )}
 
         {/* 4. Resumen: conteo unificado de imágenes/lotes y última área corroída */}
-        {loading ? (
-          <div aria-busy="true" style={RESUMEN_STYLE}><SkeletonLinea width={200} /></div>
-        ) : (
-          <div style={RESUMEN_STYLE}>
+        <div style={RESUMEN_STYLE}>
+          {resumen.loading ? (
+            <span aria-busy="true"><SkeletonLinea width={200} /></span>
+          ) : resumen.error ? (
+            <span style={{ color: 'var(--accent-red)' }}>No se pudo cargar el conteo de imágenes</span>
+          ) : (
             <strong style={{ color: 'var(--text-primary)' }}>
               {textoImagenesYLotes(resumen.totales.imagenes, {
                 count: resumen.totales.lotes,
                 imagenes: resumen.totales.imagenes_en_lotes,
               })}
             </strong>
-            {' · '}
-            {ultimaMedicion?.area_corroida_pct != null
-              ? `Última área corroída: ${formatoPct(ultimaMedicion.area_corroida_pct)} ${etiquetaBase(ultimaMedicion)}`
-              : 'Sin lecturas registradas'}
-          </div>
-        )}
+          )}
+          {' · '}
+          {cargandoUltima
+            ? 'Cargando la última lectura...'
+            : errorUltima
+              ? <span style={{ color: 'var(--accent-red)' }}>No se pudo cargar la última lectura</span>
+              : ultimaMedicion?.area_corroida_pct != null
+                ? `Última área corroída: ${formatoPct(ultimaMedicion.area_corroida_pct)} ${etiquetaBase(ultimaMedicion)}`
+                : 'Sin lecturas registradas'}
+        </div>
       </div>
 
       {/* Historial: una caja por día; al abrir un día, sus lotes y fotos sueltas */}
@@ -219,16 +225,10 @@ export default function PlantDetail({ punto }) {
           fontWeight: 600,
         }}>
           <span>HISTORIAL DE MEDICIONES</span>
-          {diaSeleccionado && (
+          {diaSeleccionado && !loteActual && (
             <button
               type="button"
-              onClick={() => {
-                if (loteActual) {
-                  setLoteSeleccionado(null);
-                } else {
-                  setDiaSeleccionado(null);
-                }
-              }}
+              onClick={() => setDiaSeleccionado(null)}
               style={botonVolverStyle}
             >
               ← Volver
@@ -236,7 +236,7 @@ export default function PlantDetail({ punto }) {
           )}
         </div>
 
-        {loading && (
+        {resumen.loading && (
           <div aria-busy="true" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
             {Array.from({ length: filasSkeleton }, (_, i) => (
               <div
@@ -257,16 +257,19 @@ export default function PlantDetail({ punto }) {
             ))}
           </div>
         )}
-        {!loading && error && (
-          <div style={{ padding: 'var(--space-3)', fontSize: 'var(--text-2xs)', color: 'var(--accent-red)' }}>{error}</div>
+        {!resumen.loading && resumen.error && (
+          <div role="alert" style={{ padding: 'var(--space-3)', fontSize: 'var(--text-2xs)', color: 'var(--accent-red)', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <span>{resumen.error}</span>
+            <button type="button" onClick={resumen.refetch} style={botonVolverStyle}>Reintentar</button>
+          </div>
         )}
-        {!loading && !error && resumen.dias.length === 0 && (
+        {!resumen.loading && !resumen.error && resumen.dias.length === 0 && (
           <div style={{ textAlign: 'center', padding: 20, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
             Sin mediciones registradas para este punto.
           </div>
         )}
 
-        {!loading && !error && resumen.dias.length > 0 && (
+        {!resumen.loading && !resumen.error && resumen.dias.length > 0 && (
           <div
             style={{
               display: 'flex', flexDirection: 'column', gap: 'var(--space-1)',
@@ -292,20 +295,13 @@ export default function PlantDetail({ punto }) {
                   borderRadius: 7,
                   flexWrap: 'wrap',
                 }}>
-                  <button
-                    type="button"
-                    onClick={() => (loteActual ? setLoteSeleccionado(null) : setDiaSeleccionado(null))}
-                    style={botonVolverStyle}
-                  >
-                    {loteActual ? `← Volver al día ${formatearFechaDiaPunto(diaResumen.fecha)}` : '← Volver'}
-                  </button>
                   {loteActual && (
                     <button
                       type="button"
-                      onClick={() => { setLoteSeleccionado(null); setDiaSeleccionado(null); }}
-                      style={{ ...botonVolverStyle, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)' }}
+                      onClick={() => setLoteSeleccionado(null)}
+                      style={botonVolverStyle}
                     >
-                      ← Todos los días
+                      {`← Volver al día ${formatearFechaDiaPunto(diaResumen.fecha)}`}
                     </button>
                   )}
                   {!loteActual && (
