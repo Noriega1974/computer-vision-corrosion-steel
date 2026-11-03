@@ -1,6 +1,6 @@
 // Filtrado y agrupación cronológica de mediciones para la línea de tiempo del panel.
 
-import { inicioDiaLocal, finDiaLocal, hoyLocalISO, desplazarDiasISO, formatearFechaAmigable } from './fechas.js';
+import { inicioDiaLocal, finDiaLocal, hoyLocalISO, desplazarDiasISO, formatearFechaAmigable, esFechaISOValida } from './fechas.js';
 import { NIVELES, nivelLabel } from './statusUtils.js';
 import { normalizar } from './textUtils.js';
 
@@ -439,4 +439,30 @@ function construirBarraDesdeConteos(conteosPorDia, anioNum) {
     meses,
     dias,
   };
+}
+
+// True when the selected day range (local 'YYYY-MM-DD', either end may be empty)
+// reaches back to or beyond the oldest day of the loaded "recent" window, so the
+// window can't be trusted to hold all of it. A window shorter than `limite` is the
+// complete history. The oldest loaded day is partial (the window cuts mid-day),
+// hence `<=`.
+export function rangoFueraDeVentana(mediciones, fechaInicio, fechaFin, limite) {
+  if (!Array.isArray(mediciones) || !(limite > 0) || mediciones.length < limite) return false;
+  const piso = fechaInicio || fechaFin;
+  if (!esFechaISOValida(piso) || (fechaFin && !esFechaISOValida(fechaFin))) return false;
+  let masAntigua = Infinity;
+  for (const m of mediciones) {
+    const t = new Date(m?.timestamp).getTime();
+    if (!Number.isNaN(t) && t < masAntigua) masAntigua = t;
+  }
+  if (masAntigua === Infinity) return false;
+  return piso <= hoyLocalISO(new Date(masAntigua));
+}
+
+// GET /mediciones/recientes limited to a local-day range (without heavy fields).
+export function urlMedicionesRango(fechaInicio, fechaFin, limite = 1000) {
+  const qs = new URLSearchParams({ limit: String(limite), resumen: '1' });
+  if (fechaInicio) qs.set('desde', fechaInicio);
+  if (fechaFin) qs.set('hasta', fechaFin);
+  return `/mediciones/recientes?${qs}`;
 }

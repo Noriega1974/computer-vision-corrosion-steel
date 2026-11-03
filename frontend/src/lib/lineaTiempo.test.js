@@ -11,6 +11,8 @@ import {
   construirBarraAnualDesdeResumen,
   repartoVisible,
   COLORES_BARRA_ANUAL,
+  rangoFueraDeVentana,
+  urlMedicionesRango,
 } from './lineaTiempo.js';
 
 // Local-day grouping depends on the machine zone: pin it to the product's zone.
@@ -277,5 +279,45 @@ describe('lineaTiempo.js — filtrado y agrupación cronológica', () => {
       { nivel_corrosion: 1, timestamp: '2026-10-28T14:00:00Z' },
     ], 2026);
     assert.equal(barra.totalFotosAnio, 1);
+  });
+});
+
+describe('rangoFueraDeVentana', () => {
+  // Ventana de 3 con límite 3: la más antigua es del 2026-10-20 (mediodía UTC, día local igual).
+  const ventana = [
+    { timestamp: '2026-10-28T17:00:00Z' },
+    { timestamp: '2026-10-25T17:00:00Z' },
+    { timestamp: '2026-10-20T17:00:00Z' },
+  ];
+
+  it('es false sin rango o con una ventana incompleta (ya es todo el historial)', () => {
+    assert.equal(rangoFueraDeVentana(ventana, '', '', 3), false);
+    assert.equal(rangoFueraDeVentana(ventana.slice(0, 2), '2026-01-01', '2026-01-01', 3), false);
+    assert.equal(rangoFueraDeVentana([], '2026-01-01', '2026-01-01', 1000), false);
+  });
+
+  it('es true cuando el rango llega al día más antiguo cargado o más atrás', () => {
+    assert.equal(rangoFueraDeVentana(ventana, '2026-03-05', '2026-03-05', 3), true);
+    assert.equal(rangoFueraDeVentana(ventana, '2026-10-20', '2026-10-20', 3), true);
+    assert.equal(rangoFueraDeVentana(ventana, '2026-10-01', '2026-10-27', 3), true);
+    assert.equal(rangoFueraDeVentana(ventana, '', '2026-10-10', 3), true);
+  });
+
+  it('es false cuando el rango cae dentro de la ventana', () => {
+    assert.equal(rangoFueraDeVentana(ventana, '2026-10-25', '2026-10-25', 3), false);
+    assert.equal(rangoFueraDeVentana(ventana, '2026-10-21', '', 3), false);
+    assert.equal(rangoFueraDeVentana(ventana, '', '2026-10-27', 3), false);
+  });
+
+  it('ignora fechas inválidas o timestamps ilegibles', () => {
+    assert.equal(rangoFueraDeVentana(ventana, '2026-13-40', '', 3), false);
+    assert.equal(rangoFueraDeVentana([{ timestamp: 'x' }, { }, { timestamp: null }], '2026-01-01', '', 3), false);
+  });
+});
+
+describe('urlMedicionesRango', () => {
+  it('arma la consulta con límite, resumen y solo los extremos presentes', () => {
+    assert.equal(urlMedicionesRango('2026-03-05', '2026-03-06'), '/mediciones/recientes?limit=1000&resumen=1&desde=2026-03-05&hasta=2026-03-06');
+    assert.equal(urlMedicionesRango('', '2026-03-06', 50), '/mediciones/recientes?limit=50&resumen=1&hasta=2026-03-06');
   });
 });
