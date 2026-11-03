@@ -1,11 +1,21 @@
 // Filtrado y agrupación cronológica de mediciones para la línea de tiempo del panel.
 
 import { inicioDiaLocal, finDiaLocal, hoyLocalISO, desplazarDiasISO, formatearFechaAmigable } from './fechas.js';
-import { NIVELES, nivelColor, nivelLabel } from './statusUtils.js';
+import { NIVELES, nivelLabel } from './statusUtils.js';
 import { normalizar } from './textUtils.js';
 
 export const ANIO_MINIMO_LINEA_TIEMPO = 2026;
 export const COLOR_DIA_SIN_FOTOS = '#94a3b8';
+
+// Paleta propia de la barra anual (la del resto de la app usa naranjas casi
+// iguales para leve y moderada, y en una franja de 3 px no se distinguen):
+// verde / ámbar claro / naranja intenso / rojo.
+export const COLORES_BARRA_ANUAL = ['#16a34a', '#fbbf24', '#ea580c', '#dc2626'];
+export const colorNivelBarra = (nivel) => COLORES_BARRA_ANUAL[nivel] ?? '#64748b';
+
+// Parte mínima de la altura de un día que ocupa cada nivel presente, para que una
+// foto severa entre cientos no desaparezca.
+export const PROPORCION_MINIMA_NIVEL = 0.12;
 
 export const MESES_BARRA_ANUAL = [
   'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
@@ -192,14 +202,48 @@ export function aniosDisponiblesLineaTiempo(mediciones = [], fechaReferencia = n
   return anios;
 }
 
-// Construye los 365 (o 366 en bisiesto) días del año `anio` del 1 de enero al
-// 31 de diciembre con el reparto proporcional por nivel ISO de corrosión.
-export function construirBarraAnual(mediciones = [], anio = ANIO_MINIMO_LINEA_TIEMPO) {
-  const parsed = Number(anio);
-  const anioNum = Number.isFinite(parsed) && parsed >= ANIO_MINIMO_LINEA_TIEMPO
-    ? Math.trunc(parsed)
-    : ANIO_MINIMO_LINEA_TIEMPO;
+// Reparte la altura de un día entre los niveles presentes: proporcional a la
+// cantidad, pero ningún nivel presente baja de `minimo`. `cantidades` es [n0..n3];
+// devuelve las partes (suman 1; 0 para los niveles ausentes).
+export function repartoVisible(cantidades, minimo = PROPORCION_MINIMA_NIVEL) {
+  const total = cantidades.reduce((a, c) => a + c, 0);
+  const partes = cantidades.map(() => 0);
+  if (total <= 0) return partes;
+  const activos = cantidades.map((c, i) => (c > 0 ? i : -1)).filter((i) => i >= 0);
+  if (activos.length * minimo >= 1) {
+    activos.forEach((i) => { partes[i] = 1 / activos.length; });
+    return partes;
+  }
+  const fijos = new Set();
+  for (let cambio = true; cambio;) {
+    cambio = false;
+    const libres = activos.filter((i) => !fijos.has(i));
+    const sumaLibres = libres.reduce((a, i) => a + cantidades[i], 0);
+    const restante = 1 - fijos.size * minimo;
+    for (const i of libres) {
+      if ((cantidades[i] / sumaLibres) * restante < minimo) { fijos.add(i); cambio = true; }
+    }
+  }
+  const libres = activos.filter((i) => !fijos.has(i));
+  const sumaLibres = libres.reduce((a, i) => a + cantidades[i], 0);
+  const restante = 1 - fijos.size * minimo;
+  activos.forEach((i) => {
+    partes[i] = fijos.has(i) ? minimo : (cantidades[i] / sumaLibres) * restante;
+  });
+  return partes;
+}
 
+const nivelValido = (valor) => {
+  if (valor === null || valor === undefined || valor === '') return null;
+  const n = Number(valor);
+  return Number.isFinite(n) ? Math.min(3, Math.max(0, Math.trunc(n))) : null;
+};
+
+// Construye los 365 (o 366 en bisiesto) días del año `anio` del 1 de enero al
+// 31 de diciembre con el reparto proporcional por nivel ISO de corrosión,
+// a partir de una lista de mediciones. Las que no tienen nivel válido se omiten.
+export function construirBarraAnual(mediciones = [], anio = ANIO_MINIMO_LINEA_TIEMPO) {
+  const anioNum = anioValido(anio);
   const conteosPorDia = new Map();
 
   for (const m of mediciones ?? []) {
@@ -207,17 +251,45 @@ export function construirBarraAnual(mediciones = [], anio = ANIO_MINIMO_LINEA_TI
     const dt = new Date(m.timestamp);
     if (Number.isNaN(dt.getTime())) continue;
     if (dt.getFullYear() !== anioNum) continue;
+    const niv = nivelValido(m.nivel_corrosion);
+    if (niv === null) continue;
     const iso = hoyLocalISO(dt);
     let registro = conteosPorDia.get(iso);
     if (!registro) {
       registro = [0, 0, 0, 0];
       conteosPorDia.set(iso, registro);
     }
-    const nivRaw = nivelNum(m);
-    const niv = Math.min(3, Math.max(0, Math.trunc(nivRaw)));
     registro[niv] += 1;
   }
+  return construirBarraDesdeConteos(conteosPorDia, anioNum);
+}
 
+// Igual, pero desde los agregados del servidor (GET /mediciones/resumen-diario):
+// `[{fecha, por_nivel:[n0..n3], ...}]` con el día local ya resuelto y sin el tope
+// de mediciones recientes. `nivel` ('all' | '0'..'3') deja solo ese nivel.
+export function construirBarraAnualDesdeResumen(dias = [], anio = ANIO_MINIMO_LINEA_TIEMPO, { nivel = 'all' } = {}) {
+  const anioNum = anioValido(anio);
+  const filtro = nivel === 'all' || nivel === '' || nivel == null ? null : Number(nivel);
+  const conteosPorDia = new Map();
+  for (const d of dias ?? []) {
+    if (typeof d?.fecha !== 'string' || !d.fecha.startsWith(`${anioNum}-`) || !Array.isArray(d.por_nivel)) continue;
+    const conteo = [0, 1, 2, 3].map((n) => {
+      const c = Number(d.por_nivel[n]);
+      return Number.isFinite(c) && c > 0 && (filtro === null || filtro === n) ? Math.trunc(c) : 0;
+    });
+    if (conteo.some((c) => c > 0)) conteosPorDia.set(d.fecha, conteo);
+  }
+  return construirBarraDesdeConteos(conteosPorDia, anioNum);
+}
+
+function anioValido(anio) {
+  const parsed = Number(anio);
+  return Number.isFinite(parsed) && parsed >= ANIO_MINIMO_LINEA_TIEMPO
+    ? Math.trunc(parsed)
+    : ANIO_MINIMO_LINEA_TIEMPO;
+}
+
+function construirBarraDesdeConteos(conteosPorDia, anioNum) {
   const dias = [];
   const meses = [];
   let diasConFotos = 0;
@@ -268,7 +340,7 @@ export function construirBarraAnual(mediciones = [], anio = ANIO_MINIMO_LINEA_TI
         if (cant > 0) {
           nivelesActivos.push({
             nivel: niv,
-            color: nivelColor(niv),
+            color: colorNivelBarra(niv),
             etiqueta: nivelLabel(niv),
             cantidad: cant,
           });
@@ -276,11 +348,13 @@ export function construirBarraAnual(mediciones = [], anio = ANIO_MINIMO_LINEA_TI
         }
       }
 
+      // Real shares go in the tooltip text; the painted height gets a floor per level.
+      const partesVisibles = repartoVisible(conteoPorNivel);
       let acumulado = 0;
       const segmentos = nivelesActivos.map((item, idx) => {
         const proporcion = item.cantidad / totalFotos;
         const desdePct = round2(acumulado * 100);
-        acumulado += proporcion;
+        acumulado += partesVisibles[item.nivel];
         const hastaPct = idx === nivelesActivos.length - 1 ? 100 : round2(acumulado * 100);
         return {
           ...item,

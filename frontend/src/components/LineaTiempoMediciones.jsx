@@ -15,6 +15,7 @@ import NivelInfo from './NivelInfo';
 import DatePicker from './DatePicker';
 import Skeleton, { SkeletonLinea } from './Skeleton';
 import { useMediciones, LIMITE_DASHBOARD } from '../hooks/useMediciones';
+import { useResumenDiario } from '../hooks/useResumenDiario';
 import { useBloques } from '../hooks/useBloques';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useAuth } from '../auth/AuthContext';
@@ -29,7 +30,8 @@ import {
   autorDeMedicion,
   ANIO_MINIMO_LINEA_TIEMPO,
   aniosDisponiblesLineaTiempo,
-  construirBarraAnual,
+  construirBarraAnualDesdeResumen,
+  colorNivelBarra,
 } from '../lib/lineaTiempo';
 
 const EVENTOS_POR_PAGINA = 25;
@@ -381,8 +383,13 @@ function TarjetaEventoLote({ evento, esSuperAdmin, nombreEmpresa }) {
   );
 }
 
+// Fed by the server's daily summary (`resumenDias`, one year), not by the loaded
+// measurement list: the bar covers every photo of the year, not the 1000 latest.
+// `nivel` ('all' | '0'..'3') keeps only that level in the days.
 export function BarraAnualLineaTiempo({
-  mediciones = [],
+  resumenDias = [],
+  nivel = 'all',
+  cargando = false,
   anioSeleccionado,
   onChangeAnio,
   diaFiltradoISO = '',
@@ -390,10 +397,7 @@ export function BarraAnualLineaTiempo({
   onLimpiarDia,
   modoColorInicial = 'segmentos',
 }) {
-  const aniosDisponibles = useMemo(
-    () => aniosDisponiblesLineaTiempo(mediciones),
-    [mediciones],
-  );
+  const aniosDisponibles = useMemo(() => aniosDisponiblesLineaTiempo(), []);
   const anioActivo = aniosDisponibles.includes(Number(anioSeleccionado))
     ? Number(anioSeleccionado)
     : aniosDisponibles[aniosDisponibles.length - 1] ?? ANIO_MINIMO_LINEA_TIEMPO;
@@ -404,8 +408,8 @@ export function BarraAnualLineaTiempo({
   const [diaHoverISO, setDiaHoverISO] = useState('');
 
   const barra = useMemo(
-    () => construirBarraAnual(mediciones, anioActivo),
-    [mediciones, anioActivo],
+    () => construirBarraAnualDesdeResumen(resumenDias, anioActivo, { nivel }),
+    [resumenDias, anioActivo, nivel],
   );
 
   const ultimoDiaConFotos = useMemo(() => {
@@ -648,7 +652,7 @@ export function BarraAnualLineaTiempo({
                 width: 10,
                 height: 10,
                 borderRadius: 3,
-                background: nivelColor(idx),
+                background: colorNivelBarra(idx),
                 display: 'inline-block',
               }} />
               {item.label}
@@ -671,7 +675,7 @@ export function BarraAnualLineaTiempo({
         >
           {diaInspeccionado
             ? diaInspeccionado.resumenTexto
-            : `Sin mediciones registradas en ${barra.anio}`}
+            : cargando ? 'Cargando la actividad del año...' : `Sin mediciones registradas en ${barra.anio}`}
         </div>
       </div>
     </div>
@@ -703,18 +707,14 @@ export default function LineaTiempoMediciones() {
     return bloques.filter((b) => String(b.empresa_id) === String(empresaId));
   }, [bloques, esSuperAdmin, empresaId]);
 
-  // Mediciones filtradas por zona, punto, nivel y búsqueda (sin recortar por día)
-  // para alimentar la barra horizontal anual completa.
-  const medicionesParaBarraAnual = useMemo(
-    () =>
-      filtrarMedicionesLineaTiempo(mediciones, {
-        empresaId: esSuperAdmin ? empresaId : 'all',
-        bloqueId,
-        nivel,
-        busqueda,
-      }),
-    [mediciones, esSuperAdmin, empresaId, bloqueId, nivel, busqueda],
-  );
+  // Barra anual: agregados del servidor para el año elegido (todas las fotos del
+  // año, no solo las 1000 recientes). Respeta zona, punto y nivel; la búsqueda por
+  // texto solo afecta la lista de abajo.
+  const resumenAnual = useResumenDiario({
+    anios: [anioBarra],
+    idPunto: bloqueId !== 'all' ? bloqueId : undefined,
+    empresaId: esSuperAdmin && empresaId !== 'all' ? empresaId : undefined,
+  });
 
   const medicionesFiltradas = useMemo(
     () =>
@@ -777,7 +777,9 @@ export default function LineaTiempoMediciones() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {/* Barra horizontal anual (exclusiva de Línea de tiempo) */}
       <BarraAnualLineaTiempo
-        mediciones={medicionesParaBarraAnual}
+        resumenDias={resumenAnual.dias}
+        nivel={nivel}
+        cargando={resumenAnual.loading}
         anioSeleccionado={anioBarra}
         onChangeAnio={(nuevoAnio) => {
           setAnioBarra(nuevoAnio);

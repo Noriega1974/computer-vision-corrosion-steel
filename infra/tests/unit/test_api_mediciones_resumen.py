@@ -119,6 +119,19 @@ def test_super_admin_no_filtra_por_empresa(h, monkeypatch):
     assert "FilterExpression" not in h.tabla.kwargs[0]
 
 
+def test_super_admin_puede_acotar_a_una_zona_y_los_demas_no(h, monkeypatch):
+    monkeypatch.setattr(h, "tabla_usuarios", fakes.FakeTabla([{"rol": "super_admin"}]))
+    _poner(h, [])
+    _resumen(h, anio="2026", empresa_id="EMP-9")
+    assert "FilterExpression" in h.tabla.kwargs[0]
+    # un admin no puede ver otra zona pasando empresa_id: su filtro sigue siendo el suyo
+    monkeypatch.setattr(h, "tabla_usuarios", fakes.FakeTabla([{"rol": "admin", "empresa_id": "EMP-1"}]))
+    _poner(h, [])
+    _resumen(h, anio="2026", empresa_id="EMP-9")
+    filtro = h.tabla.kwargs[0]["FilterExpression"].get_expression()["values"]
+    assert "EMP-1" in filtro and "EMP-9" not in filtro
+
+
 def test_con_id_punto_usa_la_clave_primaria(h):
     _poner(h, [_med("2026-10-26T15:00:00+00:00")])
     _resumen(h, anio="2026", id_punto="BLQ-1")

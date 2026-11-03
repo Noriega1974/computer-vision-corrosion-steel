@@ -2290,7 +2290,9 @@ select option {
 }
 
 .lt-barra-anual__dia--con-fotos {
-  flex: 1.6 0 3px;
+  /* Wider than an empty day but allowed to shrink (min 1px): 366 days must fit on a phone. */
+  flex: 1.6 1 1px;
+  min-width: 1px;
   cursor: pointer;
   z-index: 1;
   box-shadow: 0 0 0 0.5px rgba(15, 23, 42, 0.28);
