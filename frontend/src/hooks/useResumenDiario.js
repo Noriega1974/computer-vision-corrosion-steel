@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { apiGet } from '../lib/apiClient';
 import { useRefreshKey } from './RefreshKeyContext';
 import { combinarResumenes, urlResumenDiario } from '../lib/resumenDiario';
@@ -12,14 +12,20 @@ export function useResumenDiario({ anios, idPunto, empresaId, habilitado = true 
   const [loading, setLoading] = useState(habilitado);
   const [error, setError] = useState(null);
   const clave = `${anios.join(',')}|${idPunto ?? ''}|${empresaId ?? ''}`;
+  const claveCargada = useRef(null);
 
   useEffect(() => {
     if (!habilitado) { setLoading(false); return undefined; }
     let cancelled = false;
-    setLoading(true);
+    // Stale-while-revalidate: a refresh of the same query keeps the data on screen;
+    // a different query (other point/year) starts empty so it never shows foreign rows.
+    if (claveCargada.current !== clave) {
+      setResumen(combinarResumenes([]));
+      setLoading(true);
+    }
     setError(null);
     Promise.all(anios.map((a) => apiGet(urlResumenDiario(a, { idPunto, empresaId }))))
-      .then((resp) => { if (!cancelled) { setResumen(combinarResumenes(resp)); setLoading(false); } })
+      .then((resp) => { if (!cancelled) { claveCargada.current = clave; setResumen(combinarResumenes(resp)); setLoading(false); } })
       .catch((err) => { if (!cancelled) { setError(err.message); setLoading(false); } });
     return () => { cancelled = true; };
     // `clave` stands for anios/idPunto/empresaId (a new array each render would loop).

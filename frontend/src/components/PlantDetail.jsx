@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useMedicionesPunto } from '../hooks/useMedicionesPunto';
+import { useResumenDiario } from '../hooks/useResumenDiario';
+import { useMedicionesDia } from '../hooks/useMedicionesDia';
 import {
   nivelColor, nivelBg, nivelLabel,
 } from '../lib/statusUtils';
@@ -8,8 +10,9 @@ import Skeleton, { SkeletonLinea } from './Skeleton';
 import { useConteoRecordado } from '../hooks/useConteoRecordado';
 import { formatFecha } from '../utils/dateFormat';
 import { formatoPct, etiquetaBase } from '../lib/textUtils';
-import { formatearConteoMediciones } from '../lib/galeriaCarpetas';
-import { agruparHistorialPuntoPorDia } from '../lib/historialPunto';
+import { agruparPorLote } from '../lib/galeriaCarpetas';
+import { aniosDesde, textoImagenesYLotes } from '../lib/resumenDiario';
+import { formatearFechaDiaPunto } from '../lib/historialPunto';
 import TarjetaLote, { FichaDetalleLote } from './TarjetaLote';
 import { IconoCamara, IconoHumedad, IconoLluvia, IconoReloj, IconoTemperatura, IconoViento } from './Iconos';
 
@@ -20,42 +23,67 @@ const RESUMEN_STYLE = {
 };
 const HISTORIAL_LINEA_STYLE = { fontSize: 'var(--text-3xs)', fontWeight: 600, fontFamily: 'var(--font-data)' };
 
+// Filas por tanda en el detalle de un día o de un lote (un día puede tener cientos).
+const FILAS_POR_TANDA = 25;
+
 // ─── Tarjeta Flashcard de Ubicación (Dashboard) ─────────────────────────────
+// Historial: las cajas de día salen del resumen diario del servidor (una consulta por
+// año, desde 2026 hasta el actual; hoy es una sola), así que cuentan TODAS las fotos
+// del punto y no solo las más recientes. Al abrir un día se piden sus fotos completas
+// (hasta 500) y se muestran primero las tarjetas de lote de ese día y después SOLO las
+// fotos sueltas: las de un lote se ven dentro de su tarjeta, nunca repetidas aquí.
 export default function PlantDetail({ punto }) {
-  const { mediciones, loading, error } = useMedicionesPunto(punto?.id_bloque);
-  const filasSkeleton = useConteoRecordado(`dashboard:historial:${punto?.id_bloque}`, mediciones, loading, 4);
+  const idPunto = punto?.id_bloque;
+  // Solo la última medición (nivel, clima, área); el historial sale del resumen.
+  const { mediciones: ultimas, loading: cargandoUltima, error: errorUltima } = useMedicionesPunto(idPunto, { limite: 1 });
+  const anios = useMemo(() => aniosDesde(new Date().getFullYear()), []);
+  const resumen = useResumenDiario({ anios, idPunto, habilitado: Boolean(idPunto) });
+  const loading = resumen.loading || cargandoUltima;
+  const error = resumen.error || errorUltima;
+  const filasSkeleton = useConteoRecordado(`dashboard:historial:${idPunto}`, resumen.dias, resumen.loading, 4);
   const [diaSeleccionado, setDiaSeleccionado] = useState(null);
   const [loteSeleccionado, setLoteSeleccionado] = useState(null);
+  const [filasVisibles, setFilasVisibles] = useState(FILAS_POR_TANDA);
+  const delDia = useMedicionesDia(idPunto, diaSeleccionado);
 
   useEffect(() => {
     setDiaSeleccionado(null);
     setLoteSeleccionado(null);
-  }, [punto?.id_bloque]);
+  }, [idPunto]);
 
   useEffect(() => {
     setLoteSeleccionado(null);
+    setFilasVisibles(FILAS_POR_TANDA);
   }, [diaSeleccionado]);
 
-  const diasAgrupados = useMemo(
-    () => agruparHistorialPuntoPorDia(mediciones),
-    [mediciones],
+  useEffect(() => {
+    setFilasVisibles(FILAS_POR_TANDA);
+  }, [loteSeleccionado]);
+
+  const mediciones = ultimas;
+
+  const diaResumen = useMemo(
+    () => (diaSeleccionado ? resumen.dias.find((d) => d.fecha === diaSeleccionado) ?? null : null),
+    [resumen.dias, diaSeleccionado],
   );
 
-  const diaActual = useMemo(
-    () => (diaSeleccionado ? diasAgrupados.find((d) => d.fechaISO === diaSeleccionado) ?? null : null),
-    [diasAgrupados, diaSeleccionado],
+  // Fotos del día abierto separadas en lotes y sueltas (sin duplicar).
+  const agrupadoDia = useMemo(() => agruparPorLote(delDia.mediciones), [delDia.mediciones]);
+  const sueltasDia = useMemo(
+    () => [...agrupadoDia.sueltas].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)),
+    [agrupadoDia.sueltas],
   );
 
   const loteActual = useMemo(
-    () => (diaActual && loteSeleccionado ? diaActual.lotes.find((l) => l.id === loteSeleccionado) ?? null : null),
-    [diaActual, loteSeleccionado],
+    () => (loteSeleccionado ? agrupadoDia.lotes.find((l) => l.id === loteSeleccionado) ?? null : null),
+    [agrupadoDia.lotes, loteSeleccionado],
   );
 
   useEffect(() => {
-    if (diaSeleccionado && !diaActual) {
+    if (diaSeleccionado && !resumen.loading && !diaResumen) {
       setDiaSeleccionado(null);
     }
-  }, [diaSeleccionado, diaActual]);
+  }, [diaSeleccionado, diaResumen, resumen.loading]);
 
   if (!punto) {
     return (
@@ -163,7 +191,10 @@ export default function PlantDetail({ punto }) {
         ) : (
           <div style={RESUMEN_STYLE}>
             <strong style={{ color: 'var(--text-primary)' }}>
-              {formatearConteoMediciones(mediciones)}
+              {textoImagenesYLotes(resumen.totales.imagenes, {
+                count: resumen.totales.lotes,
+                imagenes: resumen.totales.imagenes_en_lotes,
+              })}
             </strong>
             {' · '}
             {ultimaMedicion?.area_corroida_pct != null
@@ -173,7 +204,7 @@ export default function PlantDetail({ punto }) {
         )}
       </div>
 
-      {/* Historial de mediciones agrupado por día (sin barra horizontal anual) */}
+      {/* Historial: una caja por día; al abrir un día, sus lotes y fotos sueltas */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 'var(--space-2)' }}>
         <div style={{
           flexShrink: 0,
@@ -188,7 +219,7 @@ export default function PlantDetail({ punto }) {
           fontWeight: 600,
         }}>
           <span>HISTORIAL DE MEDICIONES</span>
-          {diaActual && (
+          {diaSeleccionado && (
             <button
               type="button"
               onClick={() => {
@@ -198,17 +229,7 @@ export default function PlantDetail({ punto }) {
                   setDiaSeleccionado(null);
                 }
               }}
-              style={{
-                padding: '2px 8px',
-                borderRadius: 999,
-                border: '1px solid var(--border-strong)',
-                background: 'var(--bg-inset)',
-                color: 'var(--text-primary)',
-                fontFamily: 'var(--font-ui)',
-                fontSize: 'var(--text-3xs)',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
+              style={botonVolverStyle}
             >
               ← Volver
             </button>
@@ -239,13 +260,13 @@ export default function PlantDetail({ punto }) {
         {!loading && error && (
           <div style={{ padding: 'var(--space-3)', fontSize: 'var(--text-2xs)', color: 'var(--accent-red)' }}>{error}</div>
         )}
-        {!loading && !error && mediciones.length === 0 && (
+        {!loading && !error && resumen.dias.length === 0 && (
           <div style={{ textAlign: 'center', padding: 20, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
             Sin mediciones registradas para este punto.
           </div>
         )}
 
-        {!loading && !error && mediciones.length > 0 && (
+        {!loading && !error && resumen.dias.length > 0 && (
           <div
             style={{
               display: 'flex', flexDirection: 'column', gap: 'var(--space-1)',
@@ -253,73 +274,9 @@ export default function PlantDetail({ punto }) {
               paddingRight: 2,
             }}
           >
-            {!diaActual ? (
-              diasAgrupados.map((dia) => {
-                const colorDia = nivelColor(dia.peorNivel);
-                return (
-                  <button
-                    key={dia.fechaISO}
-                    type="button"
-                    onClick={() => setDiaSeleccionado(dia.fechaISO)}
-                    className="historial-fila historial-fila--link"
-                    style={{
-                      width: '100%',
-                      textAlign: 'left',
-                      borderRadius: 8,
-                      justifyContent: 'space-between',
-                      padding: '9px 11px',
-                    }}
-                  >
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        fontFamily: 'var(--font-ui)',
-                        fontWeight: 700,
-                        fontSize: 'var(--text-xs)',
-                        color: 'var(--text-primary)',
-                        fontVariantNumeric: 'tabular-nums',
-                      }}>
-                        <IconoReloj size={13} color="var(--accent-amber)" />
-                        <span>{dia.etiquetaDia}</span>
-                      </div>
-                      <div style={{
-                        fontSize: 'var(--text-2xs)',
-                        color: 'var(--text-muted)',
-                        fontFamily: 'var(--font-ui)',
-                        marginTop: 2,
-                        fontVariantNumeric: 'tabular-nums',
-                      }}>
-                        {dia.etiquetaConteo}
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
-                      <span style={{
-                        ...HISTORIAL_LINEA_STYLE,
-                        color: colorDia,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 5,
-                      }}>
-                        <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: colorDia }} />
-                        {nivelLabel(dia.peorNivel)}
-                      </span>
-                      <span style={{
-                        fontSize: 11,
-                        color: 'var(--text-secondary)',
-                        fontFamily: 'var(--font-ui)',
-                        fontVariantNumeric: 'tabular-nums',
-                        fontWeight: 600,
-                      }}>
-                        Máx. {formatoPct(dia.peorPct)}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })
-            ) : loteActual ? (
+            {!diaResumen ? (
+              resumen.dias.map((dia) => <CajaDia key={dia.fecha} dia={dia} onAbrir={() => setDiaSeleccionado(dia.fecha)} />)
+            ) : (
               <>
                 <div style={{
                   position: 'sticky',
@@ -337,108 +294,78 @@ export default function PlantDetail({ punto }) {
                 }}>
                   <button
                     type="button"
-                    onClick={() => setLoteSeleccionado(null)}
-                    style={{
-                      padding: '3px 8px',
-                      borderRadius: 6,
-                      border: '1px solid var(--border-strong)',
-                      background: 'var(--bg-card-solid)',
-                      color: 'var(--text-primary)',
+                    onClick={() => (loteActual ? setLoteSeleccionado(null) : setDiaSeleccionado(null))}
+                    style={botonVolverStyle}
+                  >
+                    {loteActual ? `← Volver al día ${formatearFechaDiaPunto(diaResumen.fecha)}` : '← Volver'}
+                  </button>
+                  {loteActual && (
+                    <button
+                      type="button"
+                      onClick={() => { setLoteSeleccionado(null); setDiaSeleccionado(null); }}
+                      style={{ ...botonVolverStyle, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)' }}
+                    >
+                      ← Todos los días
+                    </button>
+                  )}
+                  {!loteActual && (
+                    <div style={{
                       fontFamily: 'var(--font-ui)',
                       fontSize: 'var(--text-2xs)',
+                      color: 'var(--text-secondary)',
                       fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    ← Volver al día {diaActual.fechaEtiqueta}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLoteSeleccionado(null);
-                      setDiaSeleccionado(null);
-                    }}
-                    style={{
-                      padding: '3px 8px',
-                      borderRadius: 6,
-                      border: '1px solid var(--border)',
-                      background: 'transparent',
-                      color: 'var(--text-muted)',
-                      fontFamily: 'var(--font-ui)',
-                      fontSize: 'var(--text-3xs)',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    ← Todos los días
-                  </button>
+                      fontVariantNumeric: 'tabular-nums',
+                    }}>
+                      {formatearFechaDiaPunto(diaResumen.fecha)} · {textoImagenesYLotes(diaResumen.total, diaResumen.lotes)}
+                    </div>
+                  )}
                 </div>
 
-                <FichaDetalleLote lote={loteActual} compacta />
-
-                {loteActual.mediciones.map((m, i) => (
-                  <MedicionRow key={m.id_medicion ?? i} medicion={m} idPunto={punto.id_bloque} />
-                ))}
-              </>
-            ) : (
-              <>
-                <div style={{
-                  position: 'sticky',
-                  top: 0,
-                  zIndex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 8,
-                  padding: '6px 9px',
-                  background: 'var(--bg-inset)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 7,
-                  flexWrap: 'wrap',
-                }}>
-                  <button
-                    type="button"
-                    onClick={() => setDiaSeleccionado(null)}
-                    style={{
-                      padding: '3px 9px',
-                      borderRadius: 6,
-                      border: '1px solid var(--border-strong)',
-                      background: 'var(--bg-card-solid)',
-                      color: 'var(--text-primary)',
-                      fontFamily: 'var(--font-ui)',
-                      fontSize: 'var(--text-2xs)',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    ← Volver
-                  </button>
-                  <div style={{
-                    fontFamily: 'var(--font-ui)',
-                    fontSize: 'var(--text-2xs)',
-                    color: 'var(--text-secondary)',
-                    fontWeight: 600,
-                    fontVariantNumeric: 'tabular-nums',
-                  }}>
-                    Día {diaActual.fechaEtiqueta} · {diaActual.etiquetaConteo}
+                {delDia.loading && (
+                  <div aria-busy="true" style={{ padding: 16, textAlign: 'center', fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>
+                    Cargando las imágenes del día...
                   </div>
-                </div>
-
-                {diaActual.lotes.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 4 }}>
-                    {diaActual.lotes.map((lote) => (
-                      <TarjetaLote
-                        key={lote.id}
-                        lote={lote}
-                        compacta
-                        onClick={() => setLoteSeleccionado(lote.id)}
-                      />
-                    ))}
+                )}
+                {!delDia.loading && delDia.error && (
+                  <div style={{ padding: 'var(--space-3)', fontSize: 'var(--text-2xs)', color: 'var(--accent-red)' }}>{delDia.error}</div>
+                )}
+                {!delDia.loading && !delDia.error && delDia.truncado && (
+                  <div role="status" style={{ padding: '6px 9px', fontSize: 'var(--text-3xs)', color: 'var(--text-secondary)', background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 7 }}>
+                    Este día tiene más de 500 imágenes. Aquí se muestran las 500 más recientes.
                   </div>
                 )}
 
-                {diaActual.mediciones.map((m, i) => (
-                  <MedicionRow key={m.id_medicion ?? i} medicion={m} idPunto={punto.id_bloque} />
+                {!delDia.loading && !delDia.error && (loteActual ? (
+                  <>
+                    <FichaDetalleLote lote={loteActual} compacta />
+                    <ListaFilas
+                      filas={loteActual.mediciones}
+                      visibles={filasVisibles}
+                      onMas={() => setFilasVisibles((n) => n + FILAS_POR_TANDA)}
+                      idPunto={idPunto}
+                    />
+                  </>
+                ) : (
+                  <>
+                    {agrupadoDia.lotes.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 4 }}>
+                        {agrupadoDia.lotes.map((lote) => (
+                          <TarjetaLote
+                            key={lote.id}
+                            lote={lote}
+                            compacta
+                            onClick={() => setLoteSeleccionado(lote.id)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                    <ListaFilas
+                      filas={sueltasDia}
+                      visibles={filasVisibles}
+                      onMas={() => setFilasVisibles((n) => n + FILAS_POR_TANDA)}
+                      idPunto={idPunto}
+                    />
+                  </>
                 ))}
               </>
             )}
@@ -446,6 +373,80 @@ export default function PlantDetail({ punto }) {
         )}
       </div>
     </div>
+  );
+}
+
+const botonVolverStyle = {
+  padding: '3px 9px',
+  borderRadius: 6,
+  border: '1px solid var(--border-strong)',
+  background: 'var(--bg-card-solid)',
+  color: 'var(--text-primary)',
+  fontFamily: 'var(--font-ui)',
+  fontSize: 'var(--text-2xs)',
+  fontWeight: 600,
+  cursor: 'pointer',
+};
+
+// Caja de un día: fecha como título, "N imágenes · x lotes con y imágenes" debajo.
+function CajaDia({ dia, onAbrir }) {
+  const nivel = dia.peor_nivel;
+  const color = nivel == null ? 'var(--text-muted)' : nivelColor(nivel);
+  return (
+    <button
+      type="button"
+      onClick={onAbrir}
+      className="historial-fila historial-fila--link"
+      style={{ width: '100%', textAlign: 'left', borderRadius: 8, justifyContent: 'space-between', padding: '9px 11px' }}
+    >
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 'var(--text-xs)',
+          color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums',
+        }}>
+          <IconoReloj size={13} color="var(--accent-amber)" />
+          <span>{formatearFechaDiaPunto(dia.fecha)}</span>
+        </div>
+        <div style={{
+          fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)',
+          marginTop: 2, fontVariantNumeric: 'tabular-nums',
+        }}>
+          {textoImagenesYLotes(dia.total, dia.lotes)}
+        </div>
+      </div>
+
+      {nivel != null && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
+          <span style={{ ...HISTORIAL_LINEA_STYLE, color, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: color }} />
+            {nivelLabel(nivel)}
+          </span>
+          {dia.max_pct != null && (
+            <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+              Máx. {formatoPct(dia.max_pct)}
+            </span>
+          )}
+        </div>
+      )}
+    </button>
+  );
+}
+
+// Filas de fotos en tandas de FILAS_POR_TANDA con "Mostrar más".
+function ListaFilas({ filas, visibles, onMas, idPunto }) {
+  const mostradas = filas.slice(0, visibles);
+  return (
+    <>
+      {mostradas.map((m, i) => (
+        <MedicionRow key={m.id_medicion ?? i} medicion={m} idPunto={idPunto} />
+      ))}
+      {filas.length > visibles && (
+        <button type="button" onClick={onMas} style={{ ...botonVolverStyle, alignSelf: 'center', margin: '4px 0' }}>
+          Mostrar más ({filas.length - visibles} restantes)
+        </button>
+      )}
+    </>
   );
 }
 
