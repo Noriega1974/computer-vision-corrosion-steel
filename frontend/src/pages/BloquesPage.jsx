@@ -3,9 +3,11 @@ import ErrorEstado from '../components/ErrorEstado';
 import React, { useState, useEffect, useMemo } from 'react';
 import { IconoActivar, IconoAgregar, IconoCerrar, IconoCheck, IconoEditar, IconoEliminar, IconoEmpresa, IconoError, IconoFlechaAbajo, IconoUbicacion } from '../components/Iconos';
 import { useGestionBloques } from '../hooks/useBloques';
+import { useMediciones } from '../hooks/useMediciones';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
+import { formatearConteoMediciones } from '../lib/galeriaCarpetas';
 import SearchableSelect from '../components/SearchableSelect';
 import ImagenUploader from '../components/ImagenUploader';
 import { aplicarCambioImagen } from '../lib/imagenesApi';
@@ -414,6 +416,7 @@ export default function BloquesPage() {
   const { perfil } = useUsuarioPerfil();
 
   const { bloques, loading, error, mutating, mutError, crearBloque, editarBloque, eliminarBloque, refetch } = useGestionBloques();
+  const { mediciones: medicionesResumen } = useMediciones(1000, { resumen: true });
   const filasSkeleton = useConteoRecordado('bloques:lista', bloques, loading);
   // `enabled=esSuperAdmin`: evita el fetch (y el 403) de /empresas para
   // admin -- solo hace falta la lista completa para el selector y la
@@ -423,6 +426,31 @@ export default function BloquesPage() {
     () => Object.fromEntries(empresas.map(e => [e.id_empresa, e.nombre])),
     [empresas]
   );
+
+  const medicionesPorBloque = useMemo(() => {
+    const mapa = new Map();
+    for (const m of medicionesResumen ?? []) {
+      const id = m?.bloque_id || m?.id_punto;
+      if (!id) continue;
+      const clave = String(id);
+      let lista = mapa.get(clave);
+      if (!lista) {
+        lista = [];
+        mapa.set(clave, lista);
+      }
+      lista.push(m);
+    }
+    return mapa;
+  }, [medicionesResumen]);
+
+  const etiquetaConteoBloque = (bloque) => {
+    const clave = String(bloque?.id_bloque ?? '');
+    const meds = medicionesPorBloque.get(clave);
+    if (meds && meds.length > 0) return formatearConteoMediciones(meds);
+    const cant = bloque?.cantidad_mediciones ?? 0;
+    if (cant === 0) return formatearConteoMediciones([]);
+    return `${cant} ${cant === 1 ? 'imagen' : 'imágenes'} · 0 lotes con 0 imágenes`;
+  };
 
   const [showCreate, setShowCreate] = useState(false);
   const [editBloque, setEditBloque] = useState(null);
@@ -565,8 +593,8 @@ export default function BloquesPage() {
                         <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>
                           {b.ciudad ? `${b.ciudad}${b.departamento ? ` · ${b.departamento}` : ''}` : 'Sin dato'}
                         </td>
-                        <td style={{ padding: '10px 14px', color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>
-                          {b.cantidad_mediciones ?? 0}
+                        <td style={{ padding: '10px 14px', color: 'var(--text-muted)', fontFamily: 'var(--font-data)', fontSize: 'var(--text-xs)' }}>
+                          {etiquetaConteoBloque(b)}
                         </td>
                         <td style={{ padding: '10px 14px' }}>
                           <span style={{
@@ -672,14 +700,13 @@ export default function BloquesPage() {
       {/* ── Aviso: punto con mediciones no se puede eliminar ── */}
       {avisoConMediciones && (() => {
         const { bloque } = avisoConMediciones;
-        const n = bloque.cantidad_mediciones ?? 0;
         const activo = bloque.activo !== false;
         return (
           <ConfirmDialog
             message={
               <>
                 <strong style={{ display: 'block', marginBottom: 6 }}>
-                  Este punto tiene {n} {n === 1 ? 'medición' : 'mediciones'}
+                  Este punto tiene {etiquetaConteoBloque(bloque)}
                 </strong>
                 Para eliminarlo, primero mueve o elimina sus mediciones desde la galería. Si solo quieres dejar de usarlo, puedes desactivarlo.
               </>

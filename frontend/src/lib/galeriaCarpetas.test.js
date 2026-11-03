@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   SIN_ASIGNAR,
   iniciales,
+  resumenConteoMediciones,
+  formatearConteoMediciones,
   carpetasDeEmpresas,
   carpetasDePuntos,
   bloquesDeEmpresa,
@@ -136,5 +138,48 @@ describe('galeriaCarpetas', () => {
     const bloques = [{ id_bloque: 'B1', empresa_id: 'EMP-1', activo: true }, { id_bloque: 'B2', empresa_id: 'EMP-2', activo: true }];
     const puntos = carpetasDePuntos([], bloquesDeEmpresa(bloques, 'EMP-1'));
     assert.deepEqual(puntos.map(p => p.id), ['B1']);
+  });
+
+  it('resumenConteoMediciones y formatearConteoMediciones producen "x imágenes · x lotes con x imágenes"', () => {
+    assert.equal(formatearConteoMediciones([]), '0 imágenes · 0 lotes con 0 imágenes');
+    assert.equal(
+      formatearConteoMediciones([{ id_medicion: 'm1' }]),
+      '1 imagen · 0 lotes con 0 imágenes',
+    );
+    const mixtas = [
+      { id_medicion: '1', lote_id: 'L1' },
+      { id_medicion: '2', lote_id: 'L1' },
+      { id_medicion: '3', lote_id: 'L1' },
+      { id_medicion: '4', lote_id: 'L2' },
+      { id_medicion: '5' },
+    ];
+    assert.deepEqual(resumenConteoMediciones(mixtas), {
+      totalImagenes: 5,
+      imagenesIndividuales: 1,
+      totalLotes: 2,
+      imagenesEnLotes: 4,
+    });
+    assert.equal(formatearConteoMediciones(mixtas), '5 imágenes · 2 lotes con 4 imágenes');
+    assert.equal(
+      formatearConteoMediciones([{ id_medicion: '1', lote_id: 'L1' }]),
+      '1 imagen · 1 lote con 1 imagen',
+    );
+  });
+
+  it('agruparPorLote calcula peorNivel, peorPct, promedioPct y estado de cada lote', () => {
+    const { lotes } = agruparPorLote([
+      { id_medicion: '1', lote_id: 'L1', lote_nombre: 202611, nivel_corrosion: 1, area_corroida_pct: 5, timestamp: '2026-10-28T10:00:00Z' },
+      { id_medicion: '2', lote_id: 'L1', nivel_corrosion: 3, area_corroida_pct: 25, timestamp: '2026-10-28T10:05:00Z' },
+      { id_medicion: '3', lote_id: 'L2', lote_nombre: 'En curso', nivel_corrosion: 0, area_corroida_pct: null, timestamp: '2026-10-29T10:00:00Z' },
+    ]);
+    const l1 = lotes.find((l) => l.id === 'L1');
+    assert.equal(l1.nombre, '202611');
+    assert.equal(l1.peorNivel, 3);
+    assert.equal(l1.peorPct, 25);
+    assert.equal(l1.promedioPct, 15);
+    assert.equal(l1.estado, 'analizado');
+
+    const l2 = lotes.find((l) => l.id === 'L2');
+    assert.equal(l2.estado, 'en_proceso');
   });
 });

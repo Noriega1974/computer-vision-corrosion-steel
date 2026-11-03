@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useMedicionesPunto } from '../hooks/useMedicionesPunto';
 import {
@@ -8,7 +8,10 @@ import Skeleton, { SkeletonLinea } from './Skeleton';
 import { useConteoRecordado } from '../hooks/useConteoRecordado';
 import { formatFecha } from '../utils/dateFormat';
 import { formatoPct, etiquetaBase } from '../lib/textUtils';
-import { IconoCamara, IconoHumedad, IconoLluvia, IconoTemperatura, IconoViento } from './Iconos';
+import { formatearConteoMediciones } from '../lib/galeriaCarpetas';
+import { agruparHistorialPuntoPorDia } from '../lib/historialPunto';
+import TarjetaLote, { FichaDetalleLote } from './TarjetaLote';
+import { IconoCamara, IconoHumedad, IconoLluvia, IconoReloj, IconoTemperatura, IconoViento } from './Iconos';
 
 // Estilos de texto compartidos con el esqueleto: mismo line-height cargado o no.
 const RESUMEN_STYLE = {
@@ -21,6 +24,38 @@ const HISTORIAL_LINEA_STYLE = { fontSize: 'var(--text-3xs)', fontWeight: 600, fo
 export default function PlantDetail({ punto }) {
   const { mediciones, loading, error } = useMedicionesPunto(punto?.id_bloque);
   const filasSkeleton = useConteoRecordado(`dashboard:historial:${punto?.id_bloque}`, mediciones, loading, 4);
+  const [diaSeleccionado, setDiaSeleccionado] = useState(null);
+  const [loteSeleccionado, setLoteSeleccionado] = useState(null);
+
+  useEffect(() => {
+    setDiaSeleccionado(null);
+    setLoteSeleccionado(null);
+  }, [punto?.id_bloque]);
+
+  useEffect(() => {
+    setLoteSeleccionado(null);
+  }, [diaSeleccionado]);
+
+  const diasAgrupados = useMemo(
+    () => agruparHistorialPuntoPorDia(mediciones),
+    [mediciones],
+  );
+
+  const diaActual = useMemo(
+    () => (diaSeleccionado ? diasAgrupados.find((d) => d.fechaISO === diaSeleccionado) ?? null : null),
+    [diasAgrupados, diaSeleccionado],
+  );
+
+  const loteActual = useMemo(
+    () => (diaActual && loteSeleccionado ? diaActual.lotes.find((l) => l.id === loteSeleccionado) ?? null : null),
+    [diaActual, loteSeleccionado],
+  );
+
+  useEffect(() => {
+    if (diaSeleccionado && !diaActual) {
+      setDiaSeleccionado(null);
+    }
+  }, [diaSeleccionado, diaActual]);
 
   if (!punto) {
     return (
@@ -122,13 +157,13 @@ export default function PlantDetail({ punto }) {
           </div>
         )}
 
-        {/* 4. Resumen: total de mediciones y última área corroída */}
+        {/* 4. Resumen: conteo unificado de imágenes/lotes y última área corroída */}
         {loading ? (
           <div aria-busy="true" style={RESUMEN_STYLE}><SkeletonLinea width={200} /></div>
         ) : (
           <div style={RESUMEN_STYLE}>
             <strong style={{ color: 'var(--text-primary)' }}>
-              {mediciones.length} {mediciones.length === 1 ? 'medición' : 'mediciones'}
+              {formatearConteoMediciones(mediciones)}
             </strong>
             {' · '}
             {ultimaMedicion?.area_corroida_pct != null
@@ -138,13 +173,46 @@ export default function PlantDetail({ punto }) {
         )}
       </div>
 
-      {/* Historial de mediciones */}
-      {/* minHeight: 0 + columna flex: sin esto el bloque crecía con su
-          contenido, el overflow hidden de la tarjeta lo recortaba y la lista
-          interna nunca llegaba a tener scroll (la rueda no hacía nada). */}
+      {/* Historial de mediciones agrupado por día (sin barra horizontal anual) */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 'var(--space-2)' }}>
-        <div style={{ flexShrink: 0, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', letterSpacing: '0.04em', padding: '4px 8px 8px', fontWeight: 600 }}>
-          HISTORIAL DE MEDICIONES
+        <div style={{
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+          fontSize: 'var(--text-2xs)',
+          color: 'var(--text-muted)',
+          letterSpacing: '0.04em',
+          padding: '4px 8px 8px',
+          fontWeight: 600,
+        }}>
+          <span>HISTORIAL DE MEDICIONES</span>
+          {diaActual && (
+            <button
+              type="button"
+              onClick={() => {
+                if (loteActual) {
+                  setLoteSeleccionado(null);
+                } else {
+                  setDiaSeleccionado(null);
+                }
+              }}
+              style={{
+                padding: '2px 8px',
+                borderRadius: 999,
+                border: '1px solid var(--border-strong)',
+                background: 'var(--bg-inset)',
+                color: 'var(--text-primary)',
+                fontFamily: 'var(--font-ui)',
+                fontSize: 'var(--text-3xs)',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              ← Volver
+            </button>
+          )}
         </div>
 
         {loading && (
@@ -176,27 +244,206 @@ export default function PlantDetail({ punto }) {
             Sin mediciones registradas para este punto.
           </div>
         )}
-        {/* Antes esta lista crecia con la cantidad real de fotos: una planta
-            con 10 mediciones estiraba toda la seccion, y como el grid del
-            Dashboard reparte una sola fila entre plantas/mapa/detalle, el
-            mapa se estiraba con ella. `height: 100%` mas arriba solo funciona
-            si un ancestro tiene un alto DEFINIDO — la seccion solo tenia
-            minHeight (un piso, no un techo), asi que "100%" no tenia contra
-            que resolver y el contenido crecia libre. Ahora el visor queda
-            fijo en ~5 filas (280px, medido sobre MedicionRow real) y el
-            resto se recorre con la rueda del mouse ahi adentro, sin mover el
-            alto de nada mas alrededor. */}
-        <div
-          style={{
-            display: 'flex', flexDirection: 'column', gap: 'var(--space-1)',
-            flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain',
-            paddingRight: 2,
-          }}
-        >
-          {mediciones.slice(0, 50).map((m, i) => (
-            <MedicionRow key={m.id_medicion ?? i} medicion={m} idPunto={punto.id_bloque} />
-          ))}
-        </div>
+
+        {!loading && !error && mediciones.length > 0 && (
+          <div
+            style={{
+              display: 'flex', flexDirection: 'column', gap: 'var(--space-1)',
+              flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain',
+              paddingRight: 2,
+            }}
+          >
+            {!diaActual ? (
+              diasAgrupados.map((dia) => {
+                const colorDia = nivelColor(dia.peorNivel);
+                return (
+                  <button
+                    key={dia.fechaISO}
+                    type="button"
+                    onClick={() => setDiaSeleccionado(dia.fechaISO)}
+                    className="historial-fila historial-fila--link"
+                    style={{
+                      width: '100%',
+                      textAlign: 'left',
+                      borderRadius: 8,
+                      justifyContent: 'space-between',
+                      padding: '9px 11px',
+                    }}
+                  >
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        fontFamily: 'var(--font-ui)',
+                        fontWeight: 700,
+                        fontSize: 'var(--text-xs)',
+                        color: 'var(--text-primary)',
+                        fontVariantNumeric: 'tabular-nums',
+                      }}>
+                        <IconoReloj size={13} color="var(--accent-amber)" />
+                        <span>{dia.etiquetaDia}</span>
+                      </div>
+                      <div style={{
+                        fontSize: 'var(--text-2xs)',
+                        color: 'var(--text-muted)',
+                        fontFamily: 'var(--font-ui)',
+                        marginTop: 2,
+                        fontVariantNumeric: 'tabular-nums',
+                      }}>
+                        {dia.etiquetaConteo}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
+                      <span style={{
+                        ...HISTORIAL_LINEA_STYLE,
+                        color: colorDia,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 5,
+                      }}>
+                        <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: colorDia }} />
+                        {nivelLabel(dia.peorNivel)}
+                      </span>
+                      <span style={{
+                        fontSize: 11,
+                        color: 'var(--text-secondary)',
+                        fontFamily: 'var(--font-ui)',
+                        fontVariantNumeric: 'tabular-nums',
+                        fontWeight: 600,
+                      }}>
+                        Máx. {formatoPct(dia.peorPct)}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })
+            ) : loteActual ? (
+              <>
+                <div style={{
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 6,
+                  padding: '6px 8px',
+                  background: 'var(--bg-inset)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 7,
+                  flexWrap: 'wrap',
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => setLoteSeleccionado(null)}
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      border: '1px solid var(--border-strong)',
+                      background: 'var(--bg-card-solid)',
+                      color: 'var(--text-primary)',
+                      fontFamily: 'var(--font-ui)',
+                      fontSize: 'var(--text-2xs)',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    ← Volver al día {diaActual.fechaEtiqueta}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoteSeleccionado(null);
+                      setDiaSeleccionado(null);
+                    }}
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      border: '1px solid var(--border)',
+                      background: 'transparent',
+                      color: 'var(--text-muted)',
+                      fontFamily: 'var(--font-ui)',
+                      fontSize: 'var(--text-3xs)',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    ← Todos los días
+                  </button>
+                </div>
+
+                <FichaDetalleLote lote={loteActual} compacta />
+
+                {loteActual.mediciones.map((m, i) => (
+                  <MedicionRow key={m.id_medicion ?? i} medicion={m} idPunto={punto.id_bloque} />
+                ))}
+              </>
+            ) : (
+              <>
+                <div style={{
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                  padding: '6px 9px',
+                  background: 'var(--bg-inset)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 7,
+                  flexWrap: 'wrap',
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => setDiaSeleccionado(null)}
+                    style={{
+                      padding: '3px 9px',
+                      borderRadius: 6,
+                      border: '1px solid var(--border-strong)',
+                      background: 'var(--bg-card-solid)',
+                      color: 'var(--text-primary)',
+                      fontFamily: 'var(--font-ui)',
+                      fontSize: 'var(--text-2xs)',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    ← Volver
+                  </button>
+                  <div style={{
+                    fontFamily: 'var(--font-ui)',
+                    fontSize: 'var(--text-2xs)',
+                    color: 'var(--text-secondary)',
+                    fontWeight: 600,
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>
+                    Día {diaActual.fechaEtiqueta} · {diaActual.etiquetaConteo}
+                  </div>
+                </div>
+
+                {diaActual.lotes.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 4 }}>
+                    {diaActual.lotes.map((lote) => (
+                      <TarjetaLote
+                        key={lote.id}
+                        lote={lote}
+                        compacta
+                        onClick={() => setLoteSeleccionado(lote.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {diaActual.mediciones.map((m, i) => (
+                  <MedicionRow key={m.id_medicion ?? i} medicion={m} idPunto={punto.id_bloque} />
+                ))}
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
