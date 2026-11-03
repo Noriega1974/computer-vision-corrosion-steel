@@ -1,17 +1,22 @@
 import React from 'react';
 import { useMediciones, LIMITE_DASHBOARD } from '../hooks/useMediciones';
 import { SkeletonLinea } from './Skeleton';
-import { ultimaMedicionPorPunto } from '../lib/mediciones';
+import { calcularIndicadores, VENTANA_DIAS } from '../lib/indicadoresSistema';
+import { formatoPct } from '../lib/textUtils';
+
+const COLOR_NIVEL = ['var(--accent-green)', 'var(--accent-amber)', 'var(--accent-orange)', 'var(--accent-red)'];
 
 
 // ================================================================
-// KPI CARD
+// KPI (compacto)
 // ================================================================
 
 // El circulo con el glifo (⬡ ◎ ▲ ✓ ~ !) se quito a proposito: no aportaba
 // informacion que el numero y su etiqueta no dieran ya, y ademas parpadeaba de
-// forma infinita en las tarjetas criticas. La severidad se lee por el color y
-// por la franja superior, sin movimiento permanente en pantalla.
+// forma infinita en las tarjetas criticas. La severidad se lee por el color del
+// numero, sin movimiento permanente en pantalla.
+// Cada KPI es una celda de la fila de la mitad izquierda (2x2 en telefonos);
+// las lineas finas entre celdas las pone .kpi-celda en index.css.
 function KPICard({
   label,
   value,
@@ -19,161 +24,43 @@ function KPICard({
   color,
   loading,
 }) {
-
   return (
-
-    <div
-      className="card kpi-card"
-      aria-busy={loading || undefined}
-      style={{
-        '--kpi-color': color,
-
-        padding: '15px 17px',
-
-        position: 'relative',
-
-        overflow: 'hidden',
-
-        borderRadius: 12,
-
-        borderTop:
-          `2px solid ${color}`,
-      }}
-    >
-
-      {/* ========================================================
-          HEADER
-          ======================================================== */}
-
+    <div className="kpi-celda" aria-busy={loading || undefined}>
       <div
         style={{
-          display: 'flex',
-
-          justifyContent:
-            'space-between',
-
-          alignItems:
-            'flex-start',
-
-          gap: 'var(--space-3)',
-
-          marginBottom: 'var(--space-3)',
-        }}
-      >
-
-        <span
-          style={{
-            fontSize: 'var(--text-xs)',
-
-            color:
-              'var(--text-muted)',
-
-            fontFamily:
-              'var(--font-ui)',
-
-            fontWeight: 500,
-
-            lineHeight: 1.35,
-          }}
-        >
-          {label}
-        </span>
-
-
-      </div>
-
-
-      {/* ========================================================
-          VALUE
-          ======================================================== */}
-
-      <div
-        style={{
-          fontFamily:
-            'var(--font-data)',
-
-          fontSize: 'var(--text-2xl)',
-
+          fontFamily: 'var(--font-data)',
+          fontSize: 'var(--text-xl)',
           fontWeight: 600,
-
           color,
-
           lineHeight: 1,
-
-          letterSpacing:
-            '-0.035em',
+          letterSpacing: '-0.035em',
         }}
       >
-
-        {loading ? (
-
-          <SkeletonLinea width="3ch" />
-
-        ) : (
-
-          value
-
-        )}
-
+        {loading ? <SkeletonLinea width="3ch" /> : value}
       </div>
-
-
-      {/* ========================================================
-          SUBTITLE
-          ======================================================== */}
-
       <div
         style={{
-          marginTop: 'var(--space-2)',
-
+          marginTop: 'var(--space-1)',
+          fontSize: 'var(--text-xs)',
+          color: 'var(--text-primary)',
+          fontFamily: 'var(--font-ui)',
+          fontWeight: 500,
+          lineHeight: 1.3,
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          marginTop: 2,
           fontSize: 'var(--text-2xs)',
-
-          color:
-            'var(--text-faint)',
-
-          fontFamily:
-            'var(--font-ui)',
-
-          textTransform:
-            'uppercase',
-
-          letterSpacing:
-            '0.075em',
+          color: 'var(--text-faint)',
+          fontFamily: 'var(--font-ui)',
+          lineHeight: 1.35,
         }}
       >
-
         {sub}
-
       </div>
-
-
-      {/* ========================================================
-          BOTTOM ACCENT
-          ======================================================== */}
-
-      <div
-        style={{
-          position: 'absolute',
-
-          left: 17,
-          right: 17,
-
-          bottom: 0,
-
-          height: 1,
-
-          background:
-            `linear-gradient(
-              90deg,
-              transparent,
-              ${color},
-              transparent
-            )`,
-
-          opacity: 0.20,
-        }}
-      />
-
     </div>
   );
 }
@@ -201,27 +88,17 @@ export default function KPIBar() {
   // DATA
   // ==============================================================
 
-  // Measurements without an assigned point are not a monitored point.
-  const puntosMedidos =
-    new Set(
-      mediciones
-        .map(m => m.bloque_id)
-        .filter(Boolean)
-    ).size;
+  const {
+    totalPuntos,
+    mayorCorrosion,
+    puntosEmpeoraron,
+    pctPuntosAlDia,
+    mediciones30Dias,
+  } = calcularIndicadores(mediciones);
 
-  const totalMediciones =
-    mediciones.length;
-
-  const alcanzoLimite =
-    totalMediciones >= LIMITE_DASHBOARD;
-
-  // Latest measurement per point (shared helper); a null level counts in neither card.
-  let puntosSeveros = 0;
-  let puntosSinCorrosion = 0;
-  for (const { nivel_corrosion: nivel } of ultimaMedicionPorPunto(mediciones).values()) {
-    if (nivel === 3) puntosSeveros++;
-    else if (nivel === 0) puntosSinCorrosion++;
-  }
+  // Until the backend returns these totals, they are computed from the latest
+  // LIMITE_DASHBOARD mediciones; say so instead of passing off a partial count.
+  const alcanzoLimite = mediciones.length >= LIMITE_DASHBOARD;
 
 
   // ==============================================================
@@ -230,33 +107,35 @@ export default function KPIBar() {
 
   const kpis = [
     {
-      label: 'Puntos medidos',
-      value: puntosMedidos,
-      sub: 'con al menos una medición',
-      color: 'var(--accent-blue)',
+      label: 'Mayor corrosión',
+      value: mayorCorrosion ? formatoPct(mayorCorrosion.pct) : 'Sin datos',
+      sub: mayorCorrosion
+        ? (mayorCorrosion.punto ?? 'Punto sin nombre')
+        : 'sin mediciones con %',
+      color: COLOR_NIVEL[mayorCorrosion?.nivel] ?? 'var(--text-primary)',
     },
     {
-      label: 'Mediciones',
-      value: alcanzoLimite ? `${totalMediciones}+` : totalMediciones,
-      sub: alcanzoLimite ? `se cuentan las ${LIMITE_DASHBOARD} más recientes` : 'en total',
-      color: 'var(--accent-green)',
+      label: 'Puntos que empeoraron',
+      value: puntosEmpeoraron,
+      sub: `subieron en los últimos ${VENTANA_DIAS} días`,
+      color: puntosEmpeoraron > 0 ? 'var(--accent-orange)' : 'var(--accent-green)',
     },
     {
-      label: 'En estado severo',
-      value: puntosSeveros,
-      sub: 'puntos, según su última medición',
-      color: puntosSeveros > 0 ? 'var(--accent-red)' : 'var(--accent-green)',
+      label: 'Puntos al día',
+      value: pctPuntosAlDia === null ? 'Sin datos' : `${pctPuntosAlDia}%`,
+      sub: `de ${totalPuntos} medidos en ${VENTANA_DIAS} días`,
+      color: 'var(--text-primary)',
     },
     {
-      label: 'Sin corrosión',
-      value: puntosSinCorrosion,
-      sub: 'puntos, según su última medición',
-      color: 'var(--accent-green)',
+      label: `Mediciones en ${VENTANA_DIAS} días`,
+      value: alcanzoLimite ? `${mediciones30Dias}+` : mediciones30Dias,
+      sub: alcanzoLimite ? `de las ${LIMITE_DASHBOARD} más recientes` : 'fotos analizadas',
+      color: 'var(--text-primary)',
     },
   ];
 
   const kpisMostrados = sinDatos
-    ? kpis.map(k => ({ ...k, value: '—', sub: 'No se pudo cargar', color: 'var(--text-faint)' }))
+    ? kpis.map(k => ({ ...k, value: 'Sin datos', sub: 'No se pudo cargar', color: 'var(--text-faint)' }))
     : kpis;
 
 
@@ -265,15 +144,9 @@ export default function KPIBar() {
   // ==============================================================
 
   return (
-    <div>
-      <div
-        className="kpi-grid"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-          gap: 'var(--space-3)',
-        }}
-      >
+    <div className="card ind-card">
+      <div className="ind-card-label">Estado general del sistema</div>
+      <div className="kpi-grid">
         {kpisMostrados.map((kpi, i) => (
           <KPICard key={i} {...kpi} loading={loading} />
         ))}

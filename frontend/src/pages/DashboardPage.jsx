@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { IconoFlechaAbajo, IconoFlechaArriba, IconoGrafico, IconoSubir } from '../components/Iconos';
+import { IconoFlechaAbajo, IconoFlechaArriba, IconoReloj, IconoSubir } from '../components/Iconos';
 
 import KPIBar from '../components/KPIBar';
+import TendenciaPunto from '../components/TendenciaPunto';
 import ColombiaMap from '../components/ColombiaMap';
 import PlantDetail from '../components/PlantDetail';
 import PlantsTable from '../components/PlantsTable';
-import ChartsRow from '../components/ChartsRow';
+import LineaTiempoMediciones from '../components/LineaTiempoMediciones';
 import Skeleton from '../components/Skeleton';
 
 import { useBloques } from '../hooks/useBloques';
@@ -55,7 +56,7 @@ function useLeaflet() {
 export default function DashboardPage() {
   const [selectedPunto, setSelectedPunto] = useState(null);
   const [selectedZona, setSelectedZona] = useState(null);
-  const [showAnalisis, setShowAnalisis] = useState(false);
+  const [showTimeline, setShowTimeline] = useState(false);
 
   const leafletReady = useLeaflet();
   const { user } = useAuth();
@@ -116,40 +117,27 @@ export default function DashboardPage() {
         <section
           className="dashboard-section section-kpi"
           style={{
-            padding: '18px 20px 20px',
+            padding: '12px 18px 16px',
           }}
         >
 
-          {/* Header */}
+          {/* Header en una sola línea: título y el botón a la derecha. Compacto para dejarles el alto a las dos tarjetas sin
+              empujar el mapa hacia abajo. */}
 
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              gap: 'var(--space-4)',
-              marginBottom: 'var(--space-4)',
+              gap: 'var(--space-3)',
+              marginBottom: 'var(--space-2)',
             }}
           >
 
-            <div>
-
-              <div
-                className="dashboard-section-title"
-              >
-                Indicadores globales
-              </div>
-
-              <div
-                style={{
-                  marginTop: 5,
-                  fontSize: 'var(--text-2xs)',
-                  color: 'var(--text-faint)',
-                }}
-              >
-                Estado general del sistema de monitoreo
-              </div>
-
+            <div
+              className="dashboard-section-title"
+            >
+              Indicadores globales
             </div>
 
 
@@ -159,6 +147,7 @@ export default function DashboardPage() {
             <Link
               to="/upload"
               className="dashboard-action"
+              style={{ padding: '6px 14px', flexShrink: 0 }}
             >
 
               <IconoSubir size={14} />
@@ -173,7 +162,10 @@ export default function DashboardPage() {
 
           {/* KPI cards */}
 
-          <KPIBar />
+          <div className="indicadores-split">
+            <KPIBar />
+            <TendenciaPunto punto={selectedPunto} />
+          </div>
 
         </section>
 
@@ -323,10 +315,10 @@ export default function DashboardPage() {
         </div>
 
         {/* ========================================================
-            ANÁLISIS Y MÉTRICAS (DESPLEGABLE / EN DESARROLLO)
+            LÍNEA DE TIEMPO DE MEDICIONES
             ======================================================== */}
         <section
-          className="dashboard-section section-charts"
+          className="dashboard-section section-timeline"
           style={{
             padding: 0,
             overflow: 'hidden',
@@ -335,14 +327,14 @@ export default function DashboardPage() {
         >
           <button
             type="button"
-            onClick={() => setShowAnalisis(s => !s)}
+            onClick={() => setShowTimeline(s => !s)}
             style={{
               width: '100%',
               padding: '16px 20px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              background: showAnalisis ? 'var(--bg-inset)' : 'transparent',
+              background: showTimeline ? 'var(--bg-inset)' : 'transparent',
               border: 'none',
               cursor: 'pointer',
               fontFamily: 'var(--font-ui)',
@@ -355,7 +347,7 @@ export default function DashboardPage() {
                 className="dashboard-section-title"
                 style={{ display: 'flex', alignItems: 'center', gap: 8 }}
               >
-                <IconoGrafico size={16} /> Análisis y métricas avanzadas (en desarrollo)
+                <IconoReloj size={16} /> Línea de tiempo de mediciones
               </div>
               <div
                 style={{
@@ -364,15 +356,15 @@ export default function DashboardPage() {
                   color: 'var(--text-faint)',
                 }}
               >
-                Comportamiento y distribución de la corrosión por ciudad y severidad
+                Historial cronológico de inspecciones y lotes procesados
               </div>
             </div>
-            {showAnalisis ? <IconoFlechaArriba size={18} /> : <IconoFlechaAbajo size={18} />}
+            {showTimeline ? <IconoFlechaArriba size={18} /> : <IconoFlechaAbajo size={18} />}
           </button>
 
-          {showAnalisis && (
+          {showTimeline && (
             <div style={{ padding: '18px 20px 20px', borderTop: '1px solid var(--border)' }}>
-              <ChartsRow />
+              <LineaTiempoMediciones />
             </div>
           )}
         </section>
@@ -411,7 +403,7 @@ export default function DashboardPage() {
         >
 
           <span>
-            Corrosion Detection System © 2026
+            Sistema de detección de corrosión © 2026
           </span>
 
           <span>

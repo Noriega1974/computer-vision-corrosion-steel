@@ -63,7 +63,7 @@ export default function MedicionCard({ medicion, to, state, contexto, seleccion 
           {titulo}
         </div>
         <div style={{ ...CARD_SUBTITULO_STYLE, color: 'var(--text-muted)' }}>
-          {prefijo ? `${prefijo} · ` : ''}{tiempoRelativo(medicion.timestamp, { vacio: '—', formatFecha })}
+          {prefijo ? `${prefijo} · ` : ''}{tiempoRelativo(medicion.timestamp, { vacio: 'Sin fecha', formatFecha })}
         </div>
       </div>
 
