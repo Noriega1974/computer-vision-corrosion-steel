@@ -65,7 +65,7 @@ import uuid
 import urllib.request
 import urllib.error
 from decimal import Decimal
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import boto3
 from boto3.dynamodb.conditions import Attr, Key
@@ -469,7 +469,7 @@ def _borrar_subida(imagen_key: str) -> None:
 CAMPOS_PLACA = ("area_base", "area_corroida_pct_foto", "placa_pct_foto", "contorno_placa", "modelo_placa")
 _CAMPOS_BUSQUEDA = ("id_punto", "sk", "id_medicion", "timestamp", "fuente", "notas", "s3_key_imagen",
                     "s3_key_thumbnail", "s3_key_resultado", "area_corroida_pct", "nivel_corrosion",
-                    "modelo", "area_base", "analisis_anterior")
+                    "modelo", "area_base", "analisis_anterior", "lote_id", "lote_nombre")
 
 
 def _buscar_medicion(id_punto: str, id_medicion: str) -> dict | None:
@@ -694,7 +694,10 @@ def _tiempo_subida(valor) -> float | None:
 
 
 NOMBRE_MAX = 80
+LOTE_ID_MAX = 64
+MAX_INTENTOS_SK = 5  # conditional-write retries on a measurement sort-key collision
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+_LOTE_ID_RE = re.compile(r"[^a-zA-Z0-9_-]")
 
 
 def _nombre_foto(valor) -> str:
@@ -704,6 +707,38 @@ def _nombre_foto(valor) -> str:
         return ""
     limpio = " ".join(_CONTROL_RE.sub(" ", valor).split())
     return limpio[:NOMBRE_MAX].rstrip()
+
+
+def _lote_id(valor) -> str:
+    """`lote_id` opcional: solo alfanuméricos, guión y guión bajo, hasta 64 caracteres."""
+    if not isinstance(valor, str):
+        return ""
+    return _LOTE_ID_RE.sub("", valor.strip())[:LOTE_ID_MAX]
+
+
+def _lote_nombre(valor) -> str:
+    """`lote_nombre` opcional: sin caracteres de control, espacios colapsados, hasta 80 caracteres."""
+    return _nombre_foto(valor)
+
+
+def _ahora_utc() -> datetime:
+    """Current UTC time (single seam so tests can freeze the clock)."""
+    return datetime.now(timezone.utc)
+
+
+def _timestamp_fecha_pasada(fecha: date, ahora: datetime) -> str:
+    """Timestamp for a user-chosen measurement date: 12:00:00 UTC of that day
+    plus an offset taken from the current time of day (microsecond precision).
+    The offset is below 12 h, so the result always stays on the same UTC date,
+    and two uploads for the same point and day get different sort keys."""
+    segundos = (ahora.hour * 3600 + ahora.minute * 60 + ahora.second) % 43200
+    base = datetime(fecha.year, fecha.month, fecha.day, 12, 0, 0, tzinfo=timezone.utc)
+    return (base + timedelta(seconds=segundos, microseconds=ahora.microsecond)).isoformat(timespec="microseconds")
+
+
+def _siguiente_timestamp(ts: str) -> str:
+    """Bump a timestamp by one microsecond (used after a sort-key collision)."""
+    return (datetime.fromisoformat(ts) + timedelta(microseconds=1)).isoformat(timespec="microseconds")
 
 
 def _procesar_solicitud(event: dict, tiempos: dict) -> dict:
@@ -728,6 +763,9 @@ def _procesar_solicitud(event: dict, tiempos: dict) -> dict:
         longitud_real    = body.get("longitud_real")
         notas            = body.get("notas", "")
         nombre           = _nombre_foto(body.get("nombre"))  # opcional
+        lote_id          = _lote_id(body.get("lote_id"))  # opcional
+        # A batch name without a valid batch id would be an orphan attribute: drop it.
+        lote_nombre      = _lote_nombre(body.get("lote_nombre")) if lote_id else ""  # opcional
         timestamp_custom = body.get("timestamp_medicion")  # YYYY-MM-DD, opcional
         tiempo_subida_s  = _tiempo_subida(body.get("tiempo_subida_s"))  # opcional
 
@@ -736,13 +774,21 @@ def _procesar_solicitud(event: dict, tiempos: dict) -> dict:
         if not bloque_id_body:
             return _respuesta(400, {"error": "Selecciona el punto donde se guardará la medición"})
 
-        if timestamp_custom:
-            try:
-                ts = datetime.fromisoformat(timestamp_custom + "T12:00:00").replace(tzinfo=timezone.utc).isoformat()
-            except ValueError:
+        if timestamp_custom is not None and timestamp_custom != "":
+            if not isinstance(timestamp_custom, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", timestamp_custom):
                 return _respuesta(400, {"error": "La fecha de la medición no es válida. Elige una fecha del calendario"})
+            try:
+                fecha_parsed = date.fromisoformat(timestamp_custom)
+            except (ValueError, TypeError):
+                return _respuesta(400, {"error": "La fecha de la medición no es válida. Elige una fecha del calendario"})
+            # Compared against the UTC day on purpose: users are in Colombia
+            # (UTC-5), so their local "today" is never ahead of the UTC date.
+            ahora = _ahora_utc()
+            if fecha_parsed > ahora.date():
+                return _respuesta(400, {"error": "La fecha de la medición no puede ser futura. Elige la fecha de hoy o una anterior"})
+            ts = _timestamp_fecha_pasada(fecha_parsed, ahora)
         else:
-            ts = datetime.now(timezone.utc).isoformat()
+            ts = _ahora_utc().isoformat(timespec="microseconds")
 
         tomado_por_id = _claims(event).get("sub", "")
         # Foto fija del nombre al momento de tomar la medición -- sigue
@@ -857,6 +903,10 @@ def _procesar_solicitud(event: dict, tiempos: dict) -> dict:
                 resultado_completo["tiempo_subida_s"] = tiempo_subida_s
             if nombre:
                 resultado_completo["nombre"] = nombre
+            if lote_id:
+                resultado_completo["lote_id"] = lote_id
+            if lote_nombre:
+                resultado_completo["lote_nombre"] = lote_nombre
 
             s3.put_object(
                 Bucket=BUCKET_NAME,
@@ -896,6 +946,10 @@ def _procesar_solicitud(event: dict, tiempos: dict) -> dict:
                 item_db["tiempo_subida_s"] = Decimal(str(tiempo_subida_s))
             if nombre:
                 item_db["nombre"] = nombre
+            if lote_id:
+                item_db["lote_id"] = lote_id
+            if lote_nombre:
+                item_db["lote_nombre"] = lote_nombre
             if tomado_por_id:
                 # Identidad del autor + atributo de GSI (usuario_id/timestamp).
                 # DynamoDB rechaza strings vacíos como clave de GSI, así que
@@ -924,7 +978,37 @@ def _procesar_solicitud(event: dict, tiempos: dict) -> dict:
             if bloque.get("nombre"):
                 item_db["bloque_nombre"] = bloque["nombre"]
 
-            tabla_mediciones.put_item(Item=item_db)
+            # Conditional write: never overwrite an existing measurement with
+            # the same sort key (same point, same instant). On collision bump
+            # the timestamp by 1 us and retry a few times.
+            ts_original = ts
+            for intento in range(MAX_INTENTOS_SK):
+                item_db["sk"] = f"MED#{ts}"
+                item_db["timestamp"] = ts
+                try:
+                    tabla_mediciones.put_item(
+                        Item=item_db,
+                        ConditionExpression="attribute_not_exists(sk)",
+                    )
+                    break
+                except ClientError as e:
+                    if e.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+                        raise
+                    if intento == MAX_INTENTOS_SK - 1:
+                        raise RuntimeError("No se pudo asignar una marca de tiempo única a la medición") from e
+                    ts = _siguiente_timestamp(ts)
+            if ts != ts_original:
+                # Keep the S3 result document consistent with the stored item.
+                resultado_completo["timestamp"] = ts
+                try:
+                    s3.put_object(
+                        Bucket=BUCKET_NAME,
+                        Key=s3_key_resultado,
+                        Body=json.dumps(resultado_completo, ensure_ascii=False, cls=DecimalEncoder),
+                        ContentType="application/json",
+                    )
+                except Exception as e:
+                    logger.warning("No se pudo actualizar el timestamp en %s: %s", s3_key_resultado, e)
         except Exception as e:
             if s3_imagen_escrita:
                 try:

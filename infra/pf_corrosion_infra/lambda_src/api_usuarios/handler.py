@@ -621,6 +621,24 @@ def lambda_handler(event: dict, context) -> dict:
             if not sanitizado:
                 return _respuesta(400, {"error": "El nombre de usuario no es válido. Usa al menos una letra o un número"})
 
+            # Same company scoping as POST /usuarios: without empresa_id the
+            # collaborator is invisible in the admin's list (sparse GSI), the
+            # admin gets 403 on disable/delete and uploads fail. An admin's
+            # collaborator inherits the creator's company; only a super_admin
+            # chooses one (validated, must be active). A super_admin
+            # collaborator belongs to no company.
+            if rol == "super_admin":
+                empresa_id = None
+            elif rol_creador == "super_admin":
+                empresa_id = body.get("empresa_id")
+                if not empresa_id:
+                    return _respuesta(400, {"error": "Selecciona la afiliación del colaborador"})
+                empresa = tabla_empresas.get_item(Key={"id_empresa": empresa_id}).get("Item")
+                if not empresa or empresa.get("activa") is False:
+                    return _respuesta(400, {"error": "La afiliación seleccionada no existe o está desactivada. Actualiza la lista e inténtalo de nuevo"})
+            else:
+                empresa_id = creador.get("empresa_id")
+
             email_interno      = f"{sanitizado}@corria.app"
             cognito_username   = email_interno   # login identifier for the collaborator
             vence_en           = (datetime.now(timezone.utc) + timedelta(days=dias)).isoformat()
@@ -657,6 +675,8 @@ def lambda_handler(event: dict, context) -> dict:
                 "activo":          True,
                 "fecha_creacion":  datetime.now(timezone.utc).isoformat(),
             }
+            if empresa_id:
+                item["empresa_id"] = empresa_id
             # Desde acá, cualquier fallo debe deshacer el admin_create_user de
             # arriba — si no, el usuario queda huérfano en Cognito (existe ahí,
             # invisible en esta tabla) y bloquea el nickname para siempre.

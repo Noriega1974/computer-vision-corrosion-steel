@@ -423,3 +423,40 @@ def test_admin_no_puede_crear_colaborador_de_rango_igual_o_mayor(u, monkeypatch,
     monkeypatch.setattr(u, "_usuario_actual", lambda ev: {"id_usuario": "ADM", "rol": "admin"})
     r = u.lambda_handler(_post_colaborador(rol), None)
     assert r["statusCode"] == 403 and cog.llamadas == []
+
+
+class CognitoColaborador(CognitoFalso):
+    def admin_create_user(self, **kw):
+        self.llamadas.append(("admin_create_user", kw["Username"]))
+        return {"User": {"Attributes": [{"Name": "sub", "Value": "sub-colab"}]}}
+
+    def admin_set_user_password(self, **kw):
+        self.llamadas.append(("admin_set_user_password", kw["Username"]))
+
+    def admin_add_user_to_group(self, **kw):
+        self.llamadas.append(("admin_add_user_to_group", kw["Username"]))
+
+
+def test_admin_crea_colaborador_con_su_empresa_id_y_puede_eliminarlo(u, monkeypatch):
+    admin = {"id_usuario": "ADM", "rol": "admin", "empresa_id": "EMP-1", "email": "adm@x.co"}
+    tabla = TablaUsuarios([admin])
+    cog = CognitoColaborador()
+    monkeypatch.setattr(u, "tabla", tabla)
+    monkeypatch.setattr(u, "cognito", cog)
+    monkeypatch.setattr(u, "_usuario_actual", lambda ev: admin)
+
+    r_create = u.lambda_handler(_post_colaborador("tecnico"), None)
+    assert r_create["statusCode"] == 201, r_create["body"]
+    creado = tabla.escritos[0]
+    assert creado["empresa_id"] == "EMP-1"
+    tabla.items.append(creado)
+
+    ev_del = {
+        "httpMethod": "DELETE",
+        "resource": "/usuarios/{id_usuario}/eliminar",
+        "pathParameters": {"id_usuario": creado["id_usuario"]},
+        "requestContext": {"authorizer": {"claims": {"sub": "s", "email": "adm@x.co"}}},
+    }
+    r_del = u.lambda_handler(ev_del, None)
+    assert r_del["statusCode"] == 200, r_del["body"]
+    assert creado["id_usuario"] in tabla.borrados
