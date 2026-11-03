@@ -11,6 +11,7 @@ import {
   agruparPorLote,
   medicionesDeLote,
   contarOcultasPorFiltro,
+  etiquetaConteoBloque,
 } from './galeriaCarpetas.js';
 
 describe('galeriaCarpetas', () => {
@@ -206,5 +207,15 @@ describe('galeriaCarpetas', () => {
     assert.equal(contarOcultasPorFiltro([a, b], [a, sinPunto], marcadas, idPunto), 1);
     assert.equal(contarOcultasPorFiltro([a, b], [a, b, sinPunto], marcadas, idPunto), 0);
     assert.equal(contarOcultasPorFiltro([], [], marcadas, idPunto), 0);
+  });
+
+  it('etiquetaConteoBloque usa el total del servidor y solo cuenta lotes si la ventana está completa', () => {
+    const meds = [{ lote_id: 'L1' }, { lote_id: 'L1' }, {}];
+    assert.equal(etiquetaConteoBloque(3, meds, true), '3 imágenes · 1 lote con 2 imágenes');
+    // ventana recortada: el total del servidor manda y no se inventan lotes
+    assert.equal(etiquetaConteoBloque(2500, meds, false), '2500 imágenes');
+    assert.equal(etiquetaConteoBloque(1, [], false), '1 imagen');
+    assert.equal(etiquetaConteoBloque(0, [], true), '0 imágenes · 0 lotes con 0 imágenes');
+    assert.equal(etiquetaConteoBloque(undefined, meds, false), '3 imágenes');
   });
 });

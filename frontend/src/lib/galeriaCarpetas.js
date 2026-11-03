@@ -237,3 +237,18 @@ export function contarOcultasPorFiltro(elegidas = [], visibles = [], marcadas = 
   const visiblesMarcadas = visibles.filter(m => elegible(m) && marcadas.has(m.id_medicion)).length;
   return Math.max(0, elegidas.filter(m => elegible(m)).length - visiblesMarcadas);
 }
+
+// Count line of a point in the points list. The image total is the server's
+// `cantidad_mediciones` (exact). The batch part comes from the loaded measurements
+// only when that window is complete (fewer rows than the request limit); otherwise
+// it would undercount, so only the image total is shown.
+export function etiquetaConteoBloque(cantidadServidor, medicionesDelPunto = [], ventanaCompleta = false) {
+  const total = Number.isFinite(Number(cantidadServidor)) ? Number(cantidadServidor) : null;
+  if (ventanaCompleta) {
+    const { totalLotes, imagenesEnLotes } = resumenConteoMediciones(medicionesDelPunto);
+    const n = total ?? medicionesDelPunto.length;
+    return `${n} ${n === 1 ? 'imagen' : 'imágenes'} · ${totalLotes} ${totalLotes === 1 ? 'lote' : 'lotes'} con ${imagenesEnLotes} ${imagenesEnLotes === 1 ? 'imagen' : 'imágenes'}`;
+  }
+  const n = total ?? medicionesDelPunto.length;
+  return `${n} ${n === 1 ? 'imagen' : 'imágenes'}`;
+}
