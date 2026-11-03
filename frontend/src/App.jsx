@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth, obtenerRutaInicial } from './auth/AuthContext';
 import { RefreshKeyProvider } from './hooks/RefreshKeyContext';
+import { UploadManagerProvider } from './hooks/UploadManagerContext';
 import ProtectedRoute from './auth/ProtectedRoute';
 import RoleRoute from './auth/RoleRoute';
 import AppLayout from './layouts/AppLayout';
@@ -41,8 +42,9 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <RefreshKeyProvider>
-          <Suspense fallback={<RouteFallback />}>
-            <Routes>
+          <UploadManagerProvider>
+            <Suspense fallback={<RouteFallback />}>
+              <Routes>
               {/* Ruta pública */}
               <Route path="/login" element={<LoginPage />} />
 
@@ -105,8 +107,9 @@ export default function App() {
               </Route>
             </Routes>
           </Suspense>
-        </RefreshKeyProvider>
-      </AuthProvider>
+        </UploadManagerProvider>
+      </RefreshKeyProvider>
+    </AuthProvider>
     </BrowserRouter>
   );
 }

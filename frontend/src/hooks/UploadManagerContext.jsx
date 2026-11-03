@@ -1,0 +1,235 @@
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import exifr from 'exifr';
+import { subirUnaMedicion, MAX_FOTO_MB } from './useUploadMedicion';
+import { useRefreshKey } from './RefreshKeyContext';
+import {
+  FASE_MEDICION,
+  FASE_PREVIA,
+  LOTE_MAX,
+  calcularProgresoSubida,
+  debeInvalidar,
+  ejecutarColaConcurrencia,
+  esReanudable,
+  nombreDesdeArchivo,
+} from '../lib/gestorSubida';
+
+// Background batch upload. Lives above the routes (see App.jsx), so it owns
+// the File objects and keeps uploading while the user navigates the app.
+// Row states: 'cola' | 'subiendo' | 'analizando' | 'listo' | 'error'.
+// Preview URLs are not created here: UploadCola makes them only for visible rows.
+
+let contadorId = 0;
+
+// `sesion` holds everything shared by the batch rows, fixed when it starts so
+// a resume or a per-photo retry reuses the same lote_id, lote_nombre,
+// bloque_id and timestamp_medicion:
+// { loteId, loteNombre, bloqueId, bloqueNombre, empresaId, timestampMedicion, notas }
+function construirBody(sesion, it, gps) {
+  return {
+    fuente: 'movil',
+    bloque_id: sesion.bloqueId,
+    lote_id: sesion.loteId,
+    lote_nombre: sesion.loteNombre,
+    timestamp_medicion: sesion.timestampMedicion,
+    ...(it.nombre?.trim() && { nombre: it.nombre.trim() }),
+    ...(sesion.notas && { notas: sesion.notas }),
+    ...(gps && { latitud_real: gps.latitude, longitud_real: gps.longitude }),
+  };
+}
+
+async function leerGps(file) {
+  try {
+    const gps = await exifr.gps(file);
+    return gps?.latitude && gps?.longitude ? { latitude: gps.latitude, longitude: gps.longitude } : null;
+  } catch {
+    return null;  // no EXIF
+  }
+}
+
+function useGestorSubida() {
+  const { invalidate } = useRefreshKey();
+  const [items, setItems] = useState([]);
+  const [running, setRunning] = useState(false);
+  const [sesion, setSesion] = useState(null);
+  const [anuncio, setAnuncio] = useState('');
+  const [avisoCerrado, setAvisoCerrado] = useState(false);
+
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const sesionRef = useRef(sesion);
+  sesionRef.current = sesion;
+  const runningRef = useRef(false);
+  const ultimoInvalidarRef = useRef(null);
+
+  const patch = useCallback((id, cambios) => {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...cambios } : it)));
+  }, []);
+
+  // Warn before closing/reloading the tab while photos are still uploading.
+  useEffect(() => {
+    if (!running) return undefined;
+    const handler = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [running]);
+
+  // Adds already-validated files, up to LOTE_MAX in total. Returns how many were dropped by the cap.
+  const agregar = useCallback((files) => {
+    const lista = Array.from(files ?? []);
+    const hueco = Math.max(0, LOTE_MAX - itemsRef.current.length);
+    const tomados = lista.slice(0, hueco);
+    const nuevos = tomados.map((file) => ({
+      id: ++contadorId,
+      file,
+      nombre: nombreDesdeArchivo(file),
+      gps: undefined,  // read from EXIF right before uploading the photo
+      estado: 'cola',
+      progreso: 0,
+      inicioAnalisis: null,
+      resultado: null,
+      error: null,
+      incierto: false,
+      reintentando: false,
+    }));
+    if (nuevos.length) setItems((prev) => [...prev, ...nuevos]);
+    return lista.length - tomados.length;
+  }, []);
+
+  const quitar = useCallback((id) => {
+    if (sesionRef.current) return;  // rows are fixed once the batch starts
+    setItems((prev) => prev.filter((x) => x.id !== id));
+  }, []);
+
+  const limpiar = useCallback(() => {
+    if (runningRef.current) return;
+    setItems([]);
+    setSesion(null);
+    setAnuncio('');
+    setAvisoCerrado(false);
+  }, []);
+
+  const anunciar = useCallback((id, ok) => {
+    const lista = itemsRef.current;
+    const pos = lista.findIndex((x) => x.id === id) + 1;
+    if (pos > 0) setAnuncio(`Imagen ${pos} de ${lista.length} ${ok ? 'lista' : 'con error'}`);
+  }, []);
+
+  // One photo through the shared upload path. The error carries the phase it
+  // happened in, so the pool knows whether repeating it could duplicate a measurement.
+  const tarea = useCallback(async (it) => {
+    let fase = FASE_PREVIA;
+    try {
+      if (it.file.size > MAX_FOTO_MB * 1024 * 1024) {
+        const mb = (it.file.size / (1024 * 1024)).toFixed(1).replace('.', ',');
+        throw new Error(`La foto pesa ${mb} MB; el máximo es ${MAX_FOTO_MB} MB.`);
+      }
+      patch(it.id, { estado: 'subiendo', progreso: 0, error: null, incierto: false });
+      const actual = itemsRef.current.find((x) => x.id === it.id) ?? it;
+      let gps = actual.gps;
+      if (gps === undefined) {
+        gps = await leerGps(it.file);
+        patch(it.id, { gps });
+      }
+      const body = construirBody(sesionRef.current, actual, gps);
+      return await subirUnaMedicion(
+        it.file,
+        body,
+        performance.now(),
+        (f) => {
+          if (f === 'analizando') {
+            fase = FASE_MEDICION;
+            patch(it.id, { estado: 'analizando', progreso: 100, inicioAnalisis: Date.now() });
+          }
+        },
+        (p) => patch(it.id, { progreso: p }),
+      );
+    } catch (err) {
+      const e = err instanceof Error ? err : new Error(String(err ?? ''));
+      e.fase = fase;
+      throw e;
+    }
+  }, [patch]);
+
+  // Runs the given rows with bounded concurrency. The global refresh is
+  // throttled: at most every ~10 s while running, plus once at the end.
+  const correr = useCallback(async (ids) => {
+    if (runningRef.current || !sesionRef.current) return;
+    const filas = ids.map((id) => itemsRef.current.find((x) => x.id === id)).filter(Boolean);
+    if (filas.length === 0) return;
+    runningRef.current = true;
+    setRunning(true);
+    setAvisoCerrado(false);
+    filas.forEach((f) => patch(f.id, { estado: 'cola', error: null, incierto: false, reintentando: false }));
+    let pendienteInvalidar = false;
+    try {
+      await ejecutarColaConcurrencia({
+        items: filas,
+        tarea,
+        onItemUpdate: (id, cambios) => {
+          patch(id, cambios);
+          if (cambios.estado === 'listo' || cambios.estado === 'error') anunciar(id, cambios.estado === 'listo');
+          if (cambios.estado === 'listo') {
+            const ahora = Date.now();
+            if (debeInvalidar(ahora, ultimoInvalidarRef.current)) {
+              ultimoInvalidarRef.current = ahora;
+              pendienteInvalidar = false;
+              invalidate();
+            } else {
+              pendienteInvalidar = true;
+            }
+          }
+        },
+      });
+    } finally {
+      runningRef.current = false;
+      setRunning(false);
+      if (pendienteInvalidar) {
+        ultimoInvalidarRef.current = Date.now();
+        invalidate();
+      }
+    }
+  }, [patch, tarea, anunciar, invalidate]);
+
+  // Starts the batch with its fixed shared fields.
+  const iniciar = useCallback((nuevaSesion) => {
+    if (runningRef.current || sesionRef.current) return undefined;
+    sesionRef.current = nuevaSesion;
+    setSesion(nuevaSesion);
+    return correr(itemsRef.current.filter((x) => x.estado === 'cola').map((x) => x.id));
+  }, [correr]);
+
+  // Manual retry of one row (also allowed for unconfirmed rows, after the user checked the gallery).
+  const reintentar = useCallback((id) => correr([id]), [correr]);
+
+  // "Resume the N missing": queued rows and failures that certainly stored nothing.
+  const reanudar = useCallback(
+    () => correr(itemsRef.current.filter(esReanudable).map((x) => x.id)),
+    [correr],
+  );
+
+  const cerrarAviso = useCallback(() => setAvisoCerrado(true), []);
+
+  const progreso = useMemo(() => calcularProgresoSubida(items, { running }), [items, running]);
+  const iniciado = sesion != null;
+  const terminado = iniciado && !running;
+
+  return {
+    items, running, sesion, anuncio, avisoCerrado, progreso, iniciado, terminado,
+    listos: progreso.completadas,
+    errores: progreso.fallidas,
+    agregar, quitar, limpiar, iniciar, reintentar, reanudar, cerrarAviso,
+  };
+}
+
+const UploadManagerContext = createContext(null);
+
+export function UploadManagerProvider({ children }) {
+  const valor = useGestorSubida();
+  return <UploadManagerContext.Provider value={valor}>{children}</UploadManagerContext.Provider>;
+}
+
+export function useUploadManager() {
+  const ctx = useContext(UploadManagerContext);
+  if (!ctx) throw new Error('useUploadManager must be used inside <UploadManagerProvider>.');
+  return ctx;
+}
