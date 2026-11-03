@@ -11,18 +11,29 @@ export const MAX_FOTO_MB = 50;
 // performance.now() taken when the user started this photo, so the stored
 // `tiempo_subida_s` covers everything before the analysis request.
 // `onFase('subiendo' | 'analizando')` and `onProgreso(0-100)` are optional.
-export async function subirUnaMedicion(file, body, inicio = performance.now(), onFase, onProgreso) {
+// `opciones`: { imagenKey, onClave, signal }. With `imagenKey` the photo is already in S3
+// (a previous attempt uploaded it): upload-url and the S3 POST are skipped, so retrying the
+// analysis reuses the same object instead of orphaning a new one, and the server (idempotent
+// per imagen_key) returns the original measurement if the first call had in fact finished.
+// `onClave(key)` runs once the S3 upload succeeded; `signal` aborts the S3 upload.
+export async function subirUnaMedicion(file, body, inicio = performance.now(), onFase, onProgreso, opciones = {}) {
+  const { imagenKey, onClave, signal } = opciones;
   onFase?.('subiendo');
   onProgreso?.(0);
-  const post = await apiPost('/medicion/upload-url', { content_type: file.type || 'image/jpeg' });
-  await apiSubirS3(post, file, (f) => onProgreso?.(Math.round(f * 100)));
+  let clave = imagenKey;
+  if (!clave) {
+    const post = await apiPost('/medicion/upload-url', { content_type: file.type || 'image/jpeg' });
+    await apiSubirS3(post, file, (f) => onProgreso?.(Math.round(f * 100)), signal);
+    clave = post.imagen_key;
+    onClave?.(clave);
+  }
   onProgreso?.(100);
   const finSubida = performance.now();
 
   onFase?.('analizando');
   return apiPost('/medicion', {
     ...body,
-    imagen_key: post.imagen_key,
+    imagen_key: clave,
     tiempo_subida_s: Number(((finSubida - inicio) / 1000).toFixed(2)),
   });
 }

@@ -91,7 +91,7 @@ function Miniatura({ file }) {
     return () => URL.revokeObjectURL(u);
   }, [file]);
   const estilo = { width: 56, height: 56, objectFit: 'cover', borderRadius: 6, flexShrink: 0, background: 'var(--bg-card)' };
-  return url ? <img src={url} alt="" width={56} height={56} style={estilo} /> : <div aria-hidden="true" style={estilo} />;
+  return url ? <img src={url} alt="" width={56} height={56} decoding="async" loading="lazy" style={estilo} /> : <div aria-hidden="true" style={estilo} />;
 }
 
 // Queue for a batch upload (up to LOTE_MAX rows). Paged, FILAS_POR_PAGINA rows

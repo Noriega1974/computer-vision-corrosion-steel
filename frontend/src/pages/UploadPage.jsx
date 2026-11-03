@@ -5,7 +5,7 @@ import { IconoAgregarImagen, IconoCamara, IconoCheck, IconoEnfocar, IconoUbicaci
 import exifr from 'exifr';
 import { useBloques } from '../hooks/useBloques';
 import { useUploadMedicion, MAX_FOTO_MB } from '../hooks/useUploadMedicion';
-import { useUploadLote, clasificarArchivos, generarLoteId, sugerirNombreLote, LOTE_MAX } from '../hooks/useUploadLote';
+import { useUploadLote, clasificarArchivos, generarLoteId, sugerirNombreLote, LOTE_MAX, NOMBRE_MAX } from '../hooks/useUploadLote';
 import UploadCola from '../components/UploadCola';
 import BarraProgresoSubida from '../components/BarraProgresoSubida';
 import { nivelColor, nivelBg, nivelLabel } from '../lib/statusUtils';
@@ -18,7 +18,6 @@ import { formatoPct, etiquetaBase } from '../lib/textUtils';
 import { hoyLocalISO, esFechaISOValida, esFechaFutura } from '../lib/fechas';
 
 // ─── Componente: resultado del análisis ─────────────────────────────────────
-const NOMBRE_MAX = 80;
 
 function ResultadoAnalisis({ result, onReset, onDashboard }) {
   const nivel = result.nivel_corrosion ?? 0;
@@ -230,7 +229,7 @@ export default function UploadPage() {
 
   // Body of one /medicion request in batch mode: shared fields plus the row's
   // own name and EXIF GPS, and the batch folder identity (lote_id + lote_nombre).
-  const construirBodyLote = (it, idLote = loteIdActivo, nombreLoteFinal = (nombreLote.trim() || sugerirNombreLote(esMedicionPasada ? fechaMedicion : undefined))) => ({
+  const construirBodyLote = (it, idLote = loteIdActivo, nombreLoteFinal = (nombreLote.trim() || sugerirNombreLote(esMedicionPasada ? fechaMedicion : hoyLocalISO()))) => ({
     fuente: 'movil',
     bloque_id: bloqueSeleccionado.id_bloque,
     ...(idLote && { lote_id: idLote }),
@@ -269,7 +268,10 @@ export default function UploadPage() {
       if (!bloqueSeleccionado || lote.running || lote.items.length === 0) return;
       setErrorLocal(null);
       const loteId = loteIdActivo || generarLoteId();
-      const nombreLoteFinal = nombreLote.trim() || sugerirNombreLote(esMedicionPasada ? fechaMedicion : undefined);
+      // With the default date (upload day) the local day is captured ONCE here and sent
+      // for every photo: a batch that crosses midnight must not split across two days.
+      const fechaLote = esMedicionPasada ? fechaMedicion : hoyLocalISO();
+      const nombreLoteFinal = nombreLote.trim() || sugerirNombreLote(fechaLote);
       setLoteIdActivo(loteId);
       if (!nombreLote.trim()) setNombreLote(nombreLoteFinal);
       lote.iniciar({
@@ -278,7 +280,7 @@ export default function UploadPage() {
         bloqueId: bloqueSeleccionado.id_bloque,
         bloqueNombre: bloqueSeleccionado.nombre,
         empresaId: bloqueSeleccionado.empresa_id,
-        timestampMedicion: esMedicionPasada ? fechaMedicion : undefined,
+        timestampMedicion: fechaLote,
         notas,
       });
       return;
@@ -479,7 +481,7 @@ export default function UploadPage() {
                     onChange={(e) => setNombreLote(e.target.value)}
                     maxLength={NOMBRE_MAX}
                     autoComplete="off"
-                    placeholder={`Ej. Inspección mensual torre norte (por defecto: ${sugerirNombreLote(esMedicionPasada ? fechaMedicion : undefined)})`}
+                    placeholder={`Ej. Inspección mensual torre norte (por defecto: ${sugerirNombreLote(esMedicionPasada ? fechaMedicion : hoyLocalISO())})`}
                     style={inputStyle}
                   />
                   <div style={{ marginTop: 4, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>

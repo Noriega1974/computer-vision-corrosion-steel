@@ -12,6 +12,7 @@ import {
   ejecutarColaConcurrencia,
   paginar,
   debeInvalidar,
+  debeActualizarProgreso,
   clasificarArchivos,
   nombreDesdeArchivo,
   generarLoteId,
@@ -53,12 +54,17 @@ describe('gestorSubida: clasificarFallo', () => {
     assert.equal(clasificarFallo(errorHttp(503, FASE_MEDICION, 'TooManyRequestsException: throttled')), 'reintentar');
   });
 
-  it('marks POST /medicion as unconfirmed on 502/504/5xx or a lost response', () => {
-    assert.equal(clasificarFallo(errorHttp(502, FASE_MEDICION)), 'incierto');
-    assert.equal(clasificarFallo(errorHttp(504, FASE_MEDICION)), 'incierto');
+  it('retries POST /medicion on 502/503/504, 409 or a lost response (server is idempotent per imagen_key)', () => {
+    assert.equal(clasificarFallo(errorHttp(502, FASE_MEDICION)), 'reintentar');
+    assert.equal(clasificarFallo(errorHttp(504, FASE_MEDICION)), 'reintentar');
+    assert.equal(clasificarFallo(errorHttp(503, FASE_MEDICION, 'El servidor tuvo un problema.')), 'reintentar');
+    assert.equal(clasificarFallo(errorHttp(409, FASE_MEDICION)), 'reintentar');
+    assert.equal(clasificarFallo(errorRed(FASE_MEDICION)), 'reintentar');
+  });
+
+  it('marks POST /medicion as unconfirmed on a plain 500 or other 5xx', () => {
     assert.equal(clasificarFallo(errorHttp(500, FASE_MEDICION)), 'incierto');
-    assert.equal(clasificarFallo(errorHttp(503, FASE_MEDICION, 'El servidor tuvo un problema.')), 'incierto');
-    assert.equal(clasificarFallo(errorRed(FASE_MEDICION)), 'incierto');
+    assert.equal(clasificarFallo(errorHttp(501, FASE_MEDICION)), 'incierto');
   });
 
   it('stops the batch when the session expired', () => {
@@ -144,7 +150,7 @@ describe('gestorSubida: ejecutarColaConcurrencia', () => {
     assert.deepEqual(demoras, [10]);
   });
 
-  it('never auto-retries POST /medicion after a 504 or a lost response (no duplicates)', async () => {
+  it('does not auto-retry a plain 500 from POST /medicion and flags it unconfirmed', async () => {
     const llamadas = new Map();
     const parches = [];
     const resumen = await ejecutarColaConcurrencia({
@@ -153,8 +159,7 @@ describe('gestorSubida: ejecutarColaConcurrencia', () => {
       onItemUpdate: (id, cambios) => parches.push({ id, ...cambios }),
       tarea: async (item) => {
         llamadas.set(item.id, (llamadas.get(item.id) || 0) + 1);
-        if (item.id === 'x') throw errorHttp(504, FASE_MEDICION);
-        throw errorRed(FASE_MEDICION);
+        throw errorHttp(item.id === 'x' ? 500 : 501, FASE_MEDICION);
       },
     });
     assert.equal(llamadas.get('x'), 1);
@@ -166,6 +171,56 @@ describe('gestorSubida: ejecutarColaConcurrencia', () => {
       assert.equal(p.incierto, true);
       assert.equal(p.error, MENSAJE_NO_CONFIRMADO);
     }
+  });
+
+  it('retries a 504 from POST /medicion and succeeds on the repeat', async () => {
+    let n = 0;
+    const resumen = await ejecutarColaConcurrencia({
+      items: [{ id: 'w' }],
+      demoraBaseMs: 0,
+      tarea: async () => {
+        n += 1;
+        if (n === 1) throw errorHttp(504, FASE_MEDICION);
+        return { ok: true };
+      },
+    });
+    assert.equal(n, 2);
+    assert.equal(resumen.completadas, 1);
+  });
+
+  it('flags as unconfirmed a POST /medicion whose retries ran out, except throttling', async () => {
+    const parches = [];
+    await ejecutarColaConcurrencia({
+      items: [{ id: 'a' }, { id: 'b' }],
+      maxReintentos: 1,
+      demoraBaseMs: 0,
+      onItemUpdate: (id, c) => c.estado === 'error' && parches.push({ id, ...c }),
+      tarea: async (item) => { throw errorHttp(item.id === 'a' ? 504 : 429, FASE_MEDICION); },
+    });
+    assert.equal(parches.find((p) => p.id === 'a').incierto, true);
+    assert.equal(parches.find((p) => p.id === 'b').incierto, false);
+  });
+
+  it('stops dispatching, retrying and patching once cancelled (logout)', async () => {
+    let cancelado = false;
+    const vistos = [];
+    const parches = [];
+    const resumen = await ejecutarColaConcurrencia({
+      items: [1, 2, 3, 4].map((id) => ({ id })),
+      concurrencia: 1,
+      demoraBaseMs: 0,
+      cancelado: () => cancelado,
+      onItemUpdate: (id, c) => parches.push({ id, ...c }),
+      tarea: async (item) => {
+        vistos.push(item.id);
+        if (item.id === 2) { cancelado = true; throw errorHttp(429, FASE_PREVIA); }
+        return {};
+      },
+    });
+    assert.deepEqual(vistos, [1, 2]);
+    assert.deepEqual(parches.map((p) => p.id), [1]);
+    assert.equal(resumen.completadas, 1);
+    assert.equal(resumen.fallidas, 0);
   });
 
   it('retries a 502 that happened before POST /medicion', async () => {
@@ -246,6 +301,14 @@ describe('gestorSubida: paging and refresh throttle', () => {
     assert.equal(p.filas[0], 75);
     assert.equal(paginar(lista, 99).pagina, 39);
     assert.equal(paginar([], 2).paginas, 1);
+  });
+
+  it('publishes progress ticks at most every 200 ms, always the first and the last', () => {
+    assert.equal(debeActualizarProgreso(null, 1000, 10), true);
+    assert.equal(debeActualizarProgreso(1000, 1100, 10), false);
+    assert.equal(debeActualizarProgreso(1000, 1200, 10), true);
+    assert.equal(debeActualizarProgreso(1000, 1010, 100), true);
+    assert.equal(debeActualizarProgreso(1000, 1010, 0), true);
   });
 
   it('invalidates at most every 10 seconds', () => {

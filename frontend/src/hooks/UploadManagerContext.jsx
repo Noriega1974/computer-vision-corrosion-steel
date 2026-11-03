@@ -2,12 +2,14 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import exifr from 'exifr';
 import { subirUnaMedicion, MAX_FOTO_MB } from './useUploadMedicion';
 import { useRefreshKey } from './RefreshKeyContext';
+import { useAuth } from '../auth/AuthContext';
 import {
   FASE_MEDICION,
   FASE_PREVIA,
   LOTE_MAX,
   calcularProgresoSubida,
   debeInvalidar,
+  debeActualizarProgreso,
   ejecutarColaConcurrencia,
   esReanudable,
   nombreDesdeArchivo,
@@ -40,7 +42,7 @@ function construirBody(sesion, it, gps) {
 async function leerGps(file) {
   try {
     const gps = await exifr.gps(file);
-    return gps?.latitude && gps?.longitude ? { latitude: gps.latitude, longitude: gps.longitude } : null;
+    return gps?.latitude != null && gps?.longitude != null ? { latitude: gps.latitude, longitude: gps.longitude } : null;
   } catch {
     return null;  // no EXIF
   }
@@ -48,6 +50,8 @@ async function leerGps(file) {
 
 function useGestorSubida() {
   const { invalidate } = useRefreshKey();
+  const { user } = useAuth();
+  const sub = user?.sub ?? null;
   const [items, setItems] = useState([]);
   const [running, setRunning] = useState(false);
   const [sesion, setSesion] = useState(null);
@@ -60,6 +64,11 @@ function useGestorSubida() {
   sesionRef.current = sesion;
   const runningRef = useRef(false);
   const ultimoInvalidarRef = useRef(null);
+  // Cancellation: every run captures `genRef`; logout bumps it, so in-flight workers
+  // see `cancelado()` and stop. `abortRef` aborts the S3 transfers in flight.
+  const genRef = useRef(0);
+  const abortRef = useRef(null);
+  const ultimoProgresoRef = useRef(new Map());  // item id -> last published tick (ms)
 
   const patch = useCallback((id, cambios) => {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...cambios } : it)));
@@ -100,6 +109,25 @@ function useGestorSubida() {
     setItems((prev) => prev.filter((x) => x.id !== id));
   }, []);
 
+  // Logout (or switching account): abort the pool, drop the queue and the session so the
+  // next user never sees or continues someone else's batch. Clearing the rows unmounts
+  // the thumbnails, which revoke their object URLs.
+  const cancelarTodo = useCallback(() => {
+    genRef.current += 1;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    runningRef.current = false;
+    sesionRef.current = null;
+    ultimoProgresoRef.current.clear();
+    setItems([]);
+    setSesion(null);
+    setRunning(false);
+    setAnuncio('');
+    setAvisoCerrado(false);
+  }, []);
+
+  useEffect(() => cancelarTodo, [sub, cancelarTodo]);
+
   const limpiar = useCallback(() => {
     if (runningRef.current) return;
     setItems([]);
@@ -117,19 +145,24 @@ function useGestorSubida() {
   // One photo through the shared upload path. The error carries the phase it
   // happened in, so the pool knows whether repeating it could duplicate a measurement.
   const tarea = useCallback(async (it) => {
+    const gen = genRef.current;
+    const cancelado = () => genRef.current !== gen;
+    const parchar = (id, cambios) => { if (!cancelado()) patch(id, cambios); };
     let fase = FASE_PREVIA;
     try {
       if (it.file.size > MAX_FOTO_MB * 1024 * 1024) {
         const mb = (it.file.size / (1024 * 1024)).toFixed(1).replace('.', ',');
         throw new Error(`La foto pesa ${mb} MB; el máximo es ${MAX_FOTO_MB} MB.`);
       }
-      patch(it.id, { estado: 'subiendo', progreso: 0, error: null, incierto: false });
+      // `reintentando` is reset here: it is set by the pool between attempts.
+      parchar(it.id, { estado: 'subiendo', progreso: 0, error: null, incierto: false, reintentando: false });
       const actual = itemsRef.current.find((x) => x.id === it.id) ?? it;
       let gps = actual.gps;
       if (gps === undefined) {
         gps = await leerGps(it.file);
-        patch(it.id, { gps });
+        parchar(it.id, { gps });
       }
+      if (cancelado()) throw new Error('Subida cancelada.');
       const body = construirBody(sesionRef.current, actual, gps);
       return await subirUnaMedicion(
         it.file,
@@ -138,14 +171,27 @@ function useGestorSubida() {
         (f) => {
           if (f === 'analizando') {
             fase = FASE_MEDICION;
-            patch(it.id, { estado: 'analizando', progreso: 100, inicioAnalisis: Date.now() });
+            parchar(it.id, { estado: 'analizando', progreso: 100, inicioAnalisis: Date.now() });
           }
         },
-        (p) => patch(it.id, { progreso: p }),
+        (p) => {
+          const ahora = performance.now();
+          if (!debeActualizarProgreso(ultimoProgresoRef.current.get(it.id), ahora, p)) return;
+          ultimoProgresoRef.current.set(it.id, ahora);
+          parchar(it.id, { progreso: p });
+        },
+        {
+          // A retry of the analysis reuses the object already in S3 (no orphans).
+          imagenKey: actual.imagenKey ?? undefined,
+          onClave: (imagenKey) => parchar(it.id, { imagenKey }),
+          signal: abortRef.current?.signal,
+        },
       );
     } catch (err) {
       const e = err instanceof Error ? err : new Error(String(err ?? ''));
       e.fase = fase;
+      // The server rejected the stored key (expired/consumed): the next attempt uploads again.
+      if (e.status === 400) parchar(it.id, { imagenKey: null });
       throw e;
     }
   }, [patch]);
@@ -159,12 +205,16 @@ function useGestorSubida() {
     runningRef.current = true;
     setRunning(true);
     setAvisoCerrado(false);
+    const gen = genRef.current;
+    const cancelado = () => genRef.current !== gen;
+    abortRef.current = new AbortController();
     filas.forEach((f) => patch(f.id, { estado: 'cola', error: null, incierto: false, reintentando: false }));
     let pendienteInvalidar = false;
     try {
       await ejecutarColaConcurrencia({
         items: filas,
         tarea,
+        cancelado,
         onItemUpdate: (id, cambios) => {
           patch(id, cambios);
           if (cambios.estado === 'listo' || cambios.estado === 'error') anunciar(id, cambios.estado === 'listo');
@@ -181,9 +231,13 @@ function useGestorSubida() {
         },
       });
     } finally {
-      runningRef.current = false;
-      setRunning(false);
-      if (pendienteInvalidar) {
+      // After a logout the state was already reset (and may belong to a new run).
+      if (!cancelado()) {
+        runningRef.current = false;
+        setRunning(false);
+        ultimoProgresoRef.current.clear();
+      }
+      if (pendienteInvalidar && !cancelado()) {
         ultimoInvalidarRef.current = Date.now();
         invalidate();
       }
