@@ -11,9 +11,8 @@ import { NIVELES, nivelColor, nivelLabel } from '../lib/statusUtils';
 import NivelInfo from './NivelInfo';
 import DatePicker from './DatePicker';
 import { inicioDiaLocal, finDiaLocal, hoyLocalISO, fechaUltimaMedicionISO } from '../lib/fechas';
-import { agruparPorLote, iniciales, medicionesDeLote } from '../lib/galeriaCarpetas';
-import { formatFecha } from '../utils/dateFormat';
-import { CARD_TITULO_STYLE, CARD_SUBTITULO_STYLE, CARD_PILDORA_STYLE } from './cardTextStyles';
+import { agruparPorLote, formatearConteoMediciones, medicionesDeLote } from '../lib/galeriaCarpetas';
+import TarjetaLote, { FichaDetalleLote } from './TarjetaLote';
 
 const ORDENES = [
   { key: 'recientes', label: 'Más recientes' },
@@ -141,6 +140,9 @@ export default function GaleriaFotos({
   const universo = seleccionLoteCompleto && loteAbierto ? loteCompleto : visibles;
   const elegibles = universo.filter(m => idPuntoDe(m));
   const elegidas = elegibles.filter(m => marcadas.has(m.id_medicion));
+  const ocultasPorFiltro = seleccionLoteCompleto && loteAbierto
+    ? Math.max(0, elegidas.length - visibles.filter(m => marcadas.has(m.id_medicion)).length)
+    : 0;
 
   const salirDeSeleccion = () => {
     setSeleccionando(false); setSeleccionLoteCompleto(false); setMarcadas(new Set()); setDialogo(null);
@@ -191,8 +193,8 @@ export default function GaleriaFotos({
   const controlesBarra = (
     <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
       <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-        {filtradas.length} {filtradas.length === 1 ? 'foto' : 'fotos'}
-        {filtradas.length !== mediciones.length ? ` de ${mediciones.length}` : ''}
+        {formatearConteoMediciones(filtradas)}
+        {filtradas.length !== mediciones.length ? ` (de ${mediciones.length} en total)` : ''}
       </span>
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
         <label htmlFor="galeria-orden" style={etiquetaStyle}>ORDEN:</label>
@@ -329,35 +331,11 @@ export default function GaleriaFotos({
       ) : (
         <>
           {loteAbierto && (
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              flexWrap: 'wrap', gap: 10, padding: '12px 14px', marginBottom: 14,
-              background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  onClick={() => { setLoteAbiertoId(null); salirDeSeleccion(); }}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
-                    background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 999,
-                    cursor: 'pointer', color: 'var(--text-secondary)',
-                    fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
-                  }}
-                >
-                  ← Todos los lotes del punto
-                </button>
-                <div>
-                  <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
-                    {loteAbierto.nombre}
-                  </div>
-                  <div style={{ fontFamily: 'var(--font-ui)', fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>
-                    {loteAbierto.total} {loteAbierto.total === 1 ? 'foto' : 'fotos'}
-                    {loteAbierto.ultimaFecha ? ` · Última ${formatFecha(loteAbierto.ultimaFecha)}` : ''}
-                  </div>
-                </div>
-              </div>
-              {puedeGestionar && (
+            <FichaDetalleLote
+              lote={loteAbierto}
+              onVolver={() => { setLoteAbiertoId(null); salirDeSeleccion(); }}
+              textoVolver="← Todos los lotes del punto"
+              acciones={puedeGestionar ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <button
                     type="button"
@@ -408,8 +386,8 @@ export default function GaleriaFotos({
                     Eliminar lote
                   </button>
                 </div>
-              )}
-            </div>
+              ) : null}
+            />
           )}
 
           {!loteAbierto && lotes.length > 0 && (
@@ -422,7 +400,7 @@ export default function GaleriaFotos({
                   fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 'var(--text-xs)',
                   color: 'var(--text-muted)', letterSpacing: '0.1em', textTransform: 'uppercase',
                 }}>
-                  Carpetas por lote ({lotes.length})
+                  Lotes del punto ({lotes.length})
                 </div>
                 <button
                   type="button"
@@ -444,66 +422,11 @@ export default function GaleriaFotos({
                 gap: 'var(--space-4)',
               }}>
                 {lotes.map(lote => (
-                  <button
+                  <TarjetaLote
                     key={lote.id}
-                    type="button"
+                    lote={lote}
                     onClick={() => { setLoteAbiertoId(lote.id); salirDeSeleccion(); }}
-                    className="medicion-card"
-                    style={{
-                      display: 'flex', flexDirection: 'column', gap: 10, padding: 14,
-                      textAlign: 'left', cursor: 'pointer', color: 'inherit',
-                      background: 'var(--bg-card)', border: '1px solid var(--border)',
-                      borderRadius: 14, overflow: 'hidden', boxShadow: 'var(--shadow-sm)',
-                    }}
-                  >
-                    <div>
-                      <div style={{ ...CARD_TITULO_STYLE, color: 'var(--text-primary)' }}>
-                        {lote.nombre}
-                      </div>
-                      <div style={{
-                        ...CARD_SUBTITULO_STYLE, color: 'var(--text-muted)',
-                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                      }}>
-                        {lote.ultimaFecha ? `Última foto ${formatFecha(lote.ultimaFecha)}` : 'Carpeta de lote'}
-                      </div>
-                    </div>
-
-                    <div style={{
-                      height: 140, width: '100%', background: 'var(--bg-inset)', borderRadius: 10,
-                      border: '1px solid var(--border)', overflow: 'hidden',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      {lote.preview ? (
-                        <img
-                          src={lote.preview}
-                          alt=""
-                          loading="lazy"
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                        />
-                      ) : (
-                        <div aria-hidden="true" style={{
-                          width: 72, height: 72, borderRadius: '50%', background: 'var(--bg-card-solid)',
-                          border: '1px solid var(--border-strong)', color: 'var(--text-secondary)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 24,
-                        }}>
-                          {iniciales(lote.nombre)}
-                        </div>
-                      )}
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, width: '100%', marginTop: 2 }}>
-                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)', fontWeight: 600 }}>
-                        {lote.total} {lote.total === 1 ? 'foto' : 'fotos'}
-                      </div>
-                      <span style={{
-                        ...CARD_PILDORA_STYLE,
-                        background: 'var(--text-primary)', color: 'var(--bg-card-solid)',
-                      }}>
-                        Abrir lote
-                      </span>
-                    </div>
-                  </button>
+                  />
                 ))}
               </div>
             </div>
@@ -556,6 +479,7 @@ export default function GaleriaFotos({
       {dialogo === 'eliminar' && (
         <EliminarLoteDialog
           cantidad={elegidas.length}
+          ocultasPorFiltro={ocultasPorFiltro}
           procesando={procesando}
           onCancelar={() => setDialogo(null)}
           onConfirmar={() => ejecutar(eliminar, { sing: 'eliminada', plur: 'eliminadas' })}
@@ -564,6 +488,7 @@ export default function GaleriaFotos({
       {dialogo === 'mover' && (
         <MoverLoteDialog
           cantidad={elegidas.length}
+          ocultasPorFiltro={ocultasPorFiltro}
           puntoActual={puntoActual}
           procesando={procesando}
           onCancelar={() => setDialogo(null)}
