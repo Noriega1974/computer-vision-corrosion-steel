@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { IconoAgregarImagen, IconoError, IconoEliminar, IconoUbicacion } from './Iconos';
+import { IconoAgregarImagen, IconoError, IconoEliminar, IconoFlechaAdelante, IconoFlechaAtras, IconoUbicacion } from './Iconos';
 import NivelIcon from './NivelIcon';
 import { nivelColor, nivelLabel } from '../lib/statusUtils';
 import { formatoPct, etiquetaBase } from '../lib/textUtils';
-import { LOTE_MAX, NOMBRE_MAX } from '../hooks/useUploadLote';
+import { LOTE_MAX } from '../hooks/useUploadLote';
+import { paginar } from '../lib/gestorSubida';
 import NotaPctAproximado from './NotaPctAproximado';
 
 const visuallyHidden = {
@@ -35,9 +36,23 @@ function SegundosAnalisis({ desde }) {
 }
 
 function EstadoFila({ it, ocupado, onReintentar }) {
-  if (it.estado === 'cola') return <span>En cola</span>;
-  if (it.estado === 'subiendo') return <span>Subiendo <span style={numStyle}>{it.progreso} %</span></span>;
-  if (it.estado === 'analizando') return <span>Analizando · <SegundosAnalisis desde={it.inicioAnalisis} /></span>;
+  if (it.estado === 'cola') return <span>{it.reintentando ? 'Reintentando en unos segundos' : 'En cola'}</span>;
+  if (it.estado === 'subiendo') {
+    return (
+      <span>
+        Subiendo <span style={numStyle}>{it.progreso} %</span>
+        {it.reintentando && ' · Reintentando'}
+      </span>
+    );
+  }
+  if (it.estado === 'analizando') {
+    return (
+      <span>
+        Analizando · <SegundosAnalisis desde={it.inicioAnalisis} />
+        {it.reintentando && ' · Reintentando'}
+      </span>
+    );
+  }
   if (it.estado === 'listo') {
     const r = it.resultado ?? {};
     const nivel = r.nivel_corrosion;
@@ -66,18 +81,37 @@ function EstadoFila({ it, ocupado, onReintentar }) {
   );
 }
 
-// Queue for a multi-photo upload. A list of rows (thumbnail, name, GPS badge,
-// text status); the polite live region announces only per-row completion.
-export default function UploadCola({
-  lote, nombreLote, onNombreLoteChange, placeholderLote,
-  onQuitar, onReintentar, onAgregar, onVerGaleria, onSubirMas,
-}) {
+// Thumbnail with its own object URL: created on mount and revoked on unmount,
+// so only the rows on the visible page hold a preview in memory.
+function Miniatura({ file }) {
+  const [url, setUrl] = useState(null);
+  useEffect(() => {
+    const u = URL.createObjectURL(file);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [file]);
+  const estilo = { width: 56, height: 56, objectFit: 'cover', borderRadius: 6, flexShrink: 0, background: 'var(--bg-card)' };
+  return url ? <img src={url} alt="" width={56} height={56} style={estilo} /> : <div aria-hidden="true" style={estilo} />;
+}
+
+// Queue for a batch upload (up to LOTE_MAX rows). Paged, FILAS_POR_PAGINA rows
+// at a time, so a 1000-photo batch never renders 1000 rows or previews at once.
+// The polite live region announces only per-row completion.
+export default function UploadCola({ lote, onQuitar, onReintentar, onAgregar, onVerGaleria, onSubirMas }) {
   const { items, running, anuncio, iniciado, terminado, listos, errores } = lote;
   const resumenRef = useRef(null);
   const inputRef = useRef(null);
+  const listaRef = useRef(null);
+  const [paginaPedida, setPaginaPedida] = useState(0);
+  const { filas, pagina, paginas, desde } = paginar(items, paginaPedida);
 
   // Move focus to the summary when the batch ends so keyboard/AT users land on the outcome.
   useEffect(() => { if (terminado) resumenRef.current?.focus(); }, [terminado]);
+
+  const irAPagina = (n) => {
+    setPaginaPedida(n);
+    listaRef.current?.focus();
+  };
 
   return (
     <div>
@@ -93,54 +127,34 @@ export default function UploadCola({
             {errores > 0 && <> · <span style={numStyle}>{errores}</span> con error</>}
           </h3>
           <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-3)', flexWrap: 'wrap' }}>
-            <button type="button" onClick={onSubirMas} style={btnSecondary}>Subir más imágenes</button>
+            <button type="button" onClick={onSubirMas} style={btnSecondary}>Subir otro lote</button>
             <button type="button" onClick={onVerGaleria} style={btnPrimary}>Ver en la galería</button>
           </div>
         </div>
       )}
 
-      {onNombreLoteChange && (
-        <div style={{
-          marginBottom: 'var(--space-3)', padding: '12px 14px',
-          background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 9,
-        }}>
-          <label htmlFor="upload-nombre-lote" style={{
-            display: 'block', fontFamily: 'var(--font-data)', fontSize: 'var(--text-2xs)',
-            fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.1em',
-            textTransform: 'uppercase', marginBottom: 6,
-          }}>
-            Nombre del lote
-          </label>
-          <input
-            id="upload-nombre-lote"
-            name="nombre-lote"
-            type="text"
-            value={nombreLote ?? ''}
-            onChange={(e) => onNombreLoteChange(e.target.value)}
-            disabled={iniciado}
-            maxLength={NOMBRE_MAX}
-            autoComplete="off"
-            placeholder={placeholderLote || 'Ej. Inspección mensual torre norte'}
-            style={{
-              width: '100%', padding: '9px 12px', background: 'var(--bg-card)',
-              border: '1px solid var(--border)', borderRadius: 7, color: 'var(--text-primary)',
-              fontFamily: 'var(--font-ui)', fontSize: 14, boxSizing: 'border-box',
-            }}
-          />
-          <div style={{ marginTop: 5, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
-            Todas las imágenes de esta tanda se agruparán en una carpeta con este nombre dentro del punto. Cada archivo conserva su nombre original.
-          </div>
-        </div>
-      )}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+        marginBottom: 'var(--space-2)', fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)', color: 'var(--text-muted)',
+      }}>
+        <span>
+          <span style={numStyle}>{items.length}</span> {items.length === 1 ? 'imagen' : 'imágenes'} en el lote
+          {paginas > 1 && <> · mostrando <span style={numStyle}>{desde + 1}</span>-<span style={numStyle}>{desde + filas.length}</span></>}
+        </span>
+      </div>
 
-      <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-        {items.map((it) => (
+      <ul
+        ref={listaRef}
+        tabIndex={-1}
+        aria-label={paginas > 1 ? `Imágenes del lote, página ${pagina + 1} de ${paginas}` : 'Imágenes del lote'}
+        style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', outline: 'none' }}
+      >
+        {filas.map((it) => (
           <li key={it.id} style={{
             display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-start', flexWrap: 'wrap',
             padding: 10, background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 8,
           }}>
-            <img src={it.previewUrl} alt="" width={56} height={56}
-              style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
+            <Miniatura file={it.file} />
             <div style={{ flex: '1 1 200px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span style={{
@@ -172,6 +186,25 @@ export default function UploadCola({
           </li>
         ))}
       </ul>
+
+      {paginas > 1 && (
+        <nav aria-label="Páginas del lote" style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+          marginTop: 'var(--space-3)', fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)', color: 'var(--text-muted)',
+        }}>
+          <button type="button" onClick={() => irAPagina(pagina - 1)} disabled={pagina === 0}
+            style={{ ...btnSecondary, display: 'inline-flex', alignItems: 'center', gap: 6, opacity: pagina === 0 ? 0.5 : 1, cursor: pagina === 0 ? 'not-allowed' : 'pointer' }}>
+            <IconoFlechaAtras size={14} aria-hidden="true" />
+            Anterior
+          </button>
+          <span>Página <span style={numStyle}>{pagina + 1}</span> de <span style={numStyle}>{paginas}</span></span>
+          <button type="button" onClick={() => irAPagina(pagina + 1)} disabled={pagina >= paginas - 1}
+            style={{ ...btnSecondary, display: 'inline-flex', alignItems: 'center', gap: 6, opacity: pagina >= paginas - 1 ? 0.5 : 1, cursor: pagina >= paginas - 1 ? 'not-allowed' : 'pointer' }}>
+            Siguiente
+            <IconoFlechaAdelante size={14} aria-hidden="true" />
+          </button>
+        </nav>
+      )}
 
       {listos > 0 && (
         <NotaPctAproximado style={{ marginTop: 'var(--space-3)' }} />
