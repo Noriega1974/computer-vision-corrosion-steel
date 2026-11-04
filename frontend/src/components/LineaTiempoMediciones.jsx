@@ -15,6 +15,8 @@ import NivelInfo from './NivelInfo';
 import DatePicker from './DatePicker';
 import Skeleton, { SkeletonLinea } from './Skeleton';
 import { useMediciones, LIMITE_DASHBOARD } from '../hooks/useMediciones';
+import { useResumenDiario } from '../hooks/useResumenDiario';
+import { useMedicionesRango } from '../hooks/useMedicionesRango';
 import { useBloques } from '../hooks/useBloques';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useAuth } from '../auth/AuthContext';
@@ -27,6 +29,11 @@ import {
   filtrarMedicionesLineaTiempo,
   agruparEventosPorDia,
   autorDeMedicion,
+  ANIO_MINIMO_LINEA_TIEMPO,
+  aniosDisponiblesLineaTiempo,
+  construirBarraAnualDesdeResumen,
+  rangoFueraDeVentana,
+  colorNivelBarra,
 } from '../lib/lineaTiempo';
 
 const EVENTOS_POR_PAGINA = 25;
@@ -378,10 +385,346 @@ function TarjetaEventoLote({ evento, esSuperAdmin, nombreEmpresa }) {
   );
 }
 
+// Fed by the server's daily summary (`resumenDias`, one year), not by the loaded
+// measurement list: the bar covers every photo of the year, not the 1000 latest.
+// `nivel` ('all' | '0'..'3') keeps only that level in the days.
+export function BarraAnualLineaTiempo({
+  resumenDias = [],
+  nivel = 'all',
+  cargando = false,
+  error = null,
+  onReintentar,
+  anioSeleccionado,
+  onChangeAnio,
+  diaFiltradoISO = '',
+  onSeleccionarDia,
+  onLimpiarDia,
+  modoColorInicial = 'segmentos',
+}) {
+  const aniosDisponibles = useMemo(() => aniosDisponiblesLineaTiempo(), []);
+  const anioActivo = aniosDisponibles.includes(Number(anioSeleccionado))
+    ? Number(anioSeleccionado)
+    : aniosDisponibles[aniosDisponibles.length - 1] ?? ANIO_MINIMO_LINEA_TIEMPO;
+
+  const [modoColor, setModoColor] = useState(
+    modoColorInicial === 'degradado' ? 'degradado' : 'segmentos',
+  );
+  const [diaHoverISO, setDiaHoverISO] = useState('');
+
+  const barra = useMemo(
+    () => construirBarraAnualDesdeResumen(resumenDias, anioActivo, { nivel }),
+    [resumenDias, anioActivo, nivel],
+  );
+
+  const ultimoDiaConFotos = useMemo(() => {
+    for (let i = barra.dias.length - 1; i >= 0; i -= 1) {
+      if (!barra.dias[i].sinFotos) return barra.dias[i];
+    }
+    return null;
+  }, [barra.dias]);
+
+  const diaInspeccionado = useMemo(() => {
+    if (diaHoverISO) {
+      const encontrado = barra.dias.find((d) => d.fechaISO === diaHoverISO);
+      if (encontrado) return encontrado;
+    }
+    if (diaFiltradoISO) {
+      const filtrado = barra.dias.find((d) => d.fechaISO === diaFiltradoISO);
+      if (filtrado) return filtrado;
+    }
+    return ultimoDiaConFotos;
+  }, [barra.dias, diaHoverISO, diaFiltradoISO, ultimoDiaConFotos]);
+
+  return (
+    <div className="lt-barra-anual" aria-label={`Actividad anual de mediciones ${barra.anio}`}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 10,
+      }}>
+        <div>
+          <div style={{
+            fontFamily: 'var(--font-ui)',
+            fontWeight: 700,
+            fontSize: 'var(--text-xs)',
+            color: 'var(--text-primary)',
+          }}>
+            Actividad anual ({barra.anio}) · 1 de enero al 31 de diciembre
+          </div>
+          {error ? (
+            <div role="alert" style={{
+              display: 'flex',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 8,
+              fontFamily: 'var(--font-ui)',
+              fontSize: 'var(--text-2xs)',
+              color: 'var(--accent-red)',
+              marginTop: 2,
+            }}>
+              <span>No se pudo cargar la actividad de {barra.anio}. {error}</span>
+              {onReintentar && (
+                <button
+                  type="button"
+                  onClick={onReintentar}
+                  style={{
+                    padding: '2px 9px',
+                    background: 'var(--bg-inset)',
+                    border: '1px solid var(--border-strong)',
+                    borderRadius: 6,
+                    color: 'var(--text-primary)',
+                    fontFamily: 'var(--font-ui)',
+                    fontSize: 'var(--text-2xs)',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Reintentar
+                </button>
+              )}
+            </div>
+          ) : (
+          <div style={{
+            fontFamily: 'var(--font-ui)',
+            fontSize: 'var(--text-2xs)',
+            color: 'var(--text-muted)',
+            marginTop: 2,
+          }}>
+            {barra.diasConFotos} {barra.diasConFotos === 1 ? 'día con mediciones' : 'días con mediciones'} · {barra.totalFotosAnio} {barra.totalFotosAnio === 1 ? 'imagen registrada' : 'imágenes registradas'} en {barra.anio}
+          </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <div
+            role="group"
+            aria-label="Modo de color en días con múltiples niveles"
+            style={{
+              display: 'inline-flex',
+              padding: 2,
+              background: 'var(--bg-inset)',
+              border: '1px solid var(--border)',
+              borderRadius: 7,
+              gap: 2,
+            }}
+          >
+            {[
+              { id: 'segmentos', label: 'Segmentos' },
+              { id: 'degradado', label: 'Degradado' },
+            ].map((op) => {
+              const activo = modoColor === op.id;
+              return (
+                <button
+                  key={op.id}
+                  type="button"
+                  aria-pressed={activo}
+                  onClick={() => setModoColor(op.id)}
+                  style={{
+                    padding: '3px 8px',
+                    borderRadius: 5,
+                    border: activo ? '1px solid var(--border-strong)' : '1px solid transparent',
+                    background: activo ? 'var(--bg-card-solid)' : 'transparent',
+                    color: activo ? 'var(--text-primary)' : 'var(--text-muted)',
+                    fontFamily: 'var(--font-ui)',
+                    fontSize: 'var(--text-3xs)',
+                    fontWeight: activo ? 700 : 500,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {op.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <label htmlFor="lt-anio-barra" style={etiquetaFiltroStyle}>Año:</label>
+            <select
+              id="lt-anio-barra"
+              aria-label="Año de la barra anual"
+              value={anioActivo}
+              onChange={(e) => onChangeAnio?.(Number(e.target.value))}
+              style={selectStyle}
+            >
+              {aniosDisponibles.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {diaFiltradoISO && (
+            <button
+              type="button"
+              onClick={onLimpiarDia}
+              style={{
+                padding: '4px 10px',
+                background: 'var(--bg-inset)',
+                border: '1px solid var(--border-strong)',
+                borderRadius: 6,
+                color: 'var(--text-primary)',
+                fontFamily: 'var(--font-ui)',
+                fontSize: 'var(--text-2xs)',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Ver todo el año
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Pista horizontal de 365/366 días */}
+      <div
+        className="lt-barra-anual__pista"
+        onMouseLeave={() => setDiaHoverISO('')}
+      >
+        {barra.dias.map((dia) => {
+          const esInicioMes = dia.diaMes === 1 && dia.mes > 1;
+          const esActivo = diaFiltradoISO === dia.fechaISO;
+          const claseBase = [
+            'lt-barra-anual__dia',
+            esInicioMes ? 'lt-barra-anual__dia--inicio-mes' : '',
+            !dia.sinFotos ? 'lt-barra-anual__dia--con-fotos' : '',
+            esActivo ? 'lt-barra-anual__dia--activo' : '',
+          ]
+            .filter(Boolean)
+            .join(' ');
+
+          if (dia.sinFotos) {
+            return (
+              <div
+                key={dia.fechaISO}
+                className={claseBase}
+                title={dia.resumenTexto}
+                aria-hidden="true"
+              />
+            );
+          }
+
+          const fondo =
+            modoColor === 'degradado' ? dia.gradienteSuave : dia.gradienteSegmentos;
+
+          return (
+            <button
+              key={dia.fechaISO}
+              type="button"
+              className={claseBase}
+              style={{ background: fondo }}
+              title={dia.resumenTexto}
+              aria-label={dia.resumenTexto}
+              aria-pressed={esActivo}
+              onMouseEnter={() => setDiaHoverISO(dia.fechaISO)}
+              onFocus={() => setDiaHoverISO(dia.fechaISO)}
+              onBlur={() => setDiaHoverISO('')}
+              onClick={() => {
+                if (diaFiltradoISO === dia.fechaISO) {
+                  onLimpiarDia?.();
+                } else {
+                  onSeleccionarDia?.(dia.fechaISO);
+                }
+              }}
+            />
+          );
+        })}
+      </div>
+
+      {/* Etiquetas de los 12 meses alineadas por proporción de días */}
+      <div className="lt-barra-anual__meses" aria-hidden="true">
+        {barra.meses.map((m) => (
+          <span
+            key={m.mes}
+            className="lt-barra-anual__mes"
+            style={{ flex: `${m.diasMes} 0 0` }}
+          >
+            {m.etiqueta}
+          </span>
+        ))}
+      </div>
+
+      {/* Leyenda y detalle del día inspeccionado */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 10,
+        paddingTop: 2,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 5,
+            fontSize: 'var(--text-2xs)',
+            color: 'var(--text-muted)',
+            fontFamily: 'var(--font-ui)',
+          }}>
+            <span style={{
+              width: 10,
+              height: 10,
+              borderRadius: 3,
+              background: 'var(--lt-barra-vacio)',
+              border: '1px solid var(--border-strong)',
+              display: 'inline-block',
+            }} />
+            Sin mediciones
+          </span>
+          {NIVELES.map((item, idx) => (
+            <span
+              key={item.status}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                fontSize: 'var(--text-2xs)',
+                color: 'var(--text-secondary)',
+                fontFamily: 'var(--font-ui)',
+              }}
+            >
+              <span style={{
+                width: 10,
+                height: 10,
+                borderRadius: 3,
+                background: colorNivelBarra(idx),
+                display: 'inline-block',
+              }} />
+              {item.label}
+            </span>
+          ))}
+        </div>
+
+        <div
+          aria-live="polite"
+          style={{
+            fontSize: 'var(--text-2xs)',
+            fontFamily: 'var(--font-ui)',
+            color: 'var(--text-secondary)',
+            background: 'var(--bg-inset)',
+            border: '1px solid var(--border)',
+            borderRadius: 6,
+            padding: '4px 9px',
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          {diaInspeccionado
+            ? diaInspeccionado.resumenTexto
+            : error ? 'Actividad del año no disponible'
+              : cargando ? 'Cargando la actividad del año...' : `Sin mediciones registradas en ${barra.anio}`}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function LineaTiempoMediciones() {
   const { user } = useAuth();
   const esSuperAdmin = Boolean(user?.groups?.includes('super_admin'));
-  const { mediciones, loading, error } = useMediciones(LIMITE_LINEA_TIEMPO, { resumen: true });
+  const { mediciones: medicionesRecientes, loading: loadingRecientes, error: errorRecientes } = useMediciones(LIMITE_LINEA_TIEMPO, { resumen: true });
   const { bloques } = useBloques();
   const { empresas } = useEmpresas(esSuperAdmin);
 
@@ -392,6 +735,9 @@ export default function LineaTiempoMediciones() {
   const [fechaFin, setFechaFin] = useState('');
   const [busqueda, setBusqueda] = useState('');
   const [limiteEventos, setLimiteEventos] = useState(EVENTOS_POR_PAGINA);
+  const [anioBarra, setAnioBarra] = useState(() =>
+    Math.max(ANIO_MINIMO_LINEA_TIEMPO, new Date().getFullYear()),
+  );
 
   const nombreEmpresa = (id) => empresas.find((e) => e.id_empresa === id)?.nombre || 'Zona';
 
@@ -399,6 +745,23 @@ export default function LineaTiempoMediciones() {
     if (!esSuperAdmin || empresaId === 'all') return bloques;
     return bloques.filter((b) => String(b.empresa_id) === String(empresaId));
   }, [bloques, esSuperAdmin, empresaId]);
+
+  // Barra anual: agregados del servidor para el año elegido (todas las fotos del
+  // año, no solo las 1000 recientes). Respeta zona, punto y nivel; la búsqueda por
+  // texto solo afecta la lista de abajo.
+  const resumenAnual = useResumenDiario({
+    anios: [anioBarra],
+    idPunto: bloqueId !== 'all' ? bloqueId : undefined,
+    empresaId: esSuperAdmin && empresaId !== 'all' ? empresaId : undefined,
+  });
+
+  // Un día (o rango) más antiguo que la ventana de las 1000 recientes se pide al
+  // servidor por rango; si no, la lista quedaría vacía aunque haya fotos.
+  const fueraDeVentana = rangoFueraDeVentana(medicionesRecientes, fechaInicio, fechaFin, LIMITE_LINEA_TIEMPO);
+  const rango = useMedicionesRango({ desde: fechaInicio, hasta: fechaFin, habilitado: fueraDeVentana });
+  const mediciones = fueraDeVentana ? rango.mediciones : medicionesRecientes;
+  const loading = fueraDeVentana ? rango.loading : loadingRecientes;
+  const error = fueraDeVentana ? rango.error : errorRecientes;
 
   const medicionesFiltradas = useMemo(
     () =>
@@ -412,6 +775,9 @@ export default function LineaTiempoMediciones() {
       }),
     [mediciones, esSuperAdmin, empresaId, bloqueId, nivel, fechaInicio, fechaFin, busqueda],
   );
+
+  const diaUnicoFiltradoISO =
+    fechaInicio && fechaFin && fechaInicio === fechaFin ? fechaInicio : '';
 
   const diasAgrupados = useMemo(
     () => agruparEventosPorDia(medicionesFiltradas),
@@ -456,6 +822,37 @@ export default function LineaTiempoMediciones() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* Barra horizontal anual (exclusiva de Línea de tiempo) */}
+      <BarraAnualLineaTiempo
+        resumenDias={resumenAnual.dias}
+        nivel={nivel}
+        cargando={resumenAnual.loading}
+        error={resumenAnual.error}
+        onReintentar={resumenAnual.refetch}
+        anioSeleccionado={anioBarra}
+        onChangeAnio={(nuevoAnio) => {
+          setAnioBarra(nuevoAnio);
+          if (
+            diaUnicoFiltradoISO &&
+            !diaUnicoFiltradoISO.startsWith(`${nuevoAnio}-`)
+          ) {
+            setFechaInicio('');
+            setFechaFin('');
+          }
+        }}
+        diaFiltradoISO={diaUnicoFiltradoISO}
+        onSeleccionarDia={(iso) => {
+          setFechaInicio(iso);
+          setFechaFin(iso);
+          setLimiteEventos(EVENTOS_POR_PAGINA);
+        }}
+        onLimpiarDia={() => {
+          setFechaInicio('');
+          setFechaFin('');
+          setLimiteEventos(EVENTOS_POR_PAGINA);
+        }}
+      />
+
       {/* Barra de filtros */}
       <div style={{
         display: 'flex',
@@ -609,8 +1006,8 @@ export default function LineaTiempoMediciones() {
               setLimiteEventos(EVENTOS_POR_PAGINA);
             }}
             maxISO={hoyLocalISO()}
-            inspecciones={mediciones}
-            mesInicial={fechaUltimaMedicionISO(mediciones)}
+            inspecciones={medicionesRecientes}
+            mesInicial={fechaUltimaMedicionISO(medicionesRecientes)}
             ctaLabel="Filtrar línea de tiempo"
             clearLabel="Limpiar fechas"
             futureTitle="No hay fotos en fechas futuras"
@@ -775,7 +1172,12 @@ export default function LineaTiempoMediciones() {
         </div>
       )}
 
-      {mediciones.length >= LIMITE_LINEA_TIEMPO && (
+      {fueraDeVentana && rango.truncado && (
+        <div role="note" style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
+          El rango elegido tiene más de {LIMITE_LINEA_TIEMPO} mediciones; se muestran las {LIMITE_LINEA_TIEMPO} más recientes del rango. Acota las fechas para ver el resto.
+        </div>
+      )}
+      {!fueraDeVentana && medicionesRecientes.length >= LIMITE_LINEA_TIEMPO && (
         <div role="note" style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
           Se muestran las {LIMITE_LINEA_TIEMPO} mediciones más recientes por fecha de medición; las anteriores no aparecen aquí.
         </div>

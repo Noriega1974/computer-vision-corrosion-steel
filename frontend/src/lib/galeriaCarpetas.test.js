@@ -3,11 +3,15 @@ import assert from 'node:assert/strict';
 import {
   SIN_ASIGNAR,
   iniciales,
+  resumenConteoMediciones,
+  formatearConteoMediciones,
   carpetasDeEmpresas,
   carpetasDePuntos,
   bloquesDeEmpresa,
   agruparPorLote,
   medicionesDeLote,
+  contarOcultasPorFiltro,
+  etiquetaConteoBloque,
 } from './galeriaCarpetas.js';
 
 describe('galeriaCarpetas', () => {
@@ -136,5 +140,82 @@ describe('galeriaCarpetas', () => {
     const bloques = [{ id_bloque: 'B1', empresa_id: 'EMP-1', activo: true }, { id_bloque: 'B2', empresa_id: 'EMP-2', activo: true }];
     const puntos = carpetasDePuntos([], bloquesDeEmpresa(bloques, 'EMP-1'));
     assert.deepEqual(puntos.map(p => p.id), ['B1']);
+  });
+
+  it('resumenConteoMediciones y formatearConteoMediciones producen "x imágenes · x lotes con x imágenes"', () => {
+    assert.equal(formatearConteoMediciones([]), '0 imágenes · 0 lotes con 0 imágenes');
+    assert.equal(
+      formatearConteoMediciones([{ id_medicion: 'm1' }]),
+      '1 imagen · 0 lotes con 0 imágenes',
+    );
+    const mixtas = [
+      { id_medicion: '1', lote_id: 'L1' },
+      { id_medicion: '2', lote_id: 'L1' },
+      { id_medicion: '3', lote_id: 'L1' },
+      { id_medicion: '4', lote_id: 'L2' },
+      { id_medicion: '5' },
+    ];
+    assert.deepEqual(resumenConteoMediciones(mixtas), {
+      totalImagenes: 5,
+      imagenesIndividuales: 1,
+      totalLotes: 2,
+      imagenesEnLotes: 4,
+    });
+    assert.equal(formatearConteoMediciones(mixtas), '5 imágenes · 2 lotes con 4 imágenes');
+    assert.equal(
+      formatearConteoMediciones([{ id_medicion: '1', lote_id: 'L1' }]),
+      '1 imagen · 1 lote con 1 imagen',
+    );
+  });
+
+  it('agruparPorLote calcula peorNivel, peorPct, promedioPct y estado de cada lote', () => {
+    const { lotes } = agruparPorLote([
+      { id_medicion: '1', lote_id: 'L1', lote_nombre: 202611, nivel_corrosion: 1, area_corroida_pct: 5, timestamp: '2026-10-28T10:00:00Z' },
+      { id_medicion: '2', lote_id: 'L1', nivel_corrosion: 3, area_corroida_pct: 25, timestamp: '2026-10-28T10:05:00Z' },
+      { id_medicion: '3', lote_id: 'L2', lote_nombre: 'En curso', nivel_corrosion: 0, area_corroida_pct: null, timestamp: '2026-10-29T10:00:00Z' },
+    ]);
+    const l1 = lotes.find((l) => l.id === 'L1');
+    assert.equal(l1.nombre, '202611');
+    assert.equal(l1.peorNivel, 3);
+    assert.equal(l1.peorPct, 25);
+    assert.equal(l1.promedioPct, 15);
+    assert.equal(l1.estado, 'analizado');
+
+    const l2 = lotes.find((l) => l.id === 'L2');
+    assert.equal(l2.estado, 'en_proceso');
+  });
+
+  it('el promedio del lote ignora las fotos que aún no tienen % (en proceso)', () => {
+    const { lotes } = agruparPorLote([
+      { id_medicion: '1', lote_id: 'L', area_corroida_pct: 10, timestamp: '2026-10-28T10:00:00Z' },
+      { id_medicion: '2', lote_id: 'L', area_corroida_pct: null, timestamp: '2026-10-28T10:01:00Z' },
+      { id_medicion: '3', lote_id: 'L', timestamp: '2026-10-28T10:02:00Z' },
+    ]);
+    assert.equal(lotes[0].promedioPct, 10);
+    assert.equal(lotes[0].estado, 'en_proceso');
+    const vacio = agruparPorLote([{ id_medicion: '9', lote_id: 'V', area_corroida_pct: null, timestamp: '2026-10-28T10:00:00Z' }]);
+    assert.equal(vacio.lotes[0].promedioPct, 0);
+  });
+
+  it('contarOcultasPorFiltro compara conjuntos del mismo tipo (solo fotos con punto)', () => {
+    const idPunto = (m) => m.id_punto;
+    const a = { id_medicion: 'a', id_punto: 'P' };
+    const b = { id_medicion: 'b', id_punto: 'P' };
+    const sinPunto = { id_medicion: 'c' };
+    const marcadas = new Set(['a', 'b', 'c']);
+    // b queda oculta por el filtro; la que no tiene punto nunca fue elegible y no cuenta.
+    assert.equal(contarOcultasPorFiltro([a, b], [a, sinPunto], marcadas, idPunto), 1);
+    assert.equal(contarOcultasPorFiltro([a, b], [a, b, sinPunto], marcadas, idPunto), 0);
+    assert.equal(contarOcultasPorFiltro([], [], marcadas, idPunto), 0);
+  });
+
+  it('etiquetaConteoBloque usa el total del servidor y solo cuenta lotes si la ventana está completa', () => {
+    const meds = [{ lote_id: 'L1' }, { lote_id: 'L1' }, {}];
+    assert.equal(etiquetaConteoBloque(3, meds, true), '3 imágenes · 1 lote con 2 imágenes');
+    // ventana recortada: el total del servidor manda y no se inventan lotes
+    assert.equal(etiquetaConteoBloque(2500, meds, false), '2500 imágenes');
+    assert.equal(etiquetaConteoBloque(1, [], false), '1 imagen');
+    assert.equal(etiquetaConteoBloque(0, [], true), '0 imágenes · 0 lotes con 0 imágenes');
+    assert.equal(etiquetaConteoBloque(undefined, meds, false), '3 imágenes');
   });
 });

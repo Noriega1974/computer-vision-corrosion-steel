@@ -2233,3 +2233,112 @@ select option {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ================================================================
+   BARRA HORIZONTAL ANUAL DE LÍNEA DE TIEMPO (LineaTiempoMediciones.jsx)
+   ================================================================ */
+
+:root {
+  --lt-barra-vacio: #cbd5e1;
+  --lt-barra-vacio-hover: #94a3b8;
+  --lt-barra-borde-mes: rgba(15, 23, 42, 0.14);
+}
+
+[data-theme="dark"] {
+  --lt-barra-vacio: #334155;
+  --lt-barra-vacio-hover: #475569;
+  --lt-barra-borde-mes: rgba(248, 250, 252, 0.16);
+}
+
+.lt-barra-anual {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.lt-barra-anual__pista {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  height: 46px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  background: var(--lt-barra-vacio);
+  box-sizing: border-box;
+}
+
+.lt-barra-anual__dia {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: var(--lt-barra-vacio);
+  position: relative;
+  box-sizing: border-box;
+}
+
+.lt-barra-anual__dia--inicio-mes {
+  border-left: 1px solid var(--lt-barra-borde-mes);
+}
+
+.lt-barra-anual__dia--con-fotos {
+  /* Wider than an empty day but allowed to shrink (min 1px): 366 days must fit on a phone. */
+  flex: 1.6 1 1px;
+  min-width: 1px;
+  cursor: pointer;
+  z-index: 1;
+  box-shadow: 0 0 0 0.5px rgba(15, 23, 42, 0.28);
+  transition: transform var(--dur-fast) var(--ease-out), filter var(--dur-fast) var(--ease-out);
+}
+
+.lt-barra-anual__dia--con-fotos:hover,
+.lt-barra-anual__dia--con-fotos:focus-visible {
+  z-index: 3;
+  filter: brightness(1.08);
+  outline: 2px solid var(--text-primary);
+  outline-offset: -1px;
+}
+
+.lt-barra-anual__dia--activo {
+  z-index: 4;
+  outline: 2px solid var(--text-primary);
+  outline-offset: -1px;
+}
+
+.lt-barra-anual__meses {
+  display: flex;
+  width: 100%;
+  user-select: none;
+}
+
+.lt-barra-anual__mes {
+  min-width: 0;
+  font-family: var(--font-data);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding-left: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 640px) {
+  .lt-barra-anual__pista {
+    height: 38px;
+  }
+  .lt-barra-anual__mes {
+    font-size: 9px;
+    letter-spacing: 0;
+  }
+}

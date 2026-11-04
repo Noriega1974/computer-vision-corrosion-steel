@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useMedicionesPunto } from '../hooks/useMedicionesPunto';
+import { useResumenDiario } from '../hooks/useResumenDiario';
+import { useMedicionesDia } from '../hooks/useMedicionesDia';
 import {
   nivelColor, nivelBg, nivelLabel,
 } from '../lib/statusUtils';
@@ -8,7 +10,11 @@ import Skeleton, { SkeletonLinea } from './Skeleton';
 import { useConteoRecordado } from '../hooks/useConteoRecordado';
 import { formatFecha } from '../utils/dateFormat';
 import { formatoPct, etiquetaBase } from '../lib/textUtils';
-import { IconoCamara, IconoHumedad, IconoLluvia, IconoTemperatura, IconoViento } from './Iconos';
+import { agruparPorLote } from '../lib/galeriaCarpetas';
+import { aniosDesde, textoImagenesYLotes } from '../lib/resumenDiario';
+import { formatearFechaDiaPunto } from '../lib/historialPunto';
+import TarjetaLote, { FichaDetalleLote } from './TarjetaLote';
+import { IconoCamara, IconoHumedad, IconoLluvia, IconoReloj, IconoTemperatura, IconoViento } from './Iconos';
 
 // Estilos de texto compartidos con el esqueleto: mismo line-height cargado o no.
 const RESUMEN_STYLE = {
@@ -17,10 +23,67 @@ const RESUMEN_STYLE = {
 };
 const HISTORIAL_LINEA_STYLE = { fontSize: 'var(--text-3xs)', fontWeight: 600, fontFamily: 'var(--font-data)' };
 
+// Filas por tanda en el detalle de un día o de un lote (un día puede tener cientos).
+const FILAS_POR_TANDA = 25;
+
 // ─── Tarjeta Flashcard de Ubicación (Dashboard) ─────────────────────────────
+// Historial: las cajas de día salen del resumen diario del servidor (una consulta por
+// año, desde 2026 hasta el actual; hoy es una sola), así que cuentan TODAS las fotos
+// del punto y no solo las más recientes. Al abrir un día se piden sus fotos completas
+// (hasta 500) y se muestran primero las tarjetas de lote de ese día y después SOLO las
+// fotos sueltas: las de un lote se ven dentro de su tarjeta, nunca repetidas aquí.
 export default function PlantDetail({ punto }) {
-  const { mediciones, loading, error } = useMedicionesPunto(punto?.id_bloque);
-  const filasSkeleton = useConteoRecordado(`dashboard:historial:${punto?.id_bloque}`, mediciones, loading, 4);
+  const idPunto = punto?.id_bloque;
+  // Solo la última medición (nivel, clima, área); el historial sale del resumen.
+  const { mediciones: ultimas, loading: cargandoUltima, error: errorUltima } = useMedicionesPunto(idPunto, { limite: 1 });
+  const anios = useMemo(() => aniosDesde(new Date().getFullYear()), []);
+  const resumen = useResumenDiario({ anios, idPunto, habilitado: Boolean(idPunto) });
+  // El resumen diario (conteos e historial) y la última medición (área, clima) se
+  // cargan y fallan por separado: un fallo no reemplaza el contenido del otro.
+  const filasSkeleton = useConteoRecordado(`dashboard:historial:${idPunto}`, resumen.dias, resumen.loading, 4);
+  const [diaSeleccionado, setDiaSeleccionado] = useState(null);
+  const [loteSeleccionado, setLoteSeleccionado] = useState(null);
+  const [filasVisibles, setFilasVisibles] = useState(FILAS_POR_TANDA);
+  const delDia = useMedicionesDia(idPunto, diaSeleccionado);
+
+  useEffect(() => {
+    setDiaSeleccionado(null);
+    setLoteSeleccionado(null);
+  }, [idPunto]);
+
+  useEffect(() => {
+    setLoteSeleccionado(null);
+    setFilasVisibles(FILAS_POR_TANDA);
+  }, [diaSeleccionado]);
+
+  useEffect(() => {
+    setFilasVisibles(FILAS_POR_TANDA);
+  }, [loteSeleccionado]);
+
+  const mediciones = ultimas;
+
+  const diaResumen = useMemo(
+    () => (diaSeleccionado ? resumen.dias.find((d) => d.fecha === diaSeleccionado) ?? null : null),
+    [resumen.dias, diaSeleccionado],
+  );
+
+  // Fotos del día abierto separadas en lotes y sueltas (sin duplicar).
+  const agrupadoDia = useMemo(() => agruparPorLote(delDia.mediciones), [delDia.mediciones]);
+  const sueltasDia = useMemo(
+    () => [...agrupadoDia.sueltas].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)),
+    [agrupadoDia.sueltas],
+  );
+
+  const loteActual = useMemo(
+    () => (loteSeleccionado ? agrupadoDia.lotes.find((l) => l.id === loteSeleccionado) ?? null : null),
+    [agrupadoDia.lotes, loteSeleccionado],
+  );
+
+  useEffect(() => {
+    if (diaSeleccionado && !resumen.loading && !diaResumen) {
+      setDiaSeleccionado(null);
+    }
+  }, [diaSeleccionado, diaResumen, resumen.loading]);
 
   if (!punto) {
     return (
@@ -122,32 +185,58 @@ export default function PlantDetail({ punto }) {
           </div>
         )}
 
-        {/* 4. Resumen: total de mediciones y última área corroída */}
-        {loading ? (
-          <div aria-busy="true" style={RESUMEN_STYLE}><SkeletonLinea width={200} /></div>
-        ) : (
-          <div style={RESUMEN_STYLE}>
+        {/* 4. Resumen: conteo unificado de imágenes/lotes y última área corroída */}
+        <div style={RESUMEN_STYLE}>
+          {resumen.loading ? (
+            <span aria-busy="true"><SkeletonLinea width={200} /></span>
+          ) : resumen.error ? (
+            <span style={{ color: 'var(--accent-red)' }}>No se pudo cargar el conteo de imágenes</span>
+          ) : (
             <strong style={{ color: 'var(--text-primary)' }}>
-              {mediciones.length} {mediciones.length === 1 ? 'medición' : 'mediciones'}
+              {textoImagenesYLotes(resumen.totales.imagenes, {
+                count: resumen.totales.lotes,
+                imagenes: resumen.totales.imagenes_en_lotes,
+              })}
             </strong>
-            {' · '}
-            {ultimaMedicion?.area_corroida_pct != null
-              ? `Última área corroída: ${formatoPct(ultimaMedicion.area_corroida_pct)} ${etiquetaBase(ultimaMedicion)}`
-              : 'Sin lecturas registradas'}
-          </div>
-        )}
+          )}
+          {' · '}
+          {cargandoUltima
+            ? 'Cargando la última lectura...'
+            : errorUltima
+              ? <span style={{ color: 'var(--accent-red)' }}>No se pudo cargar la última lectura</span>
+              : ultimaMedicion?.area_corroida_pct != null
+                ? `Última área corroída: ${formatoPct(ultimaMedicion.area_corroida_pct)} ${etiquetaBase(ultimaMedicion)}`
+                : 'Sin lecturas registradas'}
+        </div>
       </div>
 
-      {/* Historial de mediciones */}
-      {/* minHeight: 0 + columna flex: sin esto el bloque crecía con su
-          contenido, el overflow hidden de la tarjeta lo recortaba y la lista
-          interna nunca llegaba a tener scroll (la rueda no hacía nada). */}
+      {/* Historial: una caja por día; al abrir un día, sus lotes y fotos sueltas */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 'var(--space-2)' }}>
-        <div style={{ flexShrink: 0, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', letterSpacing: '0.04em', padding: '4px 8px 8px', fontWeight: 600 }}>
-          HISTORIAL DE MEDICIONES
+        <div style={{
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+          fontSize: 'var(--text-2xs)',
+          color: 'var(--text-muted)',
+          letterSpacing: '0.04em',
+          padding: '4px 8px 8px',
+          fontWeight: 600,
+        }}>
+          <span>HISTORIAL DE MEDICIONES</span>
+          {diaSeleccionado && !loteActual && (
+            <button
+              type="button"
+              onClick={() => setDiaSeleccionado(null)}
+              style={botonVolverStyle}
+            >
+              ← Volver
+            </button>
+          )}
         </div>
 
-        {loading && (
+        {resumen.loading && (
           <div aria-busy="true" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
             {Array.from({ length: filasSkeleton }, (_, i) => (
               <div
@@ -168,37 +257,192 @@ export default function PlantDetail({ punto }) {
             ))}
           </div>
         )}
-        {!loading && error && (
-          <div style={{ padding: 'var(--space-3)', fontSize: 'var(--text-2xs)', color: 'var(--accent-red)' }}>{error}</div>
+        {!resumen.loading && resumen.error && (
+          <div role="alert" style={{ padding: 'var(--space-3)', fontSize: 'var(--text-2xs)', color: 'var(--accent-red)', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <span>{resumen.error}</span>
+            <button type="button" onClick={resumen.refetch} style={botonVolverStyle}>Reintentar</button>
+          </div>
         )}
-        {!loading && !error && mediciones.length === 0 && (
+        {!resumen.loading && !resumen.error && resumen.dias.length === 0 && (
           <div style={{ textAlign: 'center', padding: 20, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
             Sin mediciones registradas para este punto.
           </div>
         )}
-        {/* Antes esta lista crecia con la cantidad real de fotos: una planta
-            con 10 mediciones estiraba toda la seccion, y como el grid del
-            Dashboard reparte una sola fila entre plantas/mapa/detalle, el
-            mapa se estiraba con ella. `height: 100%` mas arriba solo funciona
-            si un ancestro tiene un alto DEFINIDO — la seccion solo tenia
-            minHeight (un piso, no un techo), asi que "100%" no tenia contra
-            que resolver y el contenido crecia libre. Ahora el visor queda
-            fijo en ~5 filas (280px, medido sobre MedicionRow real) y el
-            resto se recorre con la rueda del mouse ahi adentro, sin mover el
-            alto de nada mas alrededor. */}
-        <div
-          style={{
-            display: 'flex', flexDirection: 'column', gap: 'var(--space-1)',
-            flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain',
-            paddingRight: 2,
-          }}
-        >
-          {mediciones.slice(0, 50).map((m, i) => (
-            <MedicionRow key={m.id_medicion ?? i} medicion={m} idPunto={punto.id_bloque} />
-          ))}
-        </div>
+
+        {!resumen.loading && !resumen.error && resumen.dias.length > 0 && (
+          <div
+            style={{
+              display: 'flex', flexDirection: 'column', gap: 'var(--space-1)',
+              flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain',
+              paddingRight: 2,
+            }}
+          >
+            {!diaResumen ? (
+              resumen.dias.map((dia) => <CajaDia key={dia.fecha} dia={dia} onAbrir={() => setDiaSeleccionado(dia.fecha)} />)
+            ) : (
+              <>
+                <div style={{
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 6,
+                  padding: '6px 8px',
+                  background: 'var(--bg-inset)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 7,
+                  flexWrap: 'wrap',
+                }}>
+                  {loteActual && (
+                    <button
+                      type="button"
+                      onClick={() => setLoteSeleccionado(null)}
+                      style={botonVolverStyle}
+                    >
+                      {`← Volver al día ${formatearFechaDiaPunto(diaResumen.fecha)}`}
+                    </button>
+                  )}
+                  {!loteActual && (
+                    <div style={{
+                      fontFamily: 'var(--font-ui)',
+                      fontSize: 'var(--text-2xs)',
+                      color: 'var(--text-secondary)',
+                      fontWeight: 600,
+                      fontVariantNumeric: 'tabular-nums',
+                    }}>
+                      {formatearFechaDiaPunto(diaResumen.fecha)} · {textoImagenesYLotes(diaResumen.total, diaResumen.lotes)}
+                    </div>
+                  )}
+                </div>
+
+                {delDia.loading && (
+                  <div aria-busy="true" style={{ padding: 16, textAlign: 'center', fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>
+                    Cargando las imágenes del día...
+                  </div>
+                )}
+                {!delDia.loading && delDia.error && (
+                  <div style={{ padding: 'var(--space-3)', fontSize: 'var(--text-2xs)', color: 'var(--accent-red)' }}>{delDia.error}</div>
+                )}
+                {!delDia.loading && !delDia.error && delDia.truncado && (
+                  <div role="status" style={{ padding: '6px 9px', fontSize: 'var(--text-3xs)', color: 'var(--text-secondary)', background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 7 }}>
+                    Este día tiene más de 500 imágenes. Aquí se muestran las 500 más recientes.
+                  </div>
+                )}
+
+                {!delDia.loading && !delDia.error && (loteActual ? (
+                  <>
+                    <FichaDetalleLote lote={loteActual} compacta />
+                    <ListaFilas
+                      filas={loteActual.mediciones}
+                      visibles={filasVisibles}
+                      onMas={() => setFilasVisibles((n) => n + FILAS_POR_TANDA)}
+                      idPunto={idPunto}
+                    />
+                  </>
+                ) : (
+                  <>
+                    {agrupadoDia.lotes.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 4 }}>
+                        {agrupadoDia.lotes.map((lote) => (
+                          <TarjetaLote
+                            key={lote.id}
+                            lote={lote}
+                            compacta
+                            onClick={() => setLoteSeleccionado(lote.id)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                    <ListaFilas
+                      filas={sueltasDia}
+                      visibles={filasVisibles}
+                      onMas={() => setFilasVisibles((n) => n + FILAS_POR_TANDA)}
+                      idPunto={idPunto}
+                    />
+                  </>
+                ))}
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+const botonVolverStyle = {
+  padding: '3px 9px',
+  borderRadius: 6,
+  border: '1px solid var(--border-strong)',
+  background: 'var(--bg-card-solid)',
+  color: 'var(--text-primary)',
+  fontFamily: 'var(--font-ui)',
+  fontSize: 'var(--text-2xs)',
+  fontWeight: 600,
+  cursor: 'pointer',
+};
+
+// Caja de un día: fecha como título, "N imágenes · x lotes con y imágenes" debajo.
+function CajaDia({ dia, onAbrir }) {
+  const nivel = dia.peor_nivel;
+  const color = nivel == null ? 'var(--text-muted)' : nivelColor(nivel);
+  return (
+    <button
+      type="button"
+      onClick={onAbrir}
+      className="historial-fila historial-fila--link"
+      style={{ width: '100%', textAlign: 'left', borderRadius: 8, justifyContent: 'space-between', padding: '9px 11px' }}
+    >
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 'var(--text-xs)',
+          color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums',
+        }}>
+          <IconoReloj size={13} color="var(--accent-amber)" />
+          <span>{formatearFechaDiaPunto(dia.fecha)}</span>
+        </div>
+        <div style={{
+          fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)',
+          marginTop: 2, fontVariantNumeric: 'tabular-nums',
+        }}>
+          {textoImagenesYLotes(dia.total, dia.lotes)}
+        </div>
+      </div>
+
+      {nivel != null && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
+          <span style={{ ...HISTORIAL_LINEA_STYLE, color, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: color }} />
+            {nivelLabel(nivel)}
+          </span>
+          {dia.max_pct != null && (
+            <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+              Máx. {formatoPct(dia.max_pct)}
+            </span>
+          )}
+        </div>
+      )}
+    </button>
+  );
+}
+
+// Filas de fotos en tandas de FILAS_POR_TANDA con "Mostrar más".
+function ListaFilas({ filas, visibles, onMas, idPunto }) {
+  const mostradas = filas.slice(0, visibles);
+  return (
+    <>
+      {mostradas.map((m, i) => (
+        <MedicionRow key={m.id_medicion ?? i} medicion={m} idPunto={idPunto} />
+      ))}
+      {filas.length > visibles && (
+        <button type="button" onClick={onMas} style={{ ...botonVolverStyle, alignSelf: 'center', margin: '4px 0' }}>
+          Mostrar más ({filas.length - visibles} restantes)
+        </button>
+      )}
+    </>
   );
 }
 

@@ -11,7 +11,14 @@ import { useAuth } from '../auth/AuthContext';
 import { normalizar } from '../lib/textUtils';
 import { formatFecha } from '../utils/dateFormat';
 import {
-  SIN_ASIGNAR, claveEmpresa, clavePunto, carpetasDeEmpresas, carpetasDePuntos, iniciales, bloquesDeEmpresa,
+  SIN_ASIGNAR,
+  claveEmpresa,
+  clavePunto,
+  carpetasDeEmpresas,
+  carpetasDePuntos,
+  iniciales,
+  bloquesDeEmpresa,
+  formatearConteoMediciones,
 } from '../lib/galeriaCarpetas';
 import GaleriaBreadcrumb from '../components/GaleriaBreadcrumb';
 import GaleriaCarpetas from '../components/GaleriaCarpetas';
@@ -227,15 +234,17 @@ export default function GaleriaPage() {
   let subtitulo = '';
   if (nivelVista === 'busqueda') {
     titulo = 'Resultados de la búsqueda';
-    subtitulo = `${resultados.length} ${resultados.length === 1 ? 'foto' : 'fotos'}`;
+    subtitulo = formatearConteoMediciones(resultados);
   } else if (nivelVista === 'empresas') {
-    subtitulo = `${carpetasEmpresa.length} ${carpetasEmpresa.length === 1 ? 'zona' : 'zonas'}`;
+    subtitulo = `${carpetasEmpresa.length} ${carpetasEmpresa.length === 1 ? 'zona' : 'zonas'} · ${formatearConteoMediciones(mediciones)}`;
   } else if (nivelVista === 'puntos') {
     if (variasEmpresas) titulo = nombreEmpresa(empresaActual);
-    subtitulo = `${carpetasPunto.length} ${carpetasPunto.length === 1 ? 'punto' : 'puntos'} · ${deEmpresa.length} ${deEmpresa.length === 1 ? 'foto' : 'fotos'}`;
+    subtitulo = `${carpetasPunto.length} ${carpetasPunto.length === 1 ? 'punto' : 'puntos'} · ${formatearConteoMediciones(deEmpresa)}`;
   } else {
     titulo = tituloPunto;
-    subtitulo = ciudadDe(bloqueId) ?? '';
+    const ciudadTxt = ciudadDe(bloqueId);
+    const conteoTxt = formatearConteoMediciones(fotosDelPunto);
+    subtitulo = ciudadTxt ? `${ciudadTxt} · ${conteoTxt}` : conteoTxt;
   }
 
   const [toolbarRight, setToolbarRight] = useState(null);
@@ -246,14 +255,13 @@ export default function GaleriaPage() {
     key: c.id,
     to: `/galeria/zona/${c.id}`,
     titulo: nombreEmpresa(c.id),
-    subtitulo: `${c.puntos} ${c.puntos === 1 ? 'punto' : 'puntos'} · ${c.fotos} fotos`,
+    subtitulo: `${c.puntos} ${c.puntos === 1 ? 'punto' : 'puntos'} · ${c.etiquetaConteo || formatearConteoMediciones(c.mediciones)}`,
     logo: logoEmpresa(c.id),
     iniciales: iniciales(nombreEmpresa(c.id)),
     detalle: `Última medición ${formatFecha(c.ultima.timestamp)}`,
   }));
   const itemsPunto = carpetasPunto.map(c => {
     const tituloCarpeta = c.nombre || (c.ultima ? nombrePunto(c.ultima) : 'Punto');
-    const totalFotos = c.total ?? c.fotos ?? 0;
     return {
       key: c.id,
       to: `/galeria/zona/${empresaActual}/${c.id}`,
@@ -261,7 +269,7 @@ export default function GaleriaPage() {
       subtitulo: ciudadDe(c.id) ?? c.subtitulo ?? 'Sin ciudad',
       portada: portadaPunto(c.id) ?? c.preview,
       iniciales: iniciales(tituloCarpeta),
-      detalle: `${totalFotos} ${totalFotos === 1 ? 'foto' : 'fotos'}`,
+      detalle: c.etiquetaConteo || formatearConteoMediciones(c.mediciones),
       nivel: c.ultima ? (c.ultima.nivel_corrosion ?? 0) : null,
     };
   });

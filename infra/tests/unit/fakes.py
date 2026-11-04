@@ -16,7 +16,8 @@ class FakeS3:
         self.descargas = []
 
     def put_object(self, Bucket, Key, Body, ContentType=None):
-        self.objetos[(Bucket, Key)] = Body
+        # Como S3: get_object().read() siempre devuelve bytes.
+        self.objetos[(Bucket, Key)] = Body.encode("utf-8") if isinstance(Body, str) else Body
 
     def copy_object(self, Bucket, Key, CopySource):
         self.objetos[(Bucket, Key)] = self._obj(CopySource["Bucket"], CopySource["Key"])
@@ -71,6 +72,11 @@ class FakeTabla:
             raise ClientError(
                 {"Error": {"Code": "ConditionalCheckFailedException", "Message": "exists"}}, "PutItem")
         self.escritos.append(Item)
+
+    def delete_item(self, Key):
+        coincide = lambda it: all(it.get(k) == v for k, v in Key.items())  # noqa: E731
+        self.items = [it for it in self.items if not coincide(it)]
+        self.escritos = [it for it in self.escritos if not coincide(it)]
 
     def update_item(self, Key, UpdateExpression, ExpressionAttributeNames=None,
                     ExpressionAttributeValues=None, ReturnValues=None, **_):
