@@ -521,6 +521,17 @@ export default function BloquesPage() {
     }
   };
 
+  const pedirEliminar = (b) => {
+    // A point with measurements cannot be deleted (backend 409): explain instead of confirming.
+    if ((b.cantidad_mediciones ?? 0) > 0) setAvisoConMediciones({ bloque: b });
+    else setConfirmEliminar({ bloque: b });
+  };
+  const estiloEstado = (b) => ({
+    display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)',
+    padding: '2px 8px', borderRadius: 5, fontSize: 'var(--text-2xs)', fontWeight: 600,
+    background: b.activo === false ? 'rgba(220,38,38,0.08)' : 'rgba(22,163,74,0.08)',
+    color: b.activo === false ? '#dc2626' : '#16a34a',
+  });
   const thBase = { padding: '9px 14px', textAlign: 'left', fontFamily: 'var(--font-data)', fontSize: 'var(--text-3xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-faint)', borderBottom: '1px solid var(--border)' };
   // Punto, Descripción, [Afiliación], Ubicación, Mediciones, Estado, [Acciones]
   const colCount = 5 + (esSuperAdmin ? 1 : 0) + (puedeGestionar ? 1 : 0);
@@ -556,8 +567,54 @@ export default function BloquesPage() {
           <AvisoEnLinea tone="error" style={{ marginBottom: 'var(--space-3-5)' }}>{mutError}</AvisoEnLinea>
         )}
 
-        {/* Tabla */}
-        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+        {/* Tarjetas (móvil): una por punto, con las acciones rotuladas */}
+        <ul className="puntos-cards" aria-label="Puntos">
+          {loading
+            ? Array.from({ length: filasSkeleton }).map((_, i) => <li key={i} className="punto-card punto-card--cargando" aria-hidden="true" />)
+            : bloques.map(b => (
+                <li key={b.id_bloque} className="punto-card">
+                  <div className="punto-card__cabecera">
+                    <span className="punto-card__nombre">{b.nombre}</span>
+                    <span style={estiloEstado(b)}>
+                      {b.activo === false ? <IconoCerrar size={11} /> : <IconoCheck size={11} />}
+                      {b.activo === false ? 'Inactivo' : 'Activo'}
+                    </span>
+                  </div>
+                  <div className="punto-card__meta">
+                    {esSuperAdmin && <span>{empresaNombrePorId[b.empresa_id] ?? 'Sin dato'}</span>}
+                    <span>{b.ciudad ? `${b.ciudad}${b.departamento ? ` · ${b.departamento}` : ''}` : 'Sin ubicación'}</span>
+                    <span className="punto-card__conteo">{etiquetaConteoBloque(b)}</span>
+                  </div>
+                  {b.descripcion && <p className="punto-card__desc">{b.descripcion}</p>}
+                  {puedeGestionar && (
+                    <div className="punto-card__acciones" role="group" aria-label={`Acciones de ${b.nombre}`}>
+                      <button type="button" className="btn-accion btn-accion--plain btn-accion--texto"
+                        onClick={() => { setEditBloque(b); setFormError(null); }}>
+                        <IconoEditar size={15} aria-hidden="true" /> Editar
+                      </button>
+                      <button type="button" className={`btn-accion btn-accion--texto${b.activo === false ? ' btn-accion--ok' : ''}`}
+                        onClick={() => setConfirmToggle({ bloque: b, activarDespues: b.activo === false })}>
+                        <IconoActivar size={15} aria-hidden="true" /> {b.activo === false ? 'Activar' : 'Desactivar'}
+                      </button>
+                      <button type="button" className="btn-accion btn-accion--danger btn-accion--texto"
+                        onClick={() => pedirEliminar(b)}>
+                        <IconoEliminar size={15} aria-hidden="true" /> Eliminar
+                      </button>
+                    </div>
+                  )}
+                </li>
+              ))}
+          {!loading && bloques.length === 0 && (
+            <li className="punto-card punto-card--vacio">
+              {error
+                ? <ErrorEstado compacto titulo="No se pudieron cargar los puntos." detalle={error} onRetry={refetch} />
+                : 'No hay puntos registrados'}
+            </li>
+          )}
+        </ul>
+
+        {/* Tabla (escritorio) */}
+        <div className="puntos-tabla" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-ui)' }}>
               <thead>
@@ -590,12 +647,7 @@ export default function BloquesPage() {
                           {etiquetaConteoBloque(b)}
                         </td>
                         <td style={{ padding: '10px 14px' }}>
-                          <span style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)',
-                            padding: '2px 8px', borderRadius: 5, fontSize: 'var(--text-2xs)', fontWeight: 600,
-                            background: b.activo === false ? 'rgba(220,38,38,0.08)' : 'rgba(22,163,74,0.08)',
-                            color: b.activo === false ? '#dc2626' : '#16a34a',
-                          }}>
+                          <span style={estiloEstado(b)}>
                             {b.activo === false ? <IconoCerrar size={11} /> : <IconoCheck size={11} />}
                             {b.activo === false ? 'Inactivo' : 'Activo'}
                           </span>
@@ -605,28 +657,24 @@ export default function BloquesPage() {
                             <div style={{ display: 'flex', gap: 6 }}>
                               <button
                                 onClick={() => { setEditBloque(b); setFormError(null); }}
-                                title="Editar"
-                                aria-label="Editar"
+                                title={`Editar ${b.nombre}`}
+                                aria-label={`Editar ${b.nombre}`}
                                 className="btn-accion btn-accion--plain"
                               >
                                 <IconoEditar size={13} />
                               </button>
                               <button
                                 onClick={() => setConfirmToggle({ bloque: b, activarDespues: b.activo === false })}
-                                title={b.activo === false ? 'Activar' : 'Desactivar'}
-                                aria-label={b.activo === false ? 'Activar' : 'Desactivar'}
+                                title={`${b.activo === false ? 'Activar' : 'Desactivar'} ${b.nombre}`}
+                                aria-label={`${b.activo === false ? 'Activar' : 'Desactivar'} ${b.nombre}`}
                                 className={b.activo === false ? 'btn-accion btn-accion--ok' : 'btn-accion'}
                               >
                                 <IconoActivar size={13} />
                               </button>
                               <button
-                                onClick={() => {
-                                  // A point with measurements cannot be deleted (backend 409): explain instead of confirming.
-                                  if ((b.cantidad_mediciones ?? 0) > 0) setAvisoConMediciones({ bloque: b });
-                                  else setConfirmEliminar({ bloque: b });
-                                }}
-                                title="Eliminar"
-                                aria-label="Eliminar"
+                                onClick={() => pedirEliminar(b)}
+                                title={`Eliminar ${b.nombre}`}
+                                aria-label={`Eliminar ${b.nombre}`}
                                 className="btn-accion btn-accion--danger"
                               >
                                 <IconoEliminar size={13} />

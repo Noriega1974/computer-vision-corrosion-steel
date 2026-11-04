@@ -2551,3 +2551,37 @@ select option {
   outline: 2px solid var(--accent-blue);
   outline-offset: 2px;
 }
+
+/* ── Puntos: tarjetas en móvil, tabla en escritorio ── */
+.puntos-cards { display: none; list-style: none; margin: 0; padding: 0; gap: var(--space-3); flex-direction: column; }
+.punto-card {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; font-family: var(--font-ui);
+}
+.punto-card--cargando { min-height: 96px; }
+.punto-card--vacio { align-items: center; color: var(--text-muted); font-size: var(--text-sm); padding: var(--space-5); }
+.punto-card__cabecera { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.punto-card__nombre {
+  font-weight: 700; font-size: var(--text-md); color: var(--text-primary);
+  min-width: 0; overflow-wrap: anywhere;
+}
+.punto-card__meta {
+  display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: var(--text-sm); color: var(--text-secondary);
+}
+.punto-card__conteo { font-variant-numeric: tabular-nums; }
+.punto-card__desc { margin: 0; font-size: var(--text-sm); color: var(--text-muted); overflow-wrap: anywhere; }
+.punto-card__acciones {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
+  padding-top: 10px; border-top: 1px solid var(--border);
+}
+.btn-accion--texto {
+  min-height: 44px; padding: 0 8px; align-items: center; justify-content: center; gap: 6px;
+  font-family: var(--font-ui); font-size: var(--text-sm); font-weight: 600; white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .puntos-cards { display: flex; }
+  .puntos-tabla { display: none; }
+}
+@media (max-width: 400px) {
+  .punto-card__acciones { grid-template-columns: 1fr; }
+}
