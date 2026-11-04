@@ -172,6 +172,7 @@ def test_lote_eliminar_resultado_parcial(h):
 
 def test_eliminar_individual_permite_tecnico(h, monkeypatch):
     _rol(h, monkeypatch, "tecnico")
+    next(i for i in h.tabla.items if i["id_medicion"] == "MED-1")["tomado_por_id"] = "s"   # la tomó él
     ev = {"httpMethod": "DELETE", "pathParameters": {"id_punto": "BLQ-1"},
           "queryStringParameters": {"id_medicion": "MED-1"},
           "requestContext": {"authorizer": {"claims": {"sub": "s"}}}}
@@ -266,6 +267,7 @@ def test_mover_admin_no_puede_a_otra_empresa(h):
 
 def test_mover_tecnico_propio_ok(h, monkeypatch):
     _rol(h, monkeypatch, "tecnico")
+    next(i for i in h.tabla.items if i["id_medicion"] == "MED-1")["usuario_id"] = "s"   # la tomó él
     assert _cuerpo(h.lambda_handler(_post("mover", [_it(1)], destino_bloque_id="BLQ-2"), None))["ok"] == ["MED-1"]
 
 

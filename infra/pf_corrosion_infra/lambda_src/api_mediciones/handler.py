@@ -24,7 +24,8 @@ Rutas:
                                       ?desde=YYYY-MM-DD&hasta=YYYY-MM-DD acota por día local (UTC-5)
                                       sobre el GSI; con rango el límite por defecto es 1000 y la
                                       respuesta trae `truncado`. `limit`/`limite` (ambos nombres valen) no numérico → 400
-  DELETE /mediciones/{id_punto}    → elimina una medición puntual (super_admin/admin/tecnico)
+  DELETE /mediciones/{id_punto}    → elimina una medición puntual (super_admin/admin/tecnico;
+                                      el tecnico solo las que él mismo tomó)
                                       requiere querystring ?id_medicion=MED-...
   POST   /mediciones/lote/eliminar → elimina varias (máx. 100), body {"items":[{id_punto,id_medicion}]}
   POST   /mediciones/lote/mover    → mueve varias a otro punto, body {"items":[...],"destino_bloque_id"}
@@ -239,6 +240,32 @@ def _item_permitido(usuario: dict, item: dict) -> bool:
         return True
     empresa = usuario.get("empresa_id")
     return bool(empresa) and item.get("empresa_id") == empresa
+
+
+def _sub(event: dict) -> str:
+    return _claims(event).get("sub", "") or ""
+
+
+def _es_del_usuario(item: dict, sub: str) -> bool:
+    """La medición la tomó `sub` (inference guarda el `sub` de Cognito en
+    `tomado_por_id` y `usuario_id`)."""
+    return bool(sub) and sub in (item.get("tomado_por_id"), item.get("usuario_id"))
+
+
+def _ajenas_para_tecnico(creador: dict, sub: str, items: list) -> list:
+    """Regla del técnico: solo mueve/elimina lo que él mismo tomó. Para los
+    demás roles devuelve []."""
+    if creador.get("rol") != "tecnico":
+        return []
+    return [i for i in items if not _es_del_usuario(i, sub)]
+
+
+def _rechazo_ajenas(n: int, accion: str) -> dict:
+    if n == 1:
+        msg = f"Solo puedes {accion} las mediciones que tomaste tú. Quita la medición ajena e inténtalo de nuevo"
+    else:
+        msg = f"Solo puedes {accion} las mediciones que tomaste tú. {n} de la selección son de otra persona; quítalas e inténtalo de nuevo"
+    return _respuesta(403, {"error": msg, "cantidad_ajenas": n})
 
 
 # Light attributes read when ?resumen=1. Reading the full item and dropping
@@ -493,6 +520,8 @@ def _eliminar_medicion(event: dict, id_punto: str) -> dict:
     item = next((i for i in _mediciones_de_punto(id_punto) if i.get("id_medicion") == id_medicion), None)
     if not item or not _item_permitido(creador, item):
         return _respuesta(404, {"error": "No se encontró la medición. Actualiza la lista e inténtalo de nuevo"})
+    if _ajenas_para_tecnico(creador, _sub(event), [item]):
+        return _rechazo_ajenas(1, "eliminar")
 
     huerfanas = _borrar_medicion(item)
     cuerpo = {"ok": True, "id_medicion": id_medicion}
@@ -555,6 +584,9 @@ def _lote_eliminar(event: dict) -> dict:
         return _respuesta(400, {"error": str(e)})
 
     encontrados, errores = _resolver_lote(creador, pedidos)
+    ajenas = _ajenas_para_tecnico(creador, _sub(event), encontrados)
+    if ajenas:
+        return _rechazo_ajenas(len(ajenas), "eliminar")
     ok, advertencias = [], []
     for item in encontrados:
         try:
@@ -666,6 +698,9 @@ def _lote_mover(event: dict) -> dict:
         return _respuesta(400, {"error": "El punto de destino está inactivo. Actívalo o elige otro punto"})
 
     encontrados, errores = _resolver_lote(creador, pedidos)
+    ajenas = _ajenas_para_tecnico(creador, _sub(event), encontrados)
+    if ajenas:
+        return _rechazo_ajenas(len(ajenas), "mover")
     ok = []
     for item in encontrados:
         if item["id_punto"] == destino:
