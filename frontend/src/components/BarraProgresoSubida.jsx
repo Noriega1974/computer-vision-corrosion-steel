@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { IconoCheck, IconoCerrar, IconoSubir } from './Iconos';
 import { useUploadManager } from '../hooks/UploadManagerContext';
@@ -17,9 +17,13 @@ const btnBase = {
 // Progress of the background batch upload. Shown on Nueva medición and at the
 // top of the dashboard while a batch runs, and after it ends until closed.
 // `enlaceNuevaMedicion` adds a link back to the upload page (dashboard only).
-export default function BarraProgresoSubida({ enlaceNuevaMedicion = false, style }) {
-  const { iniciado, running, deteniendo, sesion, progreso, avisoCerrado, reanudar, detener, cerrarAviso } = useUploadManager();
+// `onDescartar` replaces the default discard (limpiar) when the page keeps extra state.
+export default function BarraProgresoSubida({ enlaceNuevaMedicion = false, onDescartar, style }) {
+  const { iniciado, running, deteniendo, sesion, progreso, avisoCerrado, reanudar, detener, cerrarAviso, limpiar } = useUploadManager();
   const [confirmando, setConfirmando] = useState(false);
+  const [descartando, setDescartando] = useState(false);
+  // The stop dialog only makes sense while running; drop it when the run ends on its own.
+  useEffect(() => { if (!running) setConfirmando(false); }, [running]);
   if (!iniciado || avisoCerrado) return null;
 
   const { total, completadas, fallidas, inciertas, detenidas, reanudables, porcentaje } = progreso;
@@ -62,7 +66,7 @@ export default function BarraProgresoSubida({ enlaceNuevaMedicion = false, style
             {sesion?.bloqueNombre && <> · {sesion.bloqueNombre}</>}
           </div>
         </div>
-        {(enlaceNuevaMedicion || running || (!running && reanudables > 0)) && (
+        {(enlaceNuevaMedicion || running || (!running && reanudables > 0) || detenida) && (
           <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
             {running && (
               <button
@@ -87,6 +91,16 @@ export default function BarraProgresoSubida({ enlaceNuevaMedicion = false, style
                   : (reanudables === 1 ? 'Reanudar la imagen faltante' : `Reanudar las ${reanudables} faltantes`)}
               </button>
             )}
+            {detenida && (
+              <button
+                type="button"
+                className="subida-accion"
+                onClick={() => setDescartando(true)}
+                style={{ ...btnBase, background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-primary)' }}
+              >
+                Descartar pendientes
+              </button>
+            )}
             {enlaceNuevaMedicion && (
               <Link
                 to="/upload"
@@ -102,16 +116,6 @@ export default function BarraProgresoSubida({ enlaceNuevaMedicion = false, style
               </Link>
             )}
           </div>
-        )}
-        {!running && detenida && (
-          <button
-            type="button"
-            className="subida-accion"
-            onClick={cerrarAviso}
-            style={{ ...btnBase, background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-primary)' }}
-          >
-            Cerrar
-          </button>
         )}
         {!running && !detenida && (
           <button
@@ -167,6 +171,18 @@ export default function BarraProgresoSubida({ enlaceNuevaMedicion = false, style
           tone="danger"
           onConfirm={() => { setConfirmando(false); detener(); }}
           onCancel={() => setConfirmando(false)}
+        />
+      )}
+
+      {descartando && !running && (
+        <ConfirmDialog
+          title="Descartar las fotos pendientes"
+          message={`Las ${detenidas === 1 ? 'foto pendiente no se subirá' : `${detenidas} fotos pendientes no se subirán`}. Las fotos ya analizadas se conservan en la galería.`}
+          confirmLabel="Descartar"
+          cancelLabel="Volver"
+          tone="danger"
+          onConfirm={() => { setDescartando(false); (onDescartar ?? limpiar)(); }}
+          onCancel={() => setDescartando(false)}
         />
       )}
 

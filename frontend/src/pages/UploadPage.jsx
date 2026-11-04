@@ -457,7 +457,7 @@ export default function UploadPage() {
 
             {modoLote ? (
               <>
-                {lote.iniciado && <BarraProgresoSubida style={{ marginBottom: 'var(--space-3)' }} />}
+                {lote.iniciado && <BarraProgresoSubida onDescartar={reiniciarLote} style={{ marginBottom: 'var(--space-3)' }} />}
                 <UploadCola
                   lote={lote}
                   onQuitar={quitarDeLote}

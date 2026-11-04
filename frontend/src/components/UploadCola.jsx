@@ -170,7 +170,7 @@ export default function UploadCola({ lote, onQuitar, onQuitarVarias, onReintenta
 
   return (
     <div>
-      {/* A stopped batch reports through the progress card (Reanudar pendientes / Cerrar). */}
+      {/* A stopped batch reports through the progress card (Reanudar pendientes / Descartar pendientes). */}
       {terminado && detenidas === 0 && (
         <div style={{
           marginBottom: 'var(--space-3)', padding: '14px 16px', background: 'var(--bg-inset)',

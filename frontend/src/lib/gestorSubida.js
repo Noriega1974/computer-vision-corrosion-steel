@@ -105,6 +105,7 @@ export function calcularProgresoSubida(items, { running = false } = {}) {
   return { total, completadas, fallidas, inciertas, pendientes, detenidas, reanudables, porcentaje, estadoGlobal };
 }
 
+const SONDEO_DETENER_MS = 50;
 const esperarPorDefecto = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Runs `tarea(item)` over `items` with at most `concurrencia` in flight.
@@ -166,7 +167,7 @@ export async function ejecutarColaConcurrencia({
           if (detenerPedido() && err?.fase !== FASE_MEDICION) { marcarDetenida(item, idx, intento); return; }
           onItemUpdate?.(item.id, { reintentando: true, intentos: intento });
           const ms = demoraBaseMs * 2 ** (intento - 1);
-          if (ms > 0) await esperar(ms);
+          if (ms > 0) await esperarSalvoDetener(ms);
           if (cancelado()) return;
           if (detenerPedido() && err?.fase !== FASE_MEDICION) { marcarDetenida(item, idx, intento); return; }
           continue;
@@ -185,6 +186,17 @@ export async function ejecutarColaConcurrencia({
         return;
       }
     }
+  }
+
+  // Backoff wait that ends early when the user asks to stop, so "Deteniendo…" resolves
+  // at once instead of after the longest retry delay.
+  function esperarSalvoDetener(ms) {
+    if (detenerPedido()) return Promise.resolve();
+    return new Promise((resolver) => {
+      const sondeo = setInterval(() => { if (detenerPedido()) fin(); }, SONDEO_DETENER_MS);
+      function fin() { clearInterval(sondeo); resolver(); }
+      esperar(ms).then(fin, fin);
+    });
   }
 
   async function trabajador() {

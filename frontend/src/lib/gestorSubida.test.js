@@ -417,6 +417,25 @@ describe('gestorSubida: Detener', () => {
     assert.equal(parches.at(-1).estado, 'detenida');
   });
 
+  it('cuts the backoff wait short when the stop is requested', async () => {
+    let parar = false;
+    let llamadas = 0;
+    const parches = [];
+    setTimeout(() => { parar = true; }, 30);
+    const inicio = Date.now();
+    await ejecutarColaConcurrencia({
+      items: filas(1),
+      demoraBaseMs: 60000,
+      esperar: () => new Promise(() => {}), // never resolves on its own
+      detenerPedido: () => parar,
+      tarea: async () => { llamadas += 1; throw errorHttp(503, FASE_PREVIA); },
+      onItemUpdate: (id, c) => parches.push(c),
+    });
+    assert.ok(Date.now() - inicio < 2000);
+    assert.equal(llamadas, 1);
+    assert.equal(parches.at(-1).estado, 'detenida');
+  });
+
   it('lets an item already analyzing finish and retry its analysis after a stop', async () => {
     let llamadas = 0;
     let parar = false;
