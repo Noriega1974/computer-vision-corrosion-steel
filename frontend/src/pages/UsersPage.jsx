@@ -8,7 +8,7 @@ import { puedeGestionar } from '../lib/permisosUsuarios';
 import { useAuth } from '../auth/AuthContext';
 import { IconoActualizar, IconoAgregar, IconoCerrar, IconoCheck, IconoCopiar, IconoDesactivarUsuario, IconoEditar, IconoEliminar, IconoEmpresa, IconoError, IconoExito, IconoFlechaAbajo, IconoFlechaArriba, IconoReloj } from '../components/Iconos';
 import { formatFecha } from '../utils/dateFormat';
-import { SkeletonLinea } from '../components/Skeleton';
+import Skeleton, { SkeletonLinea } from '../components/Skeleton';
 import { useConteoRecordado } from '../hooks/useConteoRecordado';
 import ConfirmDialog from '../components/ConfirmDialog';
 import FormModal from '../components/FormModal';
@@ -439,7 +439,10 @@ export default function UsersPage() {
   // Perfil propio: única forma de conocer el empresa_id del usuario logueado
   // en el frontend (no viaja en el JWT/user de useAuth) — se usa solo para
   // el filtro cliente-side de abajo, defensa en profundidad.
-  const { perfil: miPerfil } = useUsuarioPerfil();
+  const { perfil: miPerfil, loading: perfilCargando } = useUsuarioPerfil();
+  // Sin el perfil no se conoce el alcance (empresa_id) de un admin: mientras
+  // carga, las acciones se muestran como placeholder en vez de desaparecer.
+  const accionesPendientes = perfilCargando && !miPerfil && !esSuperAdmin;
 
   // Nombre de afiliación por usuario en la tabla. super_admin resuelve
   // contra la lista completa que ya trae `empresas`; admin ve solo usuarios
@@ -738,8 +741,14 @@ export default function UsersPage() {
                             </span>
                           </td>
                           {isAdmin && (
-                            <td style={{ padding: '10px 14px' }}>
-                              {gestionable && (<div style={{ display: 'flex', gap: 6 }}>
+                            <td style={{ padding: '10px 14px' }} aria-busy={accionesPendientes || undefined}>
+                              {accionesPendientes && (
+                                <div aria-hidden="true" style={{ display: 'flex', gap: 6 }}>
+                                  <Skeleton width={28} height={28} />
+                                  <Skeleton width={28} height={28} />
+                                </div>
+                              )}
+                              {!accionesPendientes && gestionable && (<div style={{ display: 'flex', gap: 6 }}>
                                 {/* Editar */}
                                 <button
                                   onClick={() => { setEditUsuario(u); setFormError(null); }}

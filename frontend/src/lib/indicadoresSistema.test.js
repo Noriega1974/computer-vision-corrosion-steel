@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   leyendaNiveles, segmentosBarra, resumenNiveles, textoSinMediciones, textoPromedio,
-  textoCobertura, textoAtrasado, textoMediciones30d, textoSubio, fechaCorta, sinPuntos,
+  textoCobertura, textoAtrasado, textoMediciones30d, textoSubio, fechaCorta, sinPuntos, esParcial,
 } from './indicadoresSistema.js';
 
 const AHORA = { ahora: new Date(2026, 10, 4) };
@@ -60,4 +60,12 @@ test('sin puntos en el alcance no hay resumen', () => {
   assert.equal(sinPuntos(null), true);
   assert.equal(sinPuntos({ total_puntos: 0 }), true);
   assert.equal(sinPuntos({ total_puntos: 2 }), false);
+});
+
+test('esParcial avisa cuando el servidor marcó parcial o conteo truncado, y tolera datos ausentes', () => {
+  assert.equal(esParcial({ parcial: true }), true);
+  assert.equal(esParcial({ mediciones_30d_truncado: true }), true);
+  assert.equal(esParcial({ parcial: false, mediciones_30d_truncado: false }), false);
+  assert.equal(esParcial({}), false);
+  assert.equal(esParcial(null), false);
 });

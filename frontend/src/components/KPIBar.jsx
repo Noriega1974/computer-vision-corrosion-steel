@@ -14,6 +14,7 @@ import {
   textoSubio,
   fechaCorta,
   sinPuntos,
+  esParcial,
 } from '../lib/indicadoresSistema';
 
 const estiloValor = {
@@ -76,8 +77,9 @@ function BarraNiveles({ porNivel }) {
   );
 }
 
-function ListaSubieron({ puntos, cantidad, id }) {
-  const restantes = cantidad - puntos.length;
+function ListaSubieron({ puntos: puntosProp, cantidad, id }) {
+  const puntos = puntosProp ?? [];
+  const restantes = (cantidad ?? 0) - puntos.length;
   return (
     <ul
       id={id}
@@ -206,6 +208,11 @@ export default function KPIBar({ empresaId = null }) {
           <div style={{ ...estiloSub, marginTop: 'var(--space-2)' }} aria-busy={cargando || undefined}>
             {cargando ? <Skeleton width="30%" height={10} /> : textoMediciones30d(datos?.mediciones_30d)}
           </div>
+          {!cargando && esParcial(datos) && (
+            <div role="note" style={{ ...estiloSub, marginTop: 'var(--space-1)', color: 'var(--text-muted)' }}>
+              Datos parciales: algunos puntos tienen demasiadas mediciones y las cifras pueden estar incompletas.
+            </div>
+          )}
         </>
       )}
     </div>

@@ -91,3 +91,9 @@ export function fechaCorta(iso, opciones) {
 export function sinPuntos(datos) {
   return !datos || !(datos.total_puntos > 0);
 }
+
+// El servidor marca `parcial` (o `mediciones_30d_truncado`) cuando un tope de
+// paginación cortó el cálculo: las cifras pueden estar incompletas.
+export function esParcial(datos) {
+  return Boolean(datos && (datos.parcial || datos.mediciones_30d_truncado));
+}
