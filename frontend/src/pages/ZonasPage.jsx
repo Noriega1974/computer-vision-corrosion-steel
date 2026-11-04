@@ -1,7 +1,7 @@
-import Aviso from '../components/Aviso';
+import Aviso, { AvisoEnLinea } from '../components/Aviso';
 import ErrorEstado from '../components/ErrorEstado';
 import React, { useState } from 'react';
-import { IconoActivar, IconoAgregar, IconoCerrar, IconoCheck, IconoEditar, IconoError, IconoFlechaAbajo, IconoUbicacion } from '../components/Iconos';
+import { IconoActivar, IconoAgregar, IconoCerrar, IconoCheck, IconoEditar, IconoFlechaAbajo, IconoUbicacion } from '../components/Iconos';
 import { useGestionEmpresas } from '../hooks/useEmpresas';
 import ZonaMapPicker from '../components/ZonaMapPicker';
 import ImagenUploader from '../components/ImagenUploader';
@@ -285,9 +285,7 @@ function ZonaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
         </div>
 
         {geoError && (
-          <div style={{ marginTop: 'var(--space-2)', padding: '8px 12px', background: 'rgba(220,38,38,0.05)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, fontSize: 'var(--text-2xs)', color: '#dc2626', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <IconoError size={12} /> {geoError}
-          </div>
+          <AvisoEnLinea tone="error" style={{ marginTop: 'var(--space-2)' }}>{geoError}</AvisoEnLinea>
         )}
       </div>
 
@@ -307,9 +305,7 @@ function ZonaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
       </div>
 
       {(validationError || error) && (
-        <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, color: '#dc2626', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3-5)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <IconoError size={13} /> {validationError || error}
-        </div>
+        <AvisoEnLinea tone="error" style={{ marginBottom: 'var(--space-3-5)' }}>{validationError || error}</AvisoEnLinea>
       )}
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <button type="submit" disabled={saving} style={{
@@ -421,9 +417,7 @@ export default function ZonasPage() {
         </p>
 
         {mutError && (
-          <div style={{ padding: '8px 14px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 8, color: '#dc2626', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3-5)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <IconoError size={13} /> {mutError}
-          </div>
+          <AvisoEnLinea tone="error" style={{ marginBottom: 'var(--space-3-5)' }}>{mutError}</AvisoEnLinea>
         )}
 
         <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>

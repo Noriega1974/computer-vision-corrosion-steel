@@ -268,15 +268,6 @@ export function IconoActualizar(props) {
   );
 }
 
-export function IconoDeshacer(props) {
-  return (
-    <Base {...props}>
-      <path d="M7.87 5.39A7.8 7.8 0 1 1 4.67 14.67"/>
-      <path d="M11.96 6.33L7.87 5.39L8.81 1.29"/>
-    </Base>
-  );
-}
-
 export function IconoActivar(props) {
   return (
     <Base {...props}>
@@ -325,29 +316,11 @@ export function IconoEnfocar(props) {
   );
 }
 
-export function IconoDespejar(props) {
-  return (
-    <Base {...props}>
-      <g transform="rotate(-40 11 10)"><rect x="3.5" y="5.5" width="15" height="9" rx="2.2"/><path d="M10 5.5v9"/></g>
-      <path d="M11 20.5h9.5"/>
-    </Base>
-  );
-}
-
 export function IconoReproducir(props) {
   return (
     <Base {...props}>
       <circle cx="12" cy="12" r="9"/>
       <path d="m10.2 8.6 5.4 3.4-5.4 3.4z"/>
-    </Base>
-  );
-}
-
-export function IconoHerramienta(props) {
-  return (
-    <Base {...props}>
-      <path d="M20.14 7.27A4.2 4.2 0 1 1 16.73 3.86"/>
-      <path d="M13 11 5.6 18.4a1.7 1.7 0 0 0 2.4 2.4L15.4 13.4"/>
     </Base>
   );
 }
@@ -462,34 +435,11 @@ export function IconoLuna(props) {
   );
 }
 
-export function IconoMicroscopio(props) {
-  return (
-    <Base {...props}>
-      <g transform="rotate(-25 11.5 8)"><rect x="8.5" y="3" width="6" height="10" rx="1.5"/></g>
-      <path d="M17 9.5a6.5 6.5 0 0 1-5 9.5"/>
-      <path d="M6.5 20.5h11"/>
-      <path d="M7.5 16.5h4.5"/>
-    </Base>
-  );
-}
-
 export function IconoUbicacion(props) {
   return (
     <Base {...props}>
       <path d="M12 21.2s6.6-5.4 6.6-11A6.6 6.6 0 0 0 5.4 10.2c0 5.6 6.6 11 6.6 11z"/>
       <circle cx="12" cy="10" r="2.3"/>
-    </Base>
-  );
-}
-
-export function IconoPunto(props) {
-  return (
-    <Base {...props}>
-      <circle cx="12" cy="12" r="6.5"/>
-      <path d="M12 2.8v4"/>
-      <path d="M12 17.2v4"/>
-      <path d="M2.8 12h4"/>
-      <path d="M17.2 12h4"/>
     </Base>
   );
 }
@@ -552,17 +502,6 @@ export function IconoCamara(props) {
     <Base {...props}>
       <path d="M3.5 8.8a2 2 0 0 1 2-2h2l1.5-2.6h6l1.5 2.6h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>
       <circle cx="12" cy="13.2" r="3.6"/>
-    </Base>
-  );
-}
-
-export function IconoLista(props) {
-  return (
-    <Base {...props}>
-      <path d="M8.5 5H7a2 2 0 0 0-2 2v12.5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1.5"/>
-      <rect x="8.5" y="3" width="7" height="4" rx="1.5"/>
-      <path d="M9 12.5h6"/>
-      <path d="M9 16.5h4"/>
     </Base>
   );
 }

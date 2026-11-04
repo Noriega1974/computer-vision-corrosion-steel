@@ -1,3 +1,4 @@
+import { AvisoEnLinea } from '../components/Aviso';
 import React, { useState, useEffect, useRef } from 'react';
 import { updatePassword } from 'aws-amplify/auth';
 import {
@@ -8,7 +9,6 @@ import {
   IconoCandado,
   IconoCerrar,
   IconoCheck,
-  IconoError,
   IconoModeloIA,
   IconoSeguridad,
   IconoUsuario,
@@ -810,14 +810,10 @@ export default function ConfiguracionPage() {
                 </div>
 
                 {infoMsg && (
-                  <div style={{ padding: '8px 12px', background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.25)', borderRadius: 7, color: '#16a34a', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <IconoCheck size={13} /> {infoMsg}
-                  </div>
+                  <AvisoEnLinea tone="exito" style={{ marginBottom: 'var(--space-3)' }}>{infoMsg}</AvisoEnLinea>
                 )}
                 {(infoError || saveError) && (
-                  <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, color: '#dc2626', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <IconoError size={13} /> {infoError || saveError}
-                  </div>
+                  <AvisoEnLinea tone="error" style={{ marginBottom: 'var(--space-3)' }}>{infoError || saveError}</AvisoEnLinea>
                 )}
                 <button onClick={handleSaveInfo} disabled={saving} style={{
                   padding: '8px 20px', background: 'var(--accent-amber)', border: 'none',
@@ -918,14 +914,10 @@ export default function ConfiguracionPage() {
             </Field>
 
             {pwMsg && (
-              <div style={{ padding: '8px 12px', background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.25)', borderRadius: 7, color: '#16a34a', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <IconoCheck size={13} /> {pwMsg}
-              </div>
+              <AvisoEnLinea tone="exito" style={{ marginBottom: 'var(--space-3)' }}>{pwMsg}</AvisoEnLinea>
             )}
             {pwError && (
-              <div style={{ padding: '8px 12px', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 7, color: '#dc2626', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <IconoError size={13} /> {pwError}
-              </div>
+              <AvisoEnLinea tone="error" style={{ marginBottom: 'var(--space-3)' }}>{pwError}</AvisoEnLinea>
             )}
             <button onClick={handleChangePassword} disabled={pwBloqueado} style={{
               padding: '8px 20px', background: 'var(--accent-amber)', border: 'none',

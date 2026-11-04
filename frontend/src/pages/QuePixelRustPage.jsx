@@ -50,6 +50,7 @@ const ROLES = [
       'Crear cuentas de cualquier nivel, incluido otro superadministrador.',
       'Crear, editar, desactivar y eliminar puntos de cualquier zona.',
       'Registrar, mover, renombrar y eliminar mediciones.',
+      'Usar Reintentar análisis en una medición (solo superadministradores).',
     ],
     noPuede: [
       'No tiene restricciones de alcance dentro de la aplicación.',
@@ -60,13 +61,14 @@ const ROLES = [
     puede: [
       'Ver los datos de su afiliación.',
       'Crear cuentas de técnico y de cliente, y colaboradores temporales.',
-      'Ver la lista de usuarios de su afiliación, editarlos, desactivarlos o eliminarlos.',
+      'Ver la lista de usuarios de su afiliación y editar, desactivar o eliminar a sus técnicos y clientes.',
       'Crear, editar, desactivar y eliminar puntos de su afiliación.',
       'Registrar, mover, renombrar y eliminar mediciones.',
     ],
     noPuede: [
-      'Crear administradores ni superadministradores.',
+      'Crear, editar ni eliminar a otros administradores o superadministradores.',
       'Crear o editar zonas.',
+      'Usar Reintentar análisis.',
       'Ver datos de otras afiliaciones.',
     ],
   },
