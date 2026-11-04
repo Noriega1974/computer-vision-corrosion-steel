@@ -87,12 +87,17 @@ export default function DashboardPage() {
   useEffect(() => {
     const idPunto = searchParams.get('punto');
     if (!idPunto || idPunto === puntoUrlAplicadoRef.current || puntos.length === 0) return;
+    // The user already picked a point by hand: the link must not override that choice.
+    if (selectedPunto && selectedPunto.id_bloque !== seleccionPorUrlRef.current) {
+      puntoUrlAplicadoRef.current = idPunto;
+      return;
+    }
     const match = puntos.find(p => p.id_bloque === idPunto);
     if (!match) return;
     puntoUrlAplicadoRef.current = idPunto;
     seleccionPorUrlRef.current = match.id_bloque;
     setSelectedPunto(match);
-  }, [searchParams, puntos]);
+  }, [searchParams, puntos, selectedPunto]);
 
 
   // On narrow screens the detail sits far below the list and the map: bring it into
