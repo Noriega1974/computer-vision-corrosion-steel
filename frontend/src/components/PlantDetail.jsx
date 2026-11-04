@@ -10,6 +10,7 @@ import Skeleton, { SkeletonLinea } from './Skeleton';
 import { useConteoRecordado } from '../hooks/useConteoRecordado';
 import { formatoPct, etiquetaBase } from '../lib/textUtils';
 import { agruparPorLote } from '../lib/galeriaCarpetas';
+import { anioColombia } from '../lib/fechas';
 import { aniosDesde, textoMedicionesConLotes, textoMedicionesDia } from '../lib/resumenDiario';
 import { formatearFechaDiaPunto } from '../lib/historialPunto';
 import TarjetaLote, { FichaDetalleLote } from './TarjetaLote';
@@ -36,7 +37,7 @@ export default function PlantDetail({ punto }) {
   const idPunto = punto?.id_bloque;
   // Solo la última medición (nivel, clima, área); el historial sale del resumen.
   const { mediciones: ultimas, loading: cargandoUltima, error: errorUltima } = useMedicionesPunto(idPunto, { limite: 1 });
-  const anios = useMemo(() => aniosDesde(new Date().getFullYear()), []);
+  const anios = useMemo(() => aniosDesde(anioColombia()), []);
   const resumen = useResumenDiario({ anios, idPunto, habilitado: Boolean(idPunto) });
   // El resumen diario (conteos e historial) y la última medición (área, clima) se
   // cargan y fallan por separado: un fallo no reemplaza el contenido del otro.

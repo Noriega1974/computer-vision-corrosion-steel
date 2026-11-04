@@ -24,7 +24,7 @@ import { useEmpresas } from '../hooks/useEmpresas';
 import { useAuth } from '../auth/AuthContext';
 import { NIVELES, nivelColor, nivelLabel, nivelBg } from '../lib/statusUtils';
 import { formatoPct, etiquetaBase } from '../lib/textUtils';
-import { hoyLocalISO, fechaUltimaMedicionISO } from '../lib/fechas';
+import { hoyColombiaISO, fechaUltimaMedicionISO, anioColombia } from '../lib/fechas';
 import { formatFecha } from '../utils/dateFormat';
 import { tiempoRelativo } from '../lib/tiempoRelativo';
 import {
@@ -493,7 +493,7 @@ export default function LineaTiempoMediciones() {
   const [busqueda, setBusqueda] = useState('');
   const [limiteEventos, setLimiteEventos] = useState(EVENTOS_POR_PAGINA);
   const [anioBarra, setAnioBarra] = useState(() =>
-    Math.max(ANIO_MINIMO_LINEA_TIEMPO, new Date().getFullYear()),
+    Math.max(ANIO_MINIMO_LINEA_TIEMPO, anioColombia()),
   );
 
   const nombreEmpresa = (id) => empresas.find((e) => e.id_empresa === id)?.nombre || 'Zona';
@@ -762,7 +762,7 @@ export default function LineaTiempoMediciones() {
               setFechaFin(fin);
               setLimiteEventos(EVENTOS_POR_PAGINA);
             }}
-            maxISO={hoyLocalISO()}
+            maxISO={hoyColombiaISO()}
             inspecciones={medicionesRecientes}
             mesInicial={fechaUltimaMedicionISO(medicionesRecientes)}
             ctaLabel="Filtrar línea de tiempo"

@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   filtrarMedicionesLineaTiempo,
+  agruparPorDia,
   agruparEventosPorDia,
   etiquetarDiaLineaTiempo,
   ANIO_MINIMO_LINEA_TIEMPO,
@@ -319,5 +320,45 @@ describe('urlMedicionesRango', () => {
   it('arma la consulta con límite, resumen y solo los extremos presentes', () => {
     assert.equal(urlMedicionesRango('2026-03-05', '2026-03-06'), '/mediciones/recientes?limit=1000&resumen=1&desde=2026-03-05&hasta=2026-03-06');
     assert.equal(urlMedicionesRango('', '2026-03-06', 50), '/mediciones/recientes?limit=50&resumen=1&hasta=2026-03-06');
+  });
+});
+
+describe('lineaTiempo.js — día colombiano (UTC-5) alineado con el servidor', () => {
+  it('agruparPorDia corta el día a las 05:00Z y ordena de más reciente a más antiguo', () => {
+    const meds = [
+      { id: 'a', timestamp: '2026-10-27T04:59:59Z' },
+      { id: 'b', timestamp: '2026-10-27T05:00:00Z' },
+      { id: 'c', timestamp: '2026-10-27T20:00:00Z' },
+      { id: 'd' },
+    ];
+    const dias = agruparPorDia(meds);
+    assert.deepEqual(dias.map(([dia]) => dia), ['2026-10-27', '2026-10-26', 'sin-fecha']);
+    assert.deepEqual(dias[0][1].map((m) => m.id), ['c', 'b']);
+    assert.deepEqual(dias[1][1].map((m) => m.id), ['a']);
+  });
+
+  it('agruparPorDia acepta otra clave de día', () => {
+    const dias = agruparPorDia([{ timestamp: '2026-10-27T10:00:00Z', k: 'x' }], (m) => m.k);
+    assert.equal(dias[0][0], 'x');
+  });
+
+  it('el filtro por rango compara días colombianos, no la zona del dispositivo', () => {
+    const meds = [
+      { id: 'a', timestamp: '2026-10-27T04:59:59Z' },
+      { id: 'b', timestamp: '2026-10-27T05:00:00Z' },
+    ];
+    const r = filtrarMedicionesLineaTiempo(meds, { fechaInicio: '2026-10-27', fechaFin: '2026-10-27' });
+    assert.deepEqual(r.map((m) => m.id), ['b']);
+  });
+
+  it('la barra anual asigna cada foto al día colombiano', () => {
+    const barra = construirBarraAnual([
+      { timestamp: '2026-10-27T04:59:59Z', nivel_corrosion: 1 },
+      { timestamp: '2027-01-01T04:00:00Z', nivel_corrosion: 1 },
+    ], 2026);
+    const dia = (iso) => barra.dias.find((d) => d.fechaISO === iso);
+    assert.equal(dia('2026-10-26').totalFotos, 1);
+    assert.equal(dia('2026-10-27').totalFotos, 0);
+    assert.equal(dia('2026-12-31').totalFotos, 1);
   });
 });

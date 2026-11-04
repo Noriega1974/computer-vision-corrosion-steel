@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useResumenDiario } from '../hooks/useResumenDiario';
+import { anioColombia } from '../lib/fechas';
 import { aniosDesde } from '../lib/resumenDiario';
 import { puntosTendencia, textoPromedioDia, textoDetalleDia, pctTexto } from '../lib/tendenciaDiaria';
 import { nivelColor, nivelLabel } from '../lib/statusUtils';
@@ -27,7 +28,7 @@ function PuntoDia({ cx, cy, payload }) {
 // las fotos del día), así escala a miles de mediciones. Sin punto muestra un aviso.
 export default function TendenciaPunto({ punto }) {
   const idPunto = punto?.id_bloque;
-  const anios = useMemo(() => aniosDesde(new Date().getFullYear()), []);
+  const anios = useMemo(() => aniosDesde(anioColombia()), []);
   const resumen = useResumenDiario({ anios, idPunto, habilitado: Boolean(idPunto) });
   const loading = resumen.loading;
   // Lectura del punto bajo el cursor; va en una línea fija sobre la gráfica

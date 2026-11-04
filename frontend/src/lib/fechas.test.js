@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   DIAS_SEMANA_CORTOS,
   hoyLocalISO,
+  diaColombiaISO,
+  hoyColombiaISO,
   esFechaISOValida,
   esFechaFutura,
   inicioDiaLocal,
@@ -44,6 +46,21 @@ describe('fechas.js — utilidades de calendario y validación local', () => {
     assert.equal(hoyLocalISO(nocheLocal), '2026-11-02');
     // Mismo instante expresado en UTC
     assert.equal(hoyLocalISO(new Date('2026-11-03T02:30:00Z')), '2026-11-02');
+  });
+
+  it('diaColombiaISO usa UTC-5 fijo con los mismos vectores que el backend (_dia_local)', () => {
+    assert.equal(diaColombiaISO('2026-10-27T04:59:59Z'), '2026-10-26');
+    assert.equal(diaColombiaISO('2026-10-27T05:00:00Z'), '2026-10-27');
+    assert.equal(diaColombiaISO('2026-10-27T23:59:59-05:00'), '2026-10-27');
+    assert.equal(diaColombiaISO(new Date('2026-01-01T03:00:00Z')), '2025-12-31');
+    assert.equal(diaColombiaISO(Date.UTC(2026, 10, 3, 2, 30)), '2026-11-02');
+    assert.equal(diaColombiaISO('no es fecha'), '');
+    assert.equal(diaColombiaISO(undefined), '');
+  });
+
+  it('hoyColombiaISO no depende de la zona del dispositivo', () => {
+    assert.equal(hoyColombiaISO(new Date('2026-11-03T04:59:59Z')), '2026-11-02');
+    assert.equal(hoyColombiaISO(new Date('2026-11-03T05:00:00Z')), '2026-11-03');
   });
 
   it('esFechaISOValida acepta fechas reales y rechaza fechas inexistentes o mal formadas', () => {

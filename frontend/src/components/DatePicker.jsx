@@ -3,10 +3,9 @@ import { IconoCalendario, IconoFlechaAtras, IconoFlechaAdelante } from './Iconos
 import {
   DIAS_SEMANA_CORTOS,
   MESES_LARGOS,
-  hoyLocalISO,
+  hoyColombiaISO,
   esFechaISOValida,
-  inicioDiaLocal,
-  finDiaLocal,
+  enRangoDiasColombia,
   desplazarDiasISO,
   inicioMesISO,
   formatearFechaAmigable,
@@ -45,7 +44,7 @@ export default function DatePicker({
   fechaFin = '',
   onChangeRango,
   // Límites y contexto
-  maxISO = hoyLocalISO(),
+  maxISO = hoyColombiaISO(),
   inspecciones = null,
   // Fecha ISO (p. ej. la última medición) donde abre el calendario si no hay valor elegido
   mesInicial = '',
@@ -55,7 +54,7 @@ export default function DatePicker({
   align = 'right',
   id,
 }) {
-  const hoyISO = hoyLocalISO();
+  const hoyISO = hoyColombiaISO();
   const tope = esFechaISOValida(maxISO) && maxISO < hoyISO ? maxISO : hoyISO;
   const esSoloUnico = !allowModeSwitch && initialMode === 'single';
   // Single-only mode (e.g. upload date) can never be empty: clearing resets to the latest allowed day.
@@ -127,15 +126,9 @@ export default function DatePicker({
     const d = modo === 'single' ? draftUnica : draftDesde;
     const h = modo === 'single' ? draftUnica : draftHasta;
     if (!esFechaISOValida(d) && !esFechaISOValida(h)) return inspecciones.length;
-    const ini = esFechaISOValida(d) ? inicioDiaLocal(d) : null;
-    const fin = esFechaISOValida(h) ? finDiaLocal(h) : null;
-    return inspecciones.filter((m) => {
-      const t = new Date(m.timestamp);
-      if (Number.isNaN(t.getTime())) return false;
-      if (ini && t < ini) return false;
-      if (fin && t > fin) return false;
-      return true;
-    }).length;
+    const ini = esFechaISOValida(d) ? d : '';
+    const fin = esFechaISOValida(h) ? h : '';
+    return inspecciones.filter((m) => enRangoDiasColombia(m.timestamp, ini, fin)).length;
   }, [inspecciones, modo, draftUnica, draftDesde, draftHasta]);
 
   const resumen = useMemo(() => {

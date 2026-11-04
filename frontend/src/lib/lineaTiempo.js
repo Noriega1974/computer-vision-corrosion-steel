@@ -1,6 +1,6 @@
 // Filtrado y agrupación cronológica de mediciones para la línea de tiempo del panel.
 
-import { inicioDiaLocal, finDiaLocal, hoyLocalISO, desplazarDiasISO, formatearFechaAmigable, esFechaISOValida } from './fechas.js';
+import { diaColombiaISO, enRangoDiasColombia, hoyColombiaISO, desplazarDiasISO, formatearFechaAmigable, esFechaISOValida } from './fechas.js';
 import { NIVELES, nivelLabel } from './statusUtils.js';
 import { normalizar } from './textUtils.js';
 
@@ -48,7 +48,7 @@ export function autorDeMedicion(m) {
 }
 
 // Filtra la lista de mediciones por empresa, punto (bloque), nivel ISO, rango
-// de fechas locales (inicioDiaLocal / finDiaLocal) y texto libre.
+// de días colombianos (mismo día que usa el servidor) y texto libre.
 export function filtrarMedicionesLineaTiempo(
   mediciones = [],
   {
@@ -60,8 +60,6 @@ export function filtrarMedicionesLineaTiempo(
     busqueda = '',
   } = {},
 ) {
-  const limIni = fechaInicio ? inicioDiaLocal(fechaInicio) : null;
-  const limFin = fechaFin ? finDiaLocal(fechaFin) : null;
   const q = normalizar(busqueda || '');
 
   return mediciones.filter((m) => {
@@ -72,12 +70,7 @@ export function filtrarMedicionesLineaTiempo(
     if (nivel !== undefined && nivel !== null && nivel !== '' && nivel !== 'all') {
       if (nivelNum(m) !== Number(nivel)) return false;
     }
-    if (limIni || limFin) {
-      const ts = new Date(m.timestamp);
-      if (Number.isNaN(ts.getTime())) return false;
-      if (limIni && ts < limIni) return false;
-      if (limFin && ts > limFin) return false;
-    }
+    if (!enRangoDiasColombia(m.timestamp, fechaInicio, fechaFin)) return false;
     if (q) {
       const texto = normalizar(
         `${m.nombre ?? ''} ${m.lote_nombre ?? ''} ${m.bloque_nombre ?? ''} ${m.notas ?? ''} ${autorDeMedicion(m)}`,
@@ -88,16 +81,32 @@ export function filtrarMedicionesLineaTiempo(
   });
 }
 
-// Ordena las mediciones de más reciente a más antigua, las agrupa por día
-// calendario local ('YYYY-MM-DD') y dentro de cada día colapsa las que
+export const SIN_FECHA = 'sin-fecha';
+
+// Ordena de más reciente a más antigua y agrupa por día colombiano. Devuelve
+// [[fechaISO, mediciones[]], ...] con los días en orden de aparición (los
+// días más recientes primero). `claveDe(m)` permite otra clave de día; una
+// clave vacía cae en 'sin-fecha'.
+export function agruparPorDia(mediciones = [], claveDe = (m) => diaColombiaISO(m?.timestamp)) {
+  const ordenadas = [...(mediciones ?? [])].sort((a, b) => tiempoMs(b) - tiempoMs(a));
+  const dias = new Map();
+  for (const m of ordenadas) {
+    const clave = claveDe(m) || SIN_FECHA;
+    const lista = dias.get(clave);
+    if (lista) lista.push(m);
+    else dias.set(clave, [m]);
+  }
+  return Array.from(dias.entries());
+}
+
+// Agrupa por día colombiano y dentro de cada día colapsa las mediciones que
 // comparten `lote_id` en un único evento de lote.
 export function agruparEventosPorDia(mediciones = [], { ahora = new Date() } = {}) {
-  const ordenadas = [...mediciones].sort((a, b) => tiempoMs(b) - tiempoMs(a));
   const diasMap = new Map();
 
-  for (const m of ordenadas) {
-    const dt = new Date(m?.timestamp);
-    const fechaISO = Number.isNaN(dt.getTime()) ? 'sin-fecha' : hoyLocalISO(dt);
+  const filas = agruparPorDia(mediciones).flatMap(([dia, meds]) => meds.map((m) => [dia, m]));
+
+  for (const [fechaISO, m] of filas) {
     let grupoDia = diasMap.get(fechaISO);
     if (!grupoDia) {
       grupoDia = {
@@ -173,8 +182,8 @@ export function agruparEventosPorDia(mediciones = [], { ahora = new Date() } = {
 }
 
 export function etiquetarDiaLineaTiempo(fechaISO, ahora = new Date()) {
-  if (!fechaISO || fechaISO === 'sin-fecha') return 'Sin fecha';
-  const hoy = hoyLocalISO(ahora);
+  if (!fechaISO || fechaISO === SIN_FECHA) return 'Sin fecha';
+  const hoy = hoyColombiaISO(ahora);
   const ayer = desplazarDiasISO(hoy, -1);
   const amigable = formatearFechaAmigable(fechaISO, { ahora });
   if (fechaISO === hoy) return `Hoy · ${amigable}`;
@@ -192,7 +201,7 @@ export function aniosDisponiblesLineaTiempo(mediciones = [], fechaReferencia = n
     fechaReferencia instanceof Date && !Number.isNaN(fechaReferencia.getTime())
       ? fechaReferencia
       : new Date();
-  const anioActual = Math.max(ANIO_MINIMO_LINEA_TIEMPO, ref.getFullYear());
+  const anioActual = Math.max(ANIO_MINIMO_LINEA_TIEMPO, Number(diaColombiaISO(ref).slice(0, 4)) || 0);
   const anios = [];
   for (let y = ANIO_MINIMO_LINEA_TIEMPO; y <= anioActual; y += 1) {
     anios.push(y);
@@ -250,10 +259,10 @@ export function construirBarraAnual(mediciones = [], anio = ANIO_MINIMO_LINEA_TI
     if (!m?.timestamp) continue;
     const dt = new Date(m.timestamp);
     if (Number.isNaN(dt.getTime())) continue;
-    if (dt.getFullYear() !== anioNum) continue;
+    const iso = diaColombiaISO(dt);
+    if (!iso.startsWith(`${anioNum}-`)) continue;
     const niv = nivelValido(m.nivel_corrosion);
     if (niv === null) continue;
-    const iso = hoyLocalISO(dt);
     let registro = conteosPorDia.get(iso);
     if (!registro) {
       registro = [0, 0, 0, 0];
@@ -456,7 +465,7 @@ export function rangoFueraDeVentana(mediciones, fechaInicio, fechaFin, limite) {
     if (!Number.isNaN(t) && t < masAntigua) masAntigua = t;
   }
   if (masAntigua === Infinity) return false;
-  return piso <= hoyLocalISO(new Date(masAntigua));
+  return piso <= diaColombiaISO(masAntigua);
 }
 
 // GET /mediciones/recientes limited to a local-day range (without heavy fields).

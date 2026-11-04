@@ -15,7 +15,7 @@ import NivelInfo from '../components/NivelInfo';
 import NotaPctAproximado from '../components/NotaPctAproximado';
 import DatePicker from '../components/DatePicker';
 import { formatoPct, etiquetaBase } from '../lib/textUtils';
-import { hoyLocalISO, esFechaISOValida, esFechaFutura } from '../lib/fechas';
+import { hoyColombiaISO, esFechaISOValida, esFechaFutura } from '../lib/fechas';
 
 // ─── Componente: resultado del análisis ─────────────────────────────────────
 
@@ -152,7 +152,7 @@ export default function UploadPage() {
   const [nombre, setNombre] = useState('');           // nombre de la foto (para buscarla luego)
   const [notas, setNotas] = useState('');
   const [esMedicionPasada, setEsMedicionPasada] = useState(false);
-  const [fechaMedicion, setFechaMedicion] = useState(() => hoyLocalISO());
+  const [fechaMedicion, setFechaMedicion] = useState(() => hoyColombiaISO());
   const fechaInvalida = esMedicionPasada && (!esFechaISOValida(fechaMedicion) || esFechaFutura(fechaMedicion));
 
   // El combobox de puntos trabaja con strings (mismo componente que usan
@@ -258,7 +258,7 @@ export default function UploadPage() {
 
   // Body of one /medicion request in batch mode: shared fields plus the row's
   // own name and EXIF GPS, and the batch folder identity (lote_id + lote_nombre).
-  const construirBodyLote = (it, idLote = loteIdActivo, nombreLoteFinal = (nombreLote.trim() || sugerirNombreLote(esMedicionPasada ? fechaMedicion : hoyLocalISO()))) => ({
+  const construirBodyLote = (it, idLote = loteIdActivo, nombreLoteFinal = (nombreLote.trim() || sugerirNombreLote(esMedicionPasada ? fechaMedicion : hoyColombiaISO()))) => ({
     fuente: 'movil',
     bloque_id: bloqueSeleccionado.id_bloque,
     ...(idLote && { lote_id: idLote }),
@@ -299,7 +299,7 @@ export default function UploadPage() {
       const loteId = agrupar ? (loteIdActivo || generarLoteId()) : null;
       // With the default date (upload day) the local day is captured ONCE here and sent
       // for every photo: a batch that crosses midnight must not split across two days.
-      const fechaLote = esMedicionPasada ? fechaMedicion : hoyLocalISO();
+      const fechaLote = esMedicionPasada ? fechaMedicion : hoyColombiaISO();
       const nombreLoteFinal = agrupar ? (nombreLote.trim() || sugerirNombreLote(fechaLote)) : null;
       setLoteIdActivo(loteId);
       if (agrupar && !nombreLote.trim()) setNombreLote(nombreLoteFinal);
@@ -357,7 +357,7 @@ export default function UploadPage() {
             setPreview(null);
             setExifGps(null);
             setEsMedicionPasada(false);
-            setFechaMedicion(hoyLocalISO());
+            setFechaMedicion(hoyColombiaISO());
           }}
           onDashboard={irAGaleria}
         />
@@ -464,7 +464,7 @@ export default function UploadPage() {
                   onChange={(e) => setNombreLote(e.target.value)}
                   maxLength={NOMBRE_MAX}
                   autoComplete="off"
-                  placeholder={sugerirNombreLote(esMedicionPasada ? fechaMedicion : hoyLocalISO())}
+                  placeholder={sugerirNombreLote(esMedicionPasada ? fechaMedicion : hoyColombiaISO())}
                   style={inputStyle}
                 />
               </div>
@@ -650,7 +650,7 @@ export default function UploadPage() {
                   allowModeSwitch={false}
                   value={fechaMedicion}
                   onChange={setFechaMedicion}
-                  maxISO={hoyLocalISO()}
+                  maxISO={hoyColombiaISO()}
                   clearLabel="Restablecer a hoy"
                   futureTitle="No puedes elegir una fecha futura"
                   align="left"

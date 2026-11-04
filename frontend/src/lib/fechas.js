@@ -27,6 +27,40 @@ export function hoyLocalISO(ahora = new Date()) {
   return `${y}-${pad2(m)}-${pad2(d)}`;
 }
 
+// El día de negocio es siempre el de Colombia (UTC-5 fijo, sin horario de
+// verano), igual que el servidor (`_dia_local` en api_mediciones). Agrupar o
+// elegir días con la zona del dispositivo desalinea la pantalla del backend.
+const OFFSET_COLOMBIA_MS = 5 * 3600 * 1000;
+
+// 'YYYY-MM-DD' del día colombiano de un instante (ISO, Date o ms). '' si es inválido.
+export function diaColombiaISO(ts) {
+  const ms = ts instanceof Date ? ts.getTime() : new Date(ts).getTime();
+  if (!Number.isFinite(ms)) return '';
+  return new Date(ms - OFFSET_COLOMBIA_MS).toISOString().slice(0, 10);
+}
+
+// "Hoy" para selectores y comparaciones con el servidor: día colombiano.
+export function hoyColombiaISO(ahora = new Date()) {
+  return diaColombiaISO(ahora);
+}
+
+// ¿El día colombiano de `ts` cae en [desde, hasta]? (extremos 'YYYY-MM-DD'
+// opcionales, inclusivos). Sin extremos todo cuenta; con ellos, un instante
+// inválido no cuenta.
+export function enRangoDiasColombia(ts, desde = '', hasta = '') {
+  if (!desde && !hasta) return true;
+  const dia = diaColombiaISO(ts);
+  if (!dia) return false;
+  if (desde && dia < desde) return false;
+  if (hasta && dia > hasta) return false;
+  return true;
+}
+
+// Año calendario actual de Colombia.
+export function anioColombia(ahora = new Date()) {
+  return Number(diaColombiaISO(ahora).slice(0, 4));
+}
+
 // Valida que str sea un string con formato estricto YYYY-MM-DD y represente una
 // fecha real del calendario (rechaza por ejemplo '2026-02-30').
 export function esFechaISOValida(str) {
@@ -41,10 +75,10 @@ export function esFechaISOValida(str) {
   );
 }
 
-// Devuelve true si str es una fecha ISO válida posterior al día local actual.
+// Devuelve true si str es una fecha ISO válida posterior al día actual de Colombia.
 export function esFechaFutura(str, ahora = new Date()) {
   if (!esFechaISOValida(str)) return false;
-  return str > hoyLocalISO(ahora);
+  return str > hoyColombiaISO(ahora);
 }
 
 // Inicio del día en hora local (00:00:00.000) para comparaciones de filtro.
@@ -96,7 +130,7 @@ export function fechaUltimaMedicionISO(mediciones) {
     const t = new Date(m?.timestamp).getTime();
     if (!Number.isNaN(t) && t > max) max = t;
   }
-  return max ? hoyLocalISO(new Date(max)) : '';
+  return max ? diaColombiaISO(max) : '';
 }
 
 // Cuenta la cantidad de días inclusivos entre dos fechas 'YYYY-MM-DD'.
@@ -118,7 +152,7 @@ export function resumenRangoContextual(
   hasta,
   { conteoInspecciones = null, ahora = new Date(), modo = 'range' } = {},
 ) {
-  const hoy = hoyLocalISO(ahora);
+  const hoy = hoyColombiaISO(ahora);
   const sufijoInspecciones =
     typeof conteoInspecciones === 'number'
       ? ` · ${conteoInspecciones} ${conteoInspecciones === 1 ? 'foto' : 'fotos'}`
@@ -184,7 +218,7 @@ export function construirGrillaMes(
   anio,
   mes,
   {
-    hoyISO = hoyLocalISO(),
+    hoyISO = hoyColombiaISO(),
     maxISO = hoyISO,
     modo = 'range',
     fechaUnica = '',
@@ -319,7 +353,7 @@ export function rangoAConfirmar({ modo, unica = '', desde = '', hasta = '' }) {
 
 // Texto del botón disparador según el filtro confirmado.
 export function etiquetaFiltroFechas(desde, hasta, { ahora = new Date(), vacio = 'Filtrar por fecha' } = {}) {
-  const hoy = hoyLocalISO(ahora);
+  const hoy = hoyColombiaISO(ahora);
   const hayDesde = esFechaISOValida(desde);
   const hayHasta = esFechaISOValida(hasta);
   if (!hayDesde && !hayHasta) return vacio;

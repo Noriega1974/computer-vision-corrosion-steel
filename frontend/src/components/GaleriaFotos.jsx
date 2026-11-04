@@ -10,7 +10,7 @@ import { useAccionesLote } from '../hooks/useAccionesLote';
 import { NIVELES, nivelColor, nivelLabel } from '../lib/statusUtils';
 import NivelInfo from './NivelInfo';
 import DatePicker from './DatePicker';
-import { inicioDiaLocal, finDiaLocal, hoyLocalISO, fechaUltimaMedicionISO } from '../lib/fechas';
+import { enRangoDiasColombia, hoyColombiaISO, fechaUltimaMedicionISO } from '../lib/fechas';
 import { agruparPorLote, contarOcultasPorFiltro, formatearConteoMediciones, medicionesDeLote } from '../lib/galeriaCarpetas';
 import TarjetaLote, { FichaDetalleLote } from './TarjetaLote';
 
@@ -101,15 +101,8 @@ export default function GaleriaFotos({
   const medicionesPorNivel = mediciones.filter(
     m => nivelFilter === 'all' || (m.nivel_corrosion ?? 0) === Number(nivelFilter),
   );
-  const limiteInicio = fechaInicio ? inicioDiaLocal(fechaInicio) : null;
-  const limiteFin = fechaFin ? finDiaLocal(fechaFin) : null;
   const filtradas = medicionesPorNivel
-    .filter(m => {
-      const ts = new Date(m.timestamp);
-      if (limiteInicio && ts < limiteInicio) return false;
-      if (limiteFin && ts > limiteFin) return false;
-      return true;
-    })
+    .filter(m => enRangoDiasColombia(m.timestamp, fechaInicio, fechaFin))
     .sort(COMPARADORES[orden]);
 
   const agrupado = puntoActual ? agruparPorLote(filtradas) : { lotes: [], sueltas: filtradas };
@@ -273,7 +266,7 @@ export default function GaleriaFotos({
               setFechaInicio(ini);
               setFechaFin(fin);
             }}
-            maxISO={hoyLocalISO()}
+            maxISO={hoyColombiaISO()}
             inspecciones={medicionesPorNivel}
             mesInicial={fechaUltimaMedicionISO(mediciones)}
             ctaLabel="Filtrar fotos"
