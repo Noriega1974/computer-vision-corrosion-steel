@@ -39,7 +39,7 @@ function horaCorta(ts) {
 
 // Casilla de una foto: miniatura cuadrada, punto de nivel, % y nombre corto.
 // Navega al detalle de la foto en la galería.
-export function TesteraFoto({ medicion, idPunto, mostrarFecha = false, subtitulo = null }) {
+export function TesteraFoto({ medicion, idPunto, mostrarFecha = false, subtitulo = null, etiquetaDia = null }) {
   const nivel = medicion.nivel_corrosion ?? 0;
   const color = nivelColor(nivel);
   const src = miniaturaDe(medicion);
@@ -52,6 +52,7 @@ export function TesteraFoto({ medicion, idPunto, mostrarFecha = false, subtitulo
         <span className="mosaico-tile__vacio" aria-hidden="true"><IconoCamara size={22} /></span>
       )}
       <span className="mosaico-tile__punto" aria-hidden="true" style={{ background: color }} title={nivelLabel(nivel)} />
+      {etiquetaDia && <span className="mosaico-tile__dia">{etiquetaDia}</span>}
       <span className="mosaico-tile__pie">
         <span className="mosaico-tile__pct">{medicion.area_corroida_pct == null ? nivelLabel(nivel) : formatoPct(medicion.area_corroida_pct)}</span>
         <span className="mosaico-tile__nombre">
@@ -69,7 +70,7 @@ export function TesteraFoto({ medicion, idPunto, mostrarFecha = false, subtitulo
 }
 
 // Casilla de un lote: portada, nombre, cantidad y peor nivel. Abre/cierra su contenido.
-export function TesteraLote({ nombre, total, peorNivel, peorPct, preview, abierto = false, onClick }) {
+export function TesteraLote({ nombre, total, peorNivel, peorPct, preview, abierto = false, onClick, etiquetaDia = null }) {
   const nivel = peorNivel ?? 0;
   const color = nivelColor(nivel);
   return (
@@ -85,6 +86,7 @@ export function TesteraLote({ nombre, total, peorNivel, peorPct, preview, abiert
         )}
         <span className="mosaico-tile__punto" aria-hidden="true" style={{ background: color }} />
         <span className="mosaico-tile__cuenta">{total}</span>
+        {etiquetaDia && <span className="mosaico-tile__dia">{etiquetaDia}</span>}
         <span className="mosaico-tile__pie">
           <span className="mosaico-tile__pct">{nivelLabel(nivel)}{peorPct != null ? ` · ${formatoPct(peorPct)}` : ''}</span>
           <span className="mosaico-tile__nombre">{nombre || 'Lote sin nombre'}</span>

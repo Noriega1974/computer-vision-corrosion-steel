@@ -2425,6 +2425,11 @@ select option {
 .mosaico-tile__accion:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
 .mosaico-tile__accion--quitar { top: 4px; right: 4px; }
 .mosaico-tile__accion--reintentar { bottom: 4px; left: 50%; transform: translateX(-50%); }
+.mosaico-tile__dia {
+  position: absolute; top: 5px; left: 22px; max-width: calc(100% - 60px); padding: 1px 6px; border-radius: 999px;
+  background: rgba(0, 0, 0, 0.62); color: #fff; font-size: 10px; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .mosaico-expandido {
   grid-column: 1 / -1; padding: 8px; border-radius: 8px;
   background: var(--bg-inset); border: 1px solid var(--border);

@@ -91,7 +91,7 @@ function NivelBadge({ nivel }) {
 // Eventos de un día como cuadrícula de casillas cuadradas: una foto suelta es una
 // miniatura; un lote es una casilla con su portada que, al abrirla, muestra sus fotos
 // en una fila completa de la misma cuadrícula.
-function EventosDia({ eventos }) {
+function EventosDia({ eventos, etiquetaDia }) {
   const [abiertos, setAbiertos] = useState(() => new Set());
   const alternar = (id) => setAbiertos((prev) => {
     const sig = new Set(prev);
@@ -103,10 +103,10 @@ function EventosDia({ eventos }) {
     return [hora, m.bloque_nombre].filter(Boolean).join(' · ');
   };
   return (
-    <Mosaico ancho altoMax={460} label="Actividad del día">
+    <>
       {eventos.map((ev) => {
         if (ev.tipo !== 'lote') {
-          return <TesteraFoto key={`med-${ev.id}`} medicion={ev.medicion} subtitulo={subtituloDe(ev.medicion)} />;
+          return <TesteraFoto key={`med-${ev.id}`} medicion={ev.medicion} subtitulo={subtituloDe(ev.medicion)} etiquetaDia={etiquetaDia} />;
         }
         const abierto = abiertos.has(ev.id);
         const portada = ev.mediciones.map(miniaturaDe).find(Boolean) ?? null;
@@ -120,6 +120,7 @@ function EventosDia({ eventos }) {
               preview={portada}
               abierto={abierto}
               onClick={() => alternar(ev.id)}
+              etiquetaDia={etiquetaDia}
             />
             {abierto && (
               <div className="mosaico-expandido">
@@ -137,7 +138,7 @@ function EventosDia({ eventos }) {
           </React.Fragment>
         );
       })}
-    </Mosaico>
+    </>
   );
 }
 
@@ -845,46 +846,13 @@ export default function LineaTiempoMediciones() {
           </div>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {diasPaginados.map((dia) => (
-            <div key={dia.fechaISO} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{
-                position: 'sticky',
-                top: 0,
-                zIndex: 1,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '6px 10px',
-                background: 'var(--bg-inset)',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-              }}>
-                <span style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  fontFamily: 'var(--font-ui)',
-                  fontWeight: 700,
-                  fontSize: 'var(--text-xs)',
-                  color: 'var(--text-primary)',
-                }}>
-                  <IconoReloj size={14} color="var(--accent-amber)" />
-                  {dia.etiquetaDia}
-                </span>
-                <span style={{
-                  fontFamily: 'var(--font-data)',
-                  fontSize: 'var(--text-2xs)',
-                  color: 'var(--text-muted)',
-                  fontVariantNumeric: 'tabular-nums',
-                }}>
-                  {dia.totalEventos} {dia.totalEventos === 1 ? 'evento' : 'eventos'} · {dia.totalFotos} {dia.totalFotos === 1 ? 'foto' : 'fotos'}
-                </span>
-              </div>
-
-              <EventosDia eventos={dia.eventos} />
-            </div>
-          ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* One continuous grid for every day: tiles flow without empty rows; each tile carries its day. */}
+          <Mosaico ancho altoMax={520} label="Actividad por día">
+            {diasPaginados.map((dia) => (
+              <EventosDia key={dia.fechaISO} eventos={dia.eventos} etiquetaDia={dia.etiquetaDia} />
+            ))}
+          </Mosaico>
 
           {totalEventos > limiteEventos && (
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: 4 }}>
