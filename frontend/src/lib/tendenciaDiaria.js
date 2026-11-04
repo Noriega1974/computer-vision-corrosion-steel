@@ -15,9 +15,9 @@ export function etiquetaDia(fecha) {
   return `${Number(m[3])} ${MESES[Number(m[2]) - 1] ?? ''}`.trim();
 }
 
-// 12.43 -> "12,4 %" (one decimal, comma, space before the sign).
+// 12.43 -> "12,4%" (one decimal, comma, same format as formatoPct).
 export function pctTexto(n) {
-  return `${Number(n ?? 0).toFixed(1).replace('.', ',')} %`;
+  return `${Number(n ?? 0).toFixed(1).replace('.', ',')}%`;
 }
 
 // Oldest to newest, last `max` days that have an average. Days without a numeric
@@ -38,12 +38,12 @@ export function puntosTendencia(dias, max = DIAS_TENDENCIA_MAX) {
     }));
 }
 
-// "3 nov · 12,4 % promedio"
+// "3 nov · 12,4% promedio"
 export function textoPromedioDia(p) {
   return `${p.etiqueta} · ${pctTexto(p.promedio)} promedio`;
 }
 
-// "3 imágenes · Peor: 40,5 % (Severa)"; label is injected to keep this file pure.
+// "3 imágenes · Peor: 40,5% (Severa)"; label is injected to keep this file pure.
 export function textoDetalleDia(p, labelNivel) {
   const imagenes = `${p.total} ${p.total === 1 ? 'imagen' : 'imágenes'}`;
   if (p.peorPct == null) return imagenes;

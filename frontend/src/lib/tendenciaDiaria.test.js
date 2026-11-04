@@ -12,8 +12,8 @@ describe('tendenciaDiaria', () => {
   });
 
   it('formats percentages with comma and a space', () => {
-    assert.equal(pctTexto(12.43), '12,4 %');
-    assert.equal(pctTexto(0), '0,0 %');
+    assert.equal(pctTexto(12.43), '12,4%');
+    assert.equal(pctTexto(0), '0,0%');
   });
 
   it('orders days oldest first and skips days without average', () => {
@@ -42,8 +42,8 @@ describe('tendenciaDiaria', () => {
 
   it('writes the header and the hover detail', () => {
     const [p] = puntosTendencia([dia('2026-11-03', { promedio_pct: 12.43, total: 1, max_pct: 12.43, peor_nivel: 2 })]);
-    assert.equal(textoPromedioDia(p), '3 nov · 12,4 % promedio');
-    assert.equal(textoDetalleDia(p, () => 'Moderada'), '1 imagen · Peor: 12,4 % (Moderada)');
+    assert.equal(textoPromedioDia(p), '3 nov · 12,4% promedio');
+    assert.equal(textoDetalleDia(p, () => 'Moderada'), '1 imagen · Peor: 12,4% (Moderada)');
     assert.equal(textoDetalleDia({ ...p, peorPct: null }, () => 'x'), '1 imagen');
   });
 });
