@@ -142,11 +142,11 @@ export default function UploadPage() {
   const [nombreLote, setNombreLote] = useState('');
   // La cola se muestra mientras tenga fotos; una sola foto individual usa el flujo de una foto.
   const modoLote = lote.iniciado || lote.items.length > 0;
-  // Cola (varias fotos o carga por lotes) frente al flujo de una sola foto.
-  const usaCola = modoLote || agrupar;
   // Una sesión ya iniciada manda: modo, nombre y botones salen de la sesión del gestor (que
   // sobrevive al salir de esta página), no del estado local, que al volver arranca de cero.
   const agrupar = lote.iniciado ? Boolean(lote.sesion?.loteId) : modo === 'lote';
+  // Cola (varias fotos o carga por lotes) frente al flujo de una sola foto.
+  const usaCola = modoLote || agrupar;
   const modoActivo = agrupar ? 'lote' : 'individual';
   const cambioDeModoBloqueado = lote.iniciado || uploading;
   const [avisoArchivos, setAvisoArchivos] = useState(null);  // {rechazados: string[], excedidos: number}
