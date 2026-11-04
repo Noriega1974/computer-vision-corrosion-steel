@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { IconoCamara, IconoMoverACarpeta } from './Iconos';
 import { nivelColor, nivelLabel } from '../lib/statusUtils';
 import { formatFecha, horaCorta } from '../utils/dateFormat';
+import { formatoPct } from '../lib/textUtils';
 import {
   destinoMedicion, etiquetaTestera, etiquetaTesteraLote, miniaturaDe, nombreCorto, textoPctMedicion,
 } from '../lib/mosaico';
