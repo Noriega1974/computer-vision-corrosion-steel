@@ -10,6 +10,14 @@ const TIPOS_OK = ['image/jpeg', 'image/png', 'image/jpg'];
 // Same default-name rule as the single flow: file name without extension.
 export const nombreDesdeArchivo = (file) => file.name.replace(/\.[^.]+$/, '').slice(0, NOMBRE_MAX);
 
+// Batch id: "LOT-" + UUID (40 chars, within the server's 64-char/[A-Za-z0-9_-] rule).
+// Two users batching into the same point at the same millisecond must not share a folder.
+export const generarLoteId = () => {
+  const aleatorio = globalThis.crypto?.randomUUID?.()
+    ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return `LOT-${aleatorio}`;
+};
+
 // Splits a FileList/array into valid files and rejected names (wrong type).
 export function clasificarArchivos(files) {
   const validos = [];

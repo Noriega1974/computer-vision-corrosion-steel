@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { Link } from 'react-router-dom';
 import { useMedicionesPunto } from '../hooks/useMedicionesPunto';
 import {
   nivelColor, nivelBg, nivelLabel,
@@ -6,25 +7,19 @@ import {
 import Skeleton, { SkeletonLinea } from './Skeleton';
 import { useConteoRecordado } from '../hooks/useConteoRecordado';
 import { formatFecha } from '../utils/dateFormat';
-import { formatoPct, etiquetaBase, baseArea } from '../lib/textUtils';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { formatoPct, etiquetaBase } from '../lib/textUtils';
 import { IconoCamara, IconoHumedad, IconoLluvia, IconoTemperatura, IconoViento } from './Iconos';
 
 // Estilos de texto compartidos con el esqueleto: mismo line-height cargado o no.
-const FOOTER_TITULO_STYLE = {
-  fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 16,
-  color: 'var(--text-primary)', lineHeight: 1.1, letterSpacing: '-0.02em',
+const RESUMEN_STYLE = {
+  fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.35,
+  fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums',
 };
-const FOOTER_SUB_STYLE = { fontSize: 11, color: 'var(--text-muted)', marginTop: 1, fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums' };
-const TENDENCIA_TITULO_STYLE = { fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', letterSpacing: '0.04em', marginBottom: 'var(--space-2)', fontWeight: 600 };
 const HISTORIAL_LINEA_STYLE = { fontSize: 'var(--text-3xs)', fontWeight: 600, fontFamily: 'var(--font-data)' };
 
 // ─── Tarjeta Flashcard de Ubicación (Dashboard) ─────────────────────────────
 export default function PlantDetail({ punto }) {
   const { mediciones, loading, error } = useMedicionesPunto(punto?.id_bloque);
-  // Lectura del punto bajo el cursor en la gráfica de tendencia; se muestra en una
-  // línea fija sobre la gráfica para no tapar los ejes (el alto es de ~70 px).
-  const [puntoActivo, setPuntoActivo] = useState(null);
   const filasSkeleton = useConteoRecordado(`dashboard:historial:${punto?.id_bloque}`, mediciones, loading, 4);
 
   if (!punto) {
@@ -51,17 +46,6 @@ export default function PlantDetail({ punto }) {
   const color = nivel >= 0 ? nivelColor(nivel) : 'var(--text-muted)';
   const bg = nivel >= 0 ? nivelBg(nivel) : 'transparent';
 
-  // Datos del trend: últimas 20 mediciones ordenadas cronológicamente
-  const trendData = [...mediciones]
-    .filter(m => m.area_corroida_pct != null)
-    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
-    .slice(-20)
-    .map(m => ({
-      fecha: new Date(m.timestamp).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }),
-      corrosion: parseFloat((m.area_corroida_pct ?? 0).toFixed(1)),
-      base: baseArea(m),
-    }));
-
   const clima = ultimaMedicion?.clima;
   const stats = [
     ...(clima ? [
@@ -77,145 +61,89 @@ export default function PlantDetail({ punto }) {
       background: 'var(--bg-card)', border: '1px solid var(--border)',
       height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden',
     }}>
-      {/* Flashcard superior del punto: 1) Título + subtítulo, 2) Caja encuadrada
-          de clima en el centro, 3) Pie con total de mediciones y píldora de estado */}
+      {/* Encabezado compacto del punto: 1) nombre + estado, 2) ciudad,
+          3) clima en una cuadrícula 2x2 de una línea por dato, 4) resumen. */}
       <div style={{
-        padding: '10px 14px', borderBottom: '1px solid var(--border)',
-        background: bg, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8,
+        padding: '8px 12px', borderBottom: '1px solid var(--border)',
+        background: bg, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6,
       }}>
-        {/* 1. Título y subtítulo con pesos diferenciados */}
+        {/* 1-2. Nombre y estado en la misma línea; ciudad debajo */}
         <div>
-          <div style={{
-            fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 17,
-            color: 'var(--text-primary)', letterSpacing: '-0.01em', lineHeight: 1.15,
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>
-            {punto.nombre ?? 'Punto sin nombre'}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <div style={{
+              minWidth: 0, fontFamily: 'var(--font-ui)', fontWeight: 800, fontSize: 15,
+              color: 'var(--text-primary)', letterSpacing: '-0.01em', lineHeight: 1.2,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>
+              {punto.nombre ?? 'Punto sin nombre'}
+            </div>
+            {nivel >= 0 && (
+              <div className={nivel === 3 ? 'severa-pulse' : undefined} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '2px 9px', borderRadius: 999,
+                background: 'var(--bg-card)', border: `1px solid ${color}60`,
+                fontSize: 11, fontWeight: 700, color,
+                flexShrink: 0,
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: color }} />
+                {nivelLabel(nivel)}
+              </div>
+            )}
           </div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 400, marginTop: 2 }}>
-            {punto.ciudad ?? '—'}{punto.departamento ? ` · ${punto.departamento}` : ''}
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>
+            {punto.ciudad ?? 'Sin ciudad'}{punto.departamento ? ` · ${punto.departamento}` : ''}
           </div>
         </div>
 
-        {/* 2. Bloque central encuadrado: datos meteorológicos con iconos y textos grandes */}
+        {/* 3. Clima: cada dato en una línea (icono, valor, nombre) */}
         {stats.length > 0 && (
           <div style={{
             background: 'var(--bg-card)', border: '1px solid var(--border)',
-            borderRadius: 8, padding: '8px 10px',
+            borderRadius: 8, padding: '5px 8px',
             display: 'grid',
-            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-            gap: '6px 10px',
+            gridTemplateColumns: 'auto auto',
+            justifyContent: 'space-between',
+            gap: '3px 10px',
           }}>
             {stats.map(({ Icon, label, v }) => (
-              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                <Icon size={16} strokeWidth={2} style={{ color: 'var(--accent-amber)', flexShrink: 0 }} />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{
-                    fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 14,
-                    color: 'var(--text-primary)', lineHeight: 1.1, letterSpacing: '-0.02em', whiteSpace: 'nowrap',
-                  }}>
-                    {v}
-                  </div>
-                  <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                    {label}
-                  </div>
-                </div>
+              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, whiteSpace: 'nowrap' }}>
+                <Icon size={14} strokeWidth={2} style={{ color: 'var(--accent-amber)', flexShrink: 0 }} />
+                <span style={{
+                  fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 13,
+                  color: 'var(--text-primary)', letterSpacing: '-0.01em',
+                }}>
+                  {v}
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {label}
+                </span>
               </div>
             ))}
           </div>
         )}
 
-        {/* 3. Pie de la flashcard: métrica clave a la izquierda + píldora a la derecha */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-          <div>
-            {loading ? (
-              <div aria-busy="true">
-                <div style={FOOTER_TITULO_STYLE}><SkeletonLinea width={110} /></div>
-                <div style={FOOTER_SUB_STYLE}><SkeletonLinea width={160} /></div>
-              </div>
-            ) : (
-              <>
-                <div style={FOOTER_TITULO_STYLE}>
-                  {mediciones.length} {mediciones.length === 1 ? 'medición' : 'mediciones'}
-                </div>
-                <div style={FOOTER_SUB_STYLE}>
-                  {ultimaMedicion?.area_corroida_pct != null
-                    ? `Última área corroída: ${formatoPct(ultimaMedicion.area_corroida_pct)} ${etiquetaBase(ultimaMedicion)}`
-                    : 'Sin lecturas registradas'}
-                </div>
-              </>
-            )}
+        {/* 4. Resumen: total de mediciones y última área corroída */}
+        {loading ? (
+          <div aria-busy="true" style={RESUMEN_STYLE}><SkeletonLinea width={200} /></div>
+        ) : (
+          <div style={RESUMEN_STYLE}>
+            <strong style={{ color: 'var(--text-primary)' }}>
+              {mediciones.length} {mediciones.length === 1 ? 'medición' : 'mediciones'}
+            </strong>
+            {' · '}
+            {ultimaMedicion?.area_corroida_pct != null
+              ? `Última área corroída: ${formatoPct(ultimaMedicion.area_corroida_pct)} ${etiquetaBase(ultimaMedicion)}`
+              : 'Sin lecturas registradas'}
           </div>
-
-          {nivel >= 0 && (
-            <div className={nivel === 3 ? 'severa-pulse' : undefined} style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '5px 12px', borderRadius: 999,
-              background: 'var(--bg-card)', border: `1px solid ${color}60`,
-              fontSize: 12, fontWeight: 700, color,
-              flexShrink: 0,
-            }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: color }} />
-              {nivelLabel(nivel)}
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
-      {/* Gráfica de tendencia */}
-      {loading && (
-        <div aria-busy="true" style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-          <div style={TENDENCIA_TITULO_STYLE}><SkeletonLinea width={190} /></div>
-          <Skeleton height={70} radius={8} />
-        </div>
-      )}
-      {trendData.length > 1 && (
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-          <div style={{ ...TENDENCIA_TITULO_STYLE, marginBottom: 2 }}>
-            TENDENCIA — ÁREA CORROÍDA (%)
-          </div>
-          <div aria-live="off" style={{
-            fontFamily: 'var(--font-data)', fontSize: 'var(--text-2xs)', color: 'var(--text-muted)',
-            minHeight: 16, marginBottom: 'var(--space-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>
-            {(() => {
-              const d = puntoActivo ?? trendData[trendData.length - 1];
-              return (
-                <>
-                  {d.fecha} · <strong style={{ color: 'var(--accent-amber)' }}>{formatoPct(d.corrosion)}</strong> sobre la {d.base}
-                </>
-              );
-            })()}
-          </div>
-          <ResponsiveContainer width="100%" height={70}>
-            <AreaChart
-              data={trendData}
-              margin={{ top: 2, right: 0, left: -28, bottom: 0 }}
-              onMouseMove={(e) => {
-                const i = e?.activeTooltipIndex;
-                const d = i != null ? trendData[i] : null;
-                setPuntoActivo((prev) => (prev === d ? prev : d));
-              }}
-              onMouseLeave={() => setPuntoActivo(null)}
-            >
-              <defs>
-                <linearGradient id={`grad-${punto.id_bloque}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#C1460B" stopOpacity={0.4}/>
-                  <stop offset="100%" stopColor="#C1460B" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="fecha" tick={{ fill: '#3d5a72', fontSize: 11 }} tickLine={false} axisLine={false} interval={4} />
-              <YAxis tick={{ fill: '#3d5a72', fontSize: 11 }} tickLine={false} axisLine={false} />
-              <Tooltip content={() => null} cursor={{ stroke: 'var(--border-strong)' }} />
-              <Area type="monotone" dataKey="corrosion" stroke="#C1460B" strokeWidth={1.5} fill={`url(#grad-${punto.id_bloque})`} dot={false} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
       {/* Historial de mediciones */}
-      <div style={{ flex: 1, overflow: 'auto', padding: 'var(--space-2)' }}>
-        <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', letterSpacing: '0.04em', padding: '4px 8px 8px', fontWeight: 600 }}>
+      {/* minHeight: 0 + columna flex: sin esto el bloque crecía con su
+          contenido, el overflow hidden de la tarjeta lo recortaba y la lista
+          interna nunca llegaba a tener scroll (la rueda no hacía nada). */}
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 'var(--space-2)' }}>
+        <div style={{ flexShrink: 0, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', letterSpacing: '0.04em', padding: '4px 8px 8px', fontWeight: 600 }}>
           HISTORIAL DE MEDICIONES
         </div>
 
@@ -266,7 +194,7 @@ export default function PlantDetail({ punto }) {
           }}
         >
           {mediciones.slice(0, 50).map((m, i) => (
-            <MedicionRow key={m.id_medicion ?? i} medicion={m} />
+            <MedicionRow key={m.id_medicion ?? i} medicion={m} idPunto={punto.id_bloque} />
           ))}
         </div>
       </div>
@@ -274,18 +202,15 @@ export default function PlantDetail({ punto }) {
   );
 }
 
-function MedicionRow({ medicion }) {
+// Cada fila abre el detalle de esa foto en la galería.
+function MedicionRow({ medicion, idPunto }) {
   const nivel = medicion.nivel_corrosion ?? 0;
   const color = nivelColor(nivel);
   const fecha = formatFecha(medicion.timestamp, { conHora: true });
 
-  return (
-    <div style={{
-      padding: '8px 10px',
-      background: 'var(--bg-section)',
-      border: '1px solid var(--border)',
-      display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
-    }}>
+  const idBloque = medicion.bloque_id ?? idPunto;
+  const contenido = (
+    <>
       {/* Miniatura -- 36px, así que usa url_thumbnail (~400px) en vez de
           bajar la foto original completa para mostrar un cuadrito */}
       {medicion.url_imagen ? (
@@ -335,6 +260,22 @@ function MedicionRow({ medicion }) {
           {medicion.notas && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 100 }}>{medicion.notas}</span>}
         </div>
       </div>
-    </div>
+    </>
+  );
+
+  if (!medicion.id_medicion) {
+    return <div className="historial-fila">{contenido}</div>;
+  }
+  const destino = idBloque
+    ? `/galeria/${encodeURIComponent(medicion.id_medicion)}?punto=${encodeURIComponent(idBloque)}`
+    : `/galeria/${encodeURIComponent(medicion.id_medicion)}`;
+  return (
+    <Link
+      to={destino}
+      className="historial-fila historial-fila--link"
+      aria-label={`Ver foto del ${fecha}: ${nivelLabel(nivel)}, ${formatoPct(medicion.area_corroida_pct)}`}
+    >
+      {contenido}
+    </Link>
   );
 }

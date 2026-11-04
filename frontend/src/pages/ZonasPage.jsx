@@ -454,9 +454,9 @@ export default function ZonasPage() {
                       <tr key={e.id_empresa} style={{ borderBottom: '1px solid var(--border)' }}>
                         <td style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--text-primary)' }}>{e.nombre}</td>
                         <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>
-                          {e.ciudad ? `${e.ciudad}${e.departamento ? ` · ${e.departamento}` : ''}` : '—'}
+                          {e.ciudad ? `${e.ciudad}${e.departamento ? ` · ${e.departamento}` : ''}` : 'Sin dato'}
                         </td>
-                        <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>{e.tipo_material ?? '—'}</td>
+                        <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>{e.tipo_material ?? 'Sin dato'}</td>
                         <td style={{ padding: '10px 14px', color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>
                           {(e.zonas ?? []).length > 0 ? `${e.zonas.length} zona${e.zonas.length > 1 ? 's' : ''}` : 'Sin dibujar'}
                         </td>

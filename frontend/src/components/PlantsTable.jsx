@@ -337,13 +337,13 @@ function PlantRow({ punto, index, selected, onClick }) {
         {nombre}
       </div>
       <div
-        title={`${punto.ciudad ?? '—'}${punto.departamento ? ` · ${punto.departamento}` : ''}`}
+        title={`${punto.ciudad ?? 'Sin ciudad'}${punto.departamento ? ` · ${punto.departamento}` : ''}`}
         style={{
           fontSize: 'var(--text-3xs)', color: 'var(--text-muted)',
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}
       >
-        {punto.ciudad ?? '—'}{punto.departamento ? ` · ${punto.departamento}` : ''}
+        {punto.ciudad ?? 'Sin ciudad'}{punto.departamento ? ` · ${punto.departamento}` : ''}
       </div>
     </button>
   );

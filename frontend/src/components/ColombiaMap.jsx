@@ -53,6 +53,15 @@ function escalaParaZoom(zoom) {
   return Math.min(MAX_ESCALA, Math.max(MIN_ESCALA, cruda));
 }
 
+function escapeHtml(valor) {
+  return String(valor ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // Centro y zoom con los que abre el mapa (Universidad del Norte, Barranquilla).
 const VISTA_INICIAL = { centro: [11.0190, -74.8503], zoom: 17 };
 
@@ -160,7 +169,7 @@ export default function ColombiaMap({
 
     const nivelMap = buildNivelMap(mediciones);
 
-    puntos.forEach((punto, index) => {
+    puntos.forEach(punto => {
       const lat = punto.coordenadas?.lat;
       const lng = punto.coordenadas?.lng;
 
@@ -256,7 +265,7 @@ export default function ColombiaMap({
             font-size:13px;
             margin-bottom:4px;
           ">
-            Ubicación ${index + 1}
+            ${escapeHtml(punto.nombre || 'Punto sin nombre')}
           </div>
 
           <div style="
@@ -265,7 +274,7 @@ export default function ColombiaMap({
             letter-spacing:0.1em;
             margin-bottom:8px;
           ">
-            ${ciudad}
+            ${escapeHtml(ciudad)}
           </div>
 
           <div style="
@@ -275,7 +284,7 @@ export default function ColombiaMap({
           ">
             <span>Estado:</span>
             <span style="color:${color}">
-              ${nivelStr}
+              ${escapeHtml(nivelStr)}
             </span>
           </div>
 
@@ -287,7 +296,7 @@ export default function ColombiaMap({
           ">
             <span>Estructura:</span>
             <span>
-              ${punto.tipo_estructura ?? '—'}
+              ${escapeHtml(punto.tipo_estructura ?? 'Sin dato')}
             </span>
           </div>
 
@@ -400,58 +409,42 @@ export default function ColombiaMap({
       }}
     >
 
-      {/* Header */}
+      {/* Leyenda de niveles */}
       <div
         style={{
-          padding: '12px 16px',
+          padding: '8px 14px',
           borderBottom: '1px solid var(--border)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 'var(--space-2)',
           flexShrink: 0,
         }}
       >
-
-        <div>
-
-          <div
-            style={{
-              fontFamily: 'var(--font-ui)',
-              fontWeight: 700,
-              fontSize: 'var(--text-sm)',
-              letterSpacing: '0.1em',
-              color: 'var(--text-primary)',
-            }}
-          >
-            MAPA DE UBICACIONES
-          </div>
-
-          <div
-            style={{
-              fontSize: 'var(--text-3xs)',
-              color: 'var(--text-muted)',
-              letterSpacing: '0.1em',
-              marginTop: 2
-            }}
-          >
-            {loadingPuntos
-              ? <Skeleton width={110} height="1em" radius={3} />
-              : `${puntosCount} ${puntosCount === 1 ? 'PUNTO REGISTRADO' : 'PUNTOS REGISTRADOS'}`
-            }
-          </div>
-
+        <div
+          style={{
+            fontSize: 'var(--text-3xs)',
+            color: 'var(--text-muted)',
+            fontFamily: 'var(--font-data)',
+            letterSpacing: '0.08em',
+          }}
+        >
+          {loadingPuntos
+            ? <Skeleton width={110} height="1em" radius={3} />
+            : `${puntosCount} ${puntosCount === 1 ? 'PUNTO REGISTRADO' : 'PUNTOS REGISTRADOS'}`
+          }
         </div>
 
         <div
           style={{
             display: 'flex',
             flexWrap: 'wrap',
-            gap: 'var(--space-2)'
+            alignItems: 'center',
+            gap: 'var(--space-2)',
           }}
         >
-
-          {NIVELES.map((_, n) => ({ color: nivelColor(n), label: nivelLabel(n) })).map(({ color, label }) => ( 
-
+          {NIVELES.map((_, n) => ({ color: nivelColor(n), label: nivelLabel(n) })).map(({ color, label }) => (
             <div
               key={label}
               style={{
@@ -460,30 +453,24 @@ export default function ColombiaMap({
                 gap: 'var(--space-1)',
                 fontSize: 11,
                 color,
-                letterSpacing: '0.1em'
+                letterSpacing: '0.1em',
               }}
             >
-
               <div
                 style={{
                   width: 7,
                   height: 7,
                   borderRadius: '50%',
                   background: color,
-                  flexShrink: 0
+                  flexShrink: 0,
                 }}
               />
-
               {label.toUpperCase()}
-
             </div>
-
           ))}
 
           <NivelInfo />
-
         </div>
-
       </div>
 
       {/* Mapa */}

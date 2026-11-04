@@ -4,7 +4,7 @@ import { useRefreshKey } from './RefreshKeyContext';
 
 // Dashboard requests the same set as the gallery (1000 most recent, without
 // heavy fields) so both count the same measurements. apiGet dedupes identical
-// concurrent GETs, so KPIBar, ChartsRow and ColombiaMap share one request.
+// concurrent GETs, so KPIBar, the timeline and ColombiaMap share one request.
 export const LIMITE_DASHBOARD = 1000;
 
 // `resumen` pide al backend omitir máscaras y detecciones (la galería no las

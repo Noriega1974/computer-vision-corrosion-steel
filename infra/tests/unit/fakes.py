@@ -62,8 +62,14 @@ class FakeTabla:
     def query(self, **kwargs):
         return {"Items": list(self.items)}
 
-    def put_item(self, Item):
+    def put_item(self, Item, ConditionExpression=None):
         _rechazar_floats(Item)
+        if ConditionExpression == "attribute_not_exists(sk)" and any(
+            e.get("id_punto") == Item.get("id_punto") and e.get("sk") == Item.get("sk")
+            for e in self.escritos
+        ):
+            raise ClientError(
+                {"Error": {"Code": "ConditionalCheckFailedException", "Message": "exists"}}, "PutItem")
         self.escritos.append(Item)
 
     def update_item(self, Key, UpdateExpression, ExpressionAttributeNames=None,

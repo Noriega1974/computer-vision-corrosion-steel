@@ -11,7 +11,7 @@ import { useAuth } from '../auth/AuthContext';
 import { normalizar } from '../lib/textUtils';
 import { formatFecha } from '../utils/dateFormat';
 import {
-  SIN_ASIGNAR, claveEmpresa, clavePunto, carpetasDeEmpresas, carpetasDePuntos, iniciales,
+  SIN_ASIGNAR, claveEmpresa, clavePunto, carpetasDeEmpresas, carpetasDePuntos, iniciales, bloquesDeEmpresa,
 } from '../lib/galeriaCarpetas';
 import GaleriaBreadcrumb from '../components/GaleriaBreadcrumb';
 import GaleriaCarpetas from '../components/GaleriaCarpetas';
@@ -125,6 +125,9 @@ const botonAmbarStyle = {
   fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'white',
 };
 
+// Server-side cap of GET /mediciones/{punto}?limite= (LIMITE_PUNTO_MAX).
+const LIMITE_FOTOS_PUNTO = 500;
+
 // ─── Página Galería ───────────────────────────────────────────────────────────
 // Tres niveles con ruta propia (el botón Atrás del navegador funciona):
 //   /galeria                              empresas (super_admin con varias) o puntos
@@ -143,7 +146,7 @@ export default function GaleriaPage() {
   const idPuntoApi = bloqueId && bloqueId !== SIN_ASIGNAR ? bloqueId : null;
   const { mediciones: medicionesPunto, loading: cargandoPunto, error: errorPunto, refetch: refetchPunto } =
     useMedicionesPunto(idPuntoApi, { completo: true });
-  const { bloques } = useBloques(true);
+  const { bloques, loading: cargandoBloques } = useBloques(true);
   const { user } = useAuth();
   const esSuperAdmin = user?.groups?.includes('super_admin');
   // /upload es solo para super_admin, admin y tecnico (RoleRoute): el cliente no ve el acceso.
@@ -188,10 +191,10 @@ export default function GaleriaPage() {
   // ─── Carpetas ─────────────────────────────────────────────────────────────
   const carpetasEmpresa = carpetasDeEmpresas(mediciones);
   // Solo un super_admin con datos de varias empresas necesita ese nivel.
-  const variasEmpresas = esSuperAdmin && carpetasEmpresa.length > 1;
-  const empresaActual = empresaId ?? carpetasEmpresa[0]?.id;
+  const variasEmpresas = esSuperAdmin && (carpetasEmpresa.length > 1 || empresas.length > 1);
+  const empresaActual = empresaId ?? carpetasEmpresa[0]?.id ?? perfil?.empresa_id ?? bloques[0]?.empresa_id;
   const deEmpresa = mediciones.filter(m => claveEmpresa(m) === empresaActual);
-  const carpetasPunto = carpetasDePuntos(deEmpresa);
+  const carpetasPunto = carpetasDePuntos(deEmpresa, bloquesDeEmpresa(bloques, empresaActual));
   const fotosDelPunto = idPuntoApi ? medicionesPunto
     : bloqueId ? deEmpresa.filter(m => clavePunto(m) === bloqueId) : [];
 
@@ -202,7 +205,10 @@ export default function GaleriaPage() {
 
   const volverA = `${location.pathname}${location.search}`;
   const rutaEmpresa = `/galeria/zona/${empresaActual}`;
-  const tituloPunto = fotosDelPunto[0] ? nombrePunto(fotosDelPunto[0]) : 'Punto';
+  const bloqueActualObj = bloques.find(b => b.id_bloque === bloqueId);
+  const tituloPunto = fotosDelPunto[0]
+    ? nombrePunto(fotosDelPunto[0])
+    : (bloqueActualObj?.nombre ?? 'Punto');
 
   // Migas: la empresa solo aparece si existe ese nivel para este usuario.
   const tramos = [{ label: 'Galería', to: '/galeria' }];
@@ -246,16 +252,17 @@ export default function GaleriaPage() {
     detalle: `Última medición ${formatFecha(c.ultima.timestamp)}`,
   }));
   const itemsPunto = carpetasPunto.map(c => {
-    const tituloCarpeta = nombrePunto(c.ultima);
+    const tituloCarpeta = c.nombre || (c.ultima ? nombrePunto(c.ultima) : 'Punto');
+    const totalFotos = c.total ?? c.fotos ?? 0;
     return {
       key: c.id,
       to: `/galeria/zona/${empresaActual}/${c.id}`,
       titulo: tituloCarpeta,
-      subtitulo: ciudadDe(c.id) ?? 'Sin ciudad',
-      portada: portadaPunto(c.id),
+      subtitulo: ciudadDe(c.id) ?? c.subtitulo ?? 'Sin ciudad',
+      portada: portadaPunto(c.id) ?? c.preview,
       iniciales: iniciales(tituloCarpeta),
-      detalle: `${c.fotos} ${c.fotos === 1 ? 'foto' : 'fotos'}`,
-      nivel: c.ultima.nivel_corrosion ?? 0,
+      detalle: `${totalFotos} ${totalFotos === 1 ? 'foto' : 'fotos'}`,
+      nivel: c.ultima ? (c.ultima.nivel_corrosion ?? 0) : null,
     };
   });
 
@@ -283,11 +290,15 @@ export default function GaleriaPage() {
     />;
   } else if (fallo && sinDatos) {
     contenido = <ErrorEstado titulo="No se pudieron cargar las mediciones." detalle={fallo} onRetry={enPunto ? refetchPunto : refetch} />;
-  } else if (!enPunto && mediciones.length === 0) {
+  } else if (!enPunto && !cargandoBloques && (
+    (mediciones.length === 0 && carpetasPunto.length === 0)
+    // Super admin sin fotos: el nivel de empresas saldria vacio (hay puntos o empresas, pero ninguna foto).
+    || (nivelVista === 'empresas' && itemsEmpresa.length === 0)
+  )) {
     contenido = (
       <EstadoVacio
         icono={IconoSinImagen} titulo="Sin mediciones todavía"
-        texto={puedeSubir ? 'Sube tu primera imagen para comenzar el monitoreo de corrosión.' : 'Aún no hay mediciones registradas en tu afiliación.'}
+        texto={puedeSubir ? 'Sube tu primera imagen para comenzar el monitoreo de corrosión.' : 'Aún no hay mediciones registradas en tu zona.'}
       >
         {puedeSubir && (
           <button onClick={() => navigate('/upload')} style={botonAmbarStyle}>
@@ -319,17 +330,47 @@ export default function GaleriaPage() {
     ) : <GaleriaCarpetas items={itemsPunto} />;
   } else {
     contenido = fotosDelPunto.length === 0 ? (
-      <EstadoVacio icono={IconoSinImagen} titulo="Este punto no tiene fotos" texto="La carpeta no existe o no tiene mediciones cargadas.">
-        <Link to={variasEmpresas ? rutaEmpresa : '/galeria'} style={botonAmbarStyle}>Volver</Link>
+      <EstadoVacio icono={IconoSinImagen} titulo="Este punto aún no tiene fotos" texto="Sube la primera medición para iniciar el historial de este punto.">
+        <div style={{ display: 'flex', gap: 'var(--space-2-5)', justifyContent: 'center', flexWrap: 'wrap' }}>
+          {puedeSubir && (
+            <button type="button" onClick={() => navigate('/upload')} style={botonAmbarStyle}>
+              <IconoSubir size={15} aria-hidden="true" />
+              Nueva medición
+            </button>
+          )}
+          <Link
+            to={variasEmpresas ? rutaEmpresa : '/galeria'}
+            style={{
+              ...botonAmbarStyle,
+              background: 'var(--bg-inset)',
+              border: '1px solid var(--border)',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            Volver
+          </Link>
+        </div>
       </EstadoVacio>
     ) : (
-      <GaleriaFotos
-        mediciones={fotosDelPunto}
-        volverA={volverA}
-        puntoActual={idPuntoApi}
-        toolbarTarget={toolbarRight}
-        onSeleccionChange={setSeleccionando}
-      />
+      <>
+        {idPuntoApi && fotosDelPunto.length >= LIMITE_FOTOS_PUNTO && (
+          <div role="note" style={{
+            marginBottom: 12, padding: '8px 12px', background: 'var(--bg-inset)',
+            border: '1px solid var(--border)', borderRadius: 8,
+            fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)', color: 'var(--text-secondary)',
+          }}>
+            Se muestran las {LIMITE_FOTOS_PUNTO} fotos más recientes de este punto. Las anteriores y los conteos de cada lote pueden estar incompletos.
+          </div>
+        )}
+        <GaleriaFotos
+          mediciones={fotosDelPunto}
+          volverA={volverA}
+          puntoActual={idPuntoApi}
+          listaIncompleta={!!idPuntoApi && fotosDelPunto.length >= LIMITE_FOTOS_PUNTO}
+          toolbarTarget={toolbarRight}
+          onSeleccionChange={setSeleccionando}
+        />
+      </>
     );
   }
 

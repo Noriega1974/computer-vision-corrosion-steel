@@ -84,10 +84,10 @@ function CarpetaCard({ item }) {
               flexWrap: 'wrap', lineHeight: 1.25,
             }}>
               <NivelIcon nivel={nivel} size={20} color={nivelColor(nivel)} />
-              <span>{nivelLabel(nivel)}</span>
               <span style={{ fontWeight: 500, fontSize: 11, color: 'var(--text-muted)' }}>
-                · Nivel de última foto
+                Nivel de la última foto:
               </span>
+              <span>{nivelLabel(nivel)}</span>
             </div>
           )}
         </div>

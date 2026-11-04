@@ -237,7 +237,7 @@
       rgba(255,250,245,0.50)
     );
 
-  --section-charts:
+  --section-timeline:
     linear-gradient(
       135deg,
       rgba(255,248,242,0.68),
@@ -389,7 +389,7 @@
       rgba(27, 39, 54, 0.68)
     );
 
-  --section-charts:
+  --section-timeline:
     linear-gradient(
       135deg,
       rgba(34, 49, 66, 0.80),
@@ -733,7 +733,7 @@ body {
 .section-map,
 .section-detail,
 .section-plants,
-.section-charts {
+.section-timeline {
   position: relative;
 
   border: none;
@@ -743,14 +743,14 @@ body {
    oscuro) pero ningun selector los consumia -- las 4 secciones del
    dashboard se veian identicas mas alla de su contenido. Se conectan aca,
    recalentados hacia el naranja de marca en vez del azul frio que tenian
-   (ver --section-kpi/--section-map/--section-detail/--section-charts en la
+   (ver --section-kpi/--section-map/--section-detail/--section-timeline en la
    seccion ACCENTS de :root). .section-plants queda sin tinte propio: nunca
    tuvo un token --section-plants definido, agregar uno ahora es una
    decision de color nueva que no se pidio. */
 .section-kpi    { background: var(--section-kpi); }
 .section-map    { background: var(--section-map); }
 .section-detail { background: var(--section-detail); }
-.section-charts { background: var(--section-charts); }
+.section-timeline { background: var(--section-timeline); }
 .section-plants { background: transparent; }
 
 
@@ -864,62 +864,90 @@ body {
    KPI
    ================================================================ */
 
+/* Indicadores globales en dos mitades: KPI en una fila + tendencia del punto.
+   Bloque bajo a proposito: no debe quitarle protagonismo al mapa de abajo. */
+.indicadores-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.ind-card {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 16px 12px;
+  border-radius: 12px;
+  min-width: 0;
+}
+
+.ind-card-label {
+  margin-bottom: var(--space-2);
+  font-family: var(--font-ui);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
 .kpi-grid {
-  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: start;
+  flex: 1;
 }
 
-.kpi-card {
-  position: relative;
-
-  overflow: hidden;
-
-  min-height: 112px;
+.kpi-celda {
+  padding: 2px 12px;
+  min-width: 0;
 }
 
-.kpi-card::after {
-  content: "";
+/* Linea fina vertical entre celdas; vale para cualquier cantidad de KPI. */
+.kpi-celda:first-child       { padding-left: 0; }
+.kpi-celda:last-child        { padding-right: 0; }
+.kpi-celda + .kpi-celda      { border-left: 1px solid var(--border); }
 
-  position: absolute;
-
-  width: 125px;
-  height: 125px;
-
-  right: -50px;
-  bottom: -60px;
-
-  border-radius: 50%;
-
-  background: var(--kpi-color);
-
-  opacity: 0.085;
-
-  filter: blur(22px);
-
-  pointer-events: none;
+/* Detalle de ubicación: filas del historial; cada una abre su foto. */
+.historial-fila {
+  padding: 8px 10px;
+  background: var(--bg-section);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  color: inherit;
+  text-decoration: none;
+}
+.historial-fila--link {
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+}
+.historial-fila--link:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-card);
+}
+.historial-fila--link:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 1px;
 }
 
-.kpi-card:hover {
-  transform: translateY(-2px);
-
-  border-color: color-mix(
-    in srgb,
-    var(--kpi-color) 28%,
-    var(--border)
-  );
-
-  box-shadow:
-    0 12px 28px rgba(31,56,85,0.10),
-    0 0 0 1px rgba(255,255,255,0.12);
+@media (max-width: 900px) {
+  .indicadores-split {
+    grid-template-columns: 1fr;
+  }
 }
 
-[data-theme="dark"] .kpi-card:hover {
-  box-shadow:
-    0 12px 32px rgba(0,0,0,0.32),
-    0 0 18px color-mix(
-      in srgb,
-      var(--kpi-color) 9%,
-      transparent
-    );
+/* Telefonos: los KPI pasan a 2x2 sin lineas, separados por espacio. */
+@media (max-width: 480px) {
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: var(--space-3);
+  }
+  .kpi-celda,
+  .kpi-celda:first-child,
+  .kpi-celda:last-child { padding: 0 8px 0 0; }
+  .kpi-celda + .kpi-celda { border-left: none; }
 }
 
 
@@ -1030,15 +1058,6 @@ body {
   .galeria-fab-label {
     display: none;
   }
-}
-
-
-/* ================================================================
-   CHARTS
-   ================================================================ */
-
-.charts-grid {
-  position: relative;
 }
 
 
@@ -1378,25 +1397,10 @@ body {
       1px solid var(--border);
   }
 
-  .kpi-grid {
-    grid-template-columns:
-      repeat(2, 1fr) !important;
-  }
-
-  .charts-grid {
-    grid-template-columns:
-      1fr !important;
-  }
-
 }
 
 
 @media (max-width: 480px) {
-
-  .kpi-grid {
-    grid-template-columns:
-      1fr !important;
-  }
 
   .dashboard-section {
     border-radius: 14px;
@@ -1661,4 +1665,571 @@ select option {
   clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
+}
+
+
+/* ================================================================
+   DETALLE: pestañas Original / Segmentación (control segmentado)
+   Pista hundida con borde; el segmento activo se eleva como tarjeta.
+   El acento del nivel es una raya corta bajo el texto activo.
+   ================================================================ */
+
+.detalle-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.detalle-tab {
+  position: relative;
+  flex: 1;
+  min-height: 36px;
+  padding: 7px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--text-secondary);
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.detalle-tab:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-card) 55%, transparent);
+}
+
+.detalle-tab[aria-selected="true"] {
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-card);
+  border-color: var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.detalle-tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  width: 24px;
+  height: 2px;
+  margin-left: -12px;
+  border-radius: 2px;
+  background: var(--tab-color, var(--accent-blue));
+}
+
+.detalle-tab:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 1px;
+  border-radius: 7px;
+}
+
+
+/* ================================================================
+   SELECTOR DE FECHAS REUTILIZABLE (DatePicker.jsx)
+   Adaptado a modo claro y oscuro con jerarquía visual nítida para:
+   - Encabezado contextual legible y selector de modo
+   - Banda horizontal continua de rango (.dp-cell-band)
+   - Extremos de rango (.dp-day--endpoint) y días intermedios (.dp-day--in-range)
+   - Indicador "Hoy" (.dp-day--today) con anillo distintivo
+   - Días futuros deshabilitados (.dp-day--disabled)
+   ================================================================ */
+
+:root {
+  --dp-range-band: color-mix(in srgb, var(--accent-amber) 14%, transparent);
+  --dp-range-band-border: color-mix(in srgb, var(--accent-amber) 26%, transparent);
+  --dp-today-ring: var(--accent-amber);
+  --dp-today-bg: color-mix(in srgb, var(--accent-amber) 8%, transparent);
+  --dp-endpoint-shadow: color-mix(in srgb, var(--accent-amber) 32%, transparent);
+  /* Texto sobre el relleno sólido de acento: blanco en ambos temas. */
+  --dp-on-accent: #ffffff;
+  --dp-disabled-stripe: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    rgba(100, 116, 139, 0.08) 4px,
+    rgba(100, 116, 139, 0.08) 8px
+  );
+}
+
+[data-theme="dark"] {
+  --dp-range-band: color-mix(in srgb, var(--accent-amber) 22%, transparent);
+  --dp-range-band-border: color-mix(in srgb, var(--accent-cyan) 34%, transparent);
+  --dp-today-ring: var(--accent-cyan);
+  --dp-today-bg: color-mix(in srgb, var(--accent-amber) 14%, transparent);
+  --dp-disabled-stripe: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    rgba(148, 163, 184, 0.07) 4px,
+    rgba(148, 163, 184, 0.07) 8px
+  );
+}
+
+.dp-root {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-ui);
+}
+
+.dp-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 5px 11px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.dp-trigger:hover {
+  border-color: var(--accent-amber);
+  background: var(--bg-card-solid);
+}
+
+.dp-trigger--active {
+  border-color: var(--accent-amber);
+  background: var(--dp-today-bg);
+  font-weight: 600;
+}
+
+.dp-trigger:focus-visible {
+  outline: 2px solid var(--accent-amber);
+  outline-offset: 2px;
+}
+
+.dp-trigger__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent-amber);
+  color: var(--dp-on-accent);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.dp-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  width: 332px;
+  max-width: calc(100vw - 24px);
+  background: var(--bg-card-solid);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  padding: 14px;
+  color: var(--text-primary);
+  animation: nivel-info-in 150ms var(--ease-out);
+}
+
+.dp-popover--left {
+  right: auto;
+  left: 0;
+}
+
+.dp-header-summary {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 11px;
+  margin-bottom: 10px;
+  /* Altura fija: el resumen nunca debe saltar de línea ni mover la grilla */
+  min-height: 52px;
+  overflow: hidden;
+}
+
+.dp-header-summary__title,
+.dp-header-summary__subtitle {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dp-header-summary__title {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.dp-header-summary__subtitle {
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dp-mode-switch {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  margin-bottom: 10px;
+}
+
+.dp-mode-btn {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+
+.dp-mode-btn[aria-pressed="true"] {
+  background: var(--bg-card-solid);
+  color: var(--text-primary);
+  border-color: var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.dp-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+
+.dp-shortcut-chip {
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+
+.dp-shortcut-chip:disabled {
+  cursor: default;
+}
+
+.dp-backdrop,
+.dp-close {
+  display: none;
+}
+
+.dp-shortcut-chip:hover {
+  border-color: var(--accent-amber);
+  color: var(--accent-amber);
+}
+
+.dp-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.dp-nav__label {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.dp-nav__btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.dp-nav__btn:hover:not(:disabled) {
+  border-color: var(--accent-amber);
+  color: var(--accent-amber);
+}
+
+.dp-nav__btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.dp-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 1px;
+}
+
+.dp-weekday {
+  text-align: center;
+  font-family: var(--font-data);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 4px 0;
+  letter-spacing: 0.02em;
+}
+
+.dp-grid {
+  display: flex;
+  flex-direction: column;
+  row-gap: 3px;
+}
+
+.dp-week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.dp-cell {
+  position: relative;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Banda horizontal continua que une el rango Desde → Hasta */
+.dp-cell-band {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  right: 0;
+  background: var(--dp-range-band);
+  border-top: 1px solid var(--dp-range-band-border);
+  border-bottom: 1px solid var(--dp-range-band-border);
+  pointer-events: none;
+}
+
+.dp-cell-band--inicio {
+  left: 4px;
+  border-top-left-radius: 999px;
+  border-bottom-left-radius: 999px;
+  border-left: 1px solid var(--dp-range-band-border);
+}
+
+.dp-cell-band--fin {
+  right: 4px;
+  border-top-right-radius: 999px;
+  border-bottom-right-radius: 999px;
+  border-right: 1px solid var(--dp-range-band-border);
+}
+
+.dp-day {
+  position: relative;
+  z-index: 1;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.dp-day:hover:not([aria-disabled="true"]) {
+  border-color: var(--accent-amber);
+  background: var(--dp-today-bg);
+}
+
+.dp-day:focus-visible {
+  outline: 2px solid var(--accent-amber);
+  outline-offset: 1px;
+}
+
+.dp-day--outside {
+  color: var(--text-faint);
+  opacity: 0.58;
+}
+
+.dp-day--today {
+  border: 1.5px solid var(--dp-today-ring);
+  background: var(--dp-today-bg);
+  font-weight: 700;
+}
+
+.dp-day__hoy-dot {
+  font-size: 7px;
+  font-family: var(--font-data);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  margin-top: 1px;
+  color: var(--dp-today-ring);
+  font-weight: 700;
+}
+
+.dp-day--in-range {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.dp-day--endpoint {
+  background: var(--accent-amber) !important;
+  border-color: var(--accent-amber) !important;
+  color: var(--dp-on-accent) !important;
+  font-weight: 700;
+  box-shadow: 0 2px 6px var(--dp-endpoint-shadow);
+}
+
+.dp-day--endpoint .dp-day__hoy-dot {
+  color: var(--dp-on-accent);
+}
+
+.dp-day--disabled {
+  color: var(--text-faint);
+  opacity: 0.36;
+  cursor: not-allowed;
+  background-image: var(--dp-disabled-stripe);
+}
+
+/* En pantallas angostas el popover se ancla al borde inferior del viewport
+   (hoja inferior) para no desbordar a izquierda o derecha. */
+@media (max-width: 480px) {
+  .dp-popover,
+  .dp-popover--left {
+    position: fixed;
+    top: auto;
+    right: 12px;
+    left: 12px;
+    bottom: 12px;
+    width: auto;
+    max-width: none;
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+    z-index: 210;
+  }
+
+  .dp-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 209; /* justo debajo de la hoja (.dp-popover, 210) */
+    background: rgba(0, 0, 0, 0.28);
+  }
+
+  .dp-close {
+    display: block;
+    margin: 0 0 8px auto;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-inset);
+    color: var(--text-secondary);
+    font-family: var(--font-ui);
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    cursor: pointer;
+  }
+}
+
+.dp-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.dp-btn-clear {
+  padding: 6px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.dp-btn-clear:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.dp-btn-clear:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.dp-btn-apply {
+  flex: 1;
+  padding: 7px 12px;
+  border-radius: 7px;
+  border: none;
+  background: var(--accent-amber);
+  color: var(--dp-on-accent);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dp-btn-apply:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.dp-btn-apply:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }

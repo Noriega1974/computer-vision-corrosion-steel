@@ -17,9 +17,9 @@ export function setDateFormat(formato) {
 // Formatea un timestamp según la preferencia guardada.
 // `conHora`: agrega HH:mm. `conSegundos`: agrega también los segundos.
 export function formatFecha(timestamp, { conHora = false, conSegundos = false } = {}) {
-  if (!timestamp) return '—';
+  if (!timestamp) return 'Sin fecha';
   const d = new Date(timestamp);
-  if (Number.isNaN(d.getTime())) return '—';
+  if (Number.isNaN(d.getTime())) return 'Sin fecha';
 
   const dd = String(d.getDate()).padStart(2, '0');
   const mm = String(d.getMonth() + 1).padStart(2, '0');

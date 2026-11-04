@@ -17,14 +17,15 @@ const botonStyle = {
  * recibe el `transform`, así que todo se acerca junto y nunca se desalinea.
  *  - Botones + / − / restablecer (misma apariencia que los controles del mapa).
  *  - Ctrl + rueda (o pellizco de trackpad) acerca hacia el cursor; la rueda sin
- *    Ctrl sigue desplazando la página.
+ *    Ctrl sigue desplazando la página. Con `ruedaSinCtrl` (visores modales, donde
+ *    no hay página que desplazar) la rueda sola acerca.
  *  - Con zoom, arrastrar con el mouse o el dedo desplaza; dos dedos pellizcan.
  *
  * Controlado: `vista` y `onVista` los guarda quien lo usa, para que el nivel de
  * zoom se conserve al cambiar entre las pestañas Original y Segmentación.
  * `children` recibe el zoom actual (función) o se pasa tal cual.
  */
-export default function ZoomPan({ vista, onVista, style, children }) {
+export default function ZoomPan({ vista, onVista, style, children, ruedaSinCtrl = false }) {
   const marcoRef = useRef(null);
   const [tam, setTam] = useState({ W: 0, H: 0 });
   const [arrastrando, setArrastrando] = useState(false);
@@ -47,19 +48,19 @@ export default function ZoomPan({ vista, onVista, style, children }) {
   const aplicar = useCallback((fn) => onVista(fn(vistaRef.current)), [onVista]);
 
   // Ctrl + rueda: listener NO pasivo para poder cancelar el zoom de la página.
-  // Sin Ctrl no se hace nada y la página sigue desplazándose.
+  // Sin Ctrl no se hace nada y la página sigue desplazándose (salvo `ruedaSinCtrl`).
   useEffect(() => {
     const el = marcoRef.current;
     if (!el) return undefined;
     const onWheel = (e) => {
-      if (!e.ctrlKey) return;
+      if (!ruedaSinCtrl && !e.ctrlKey) return;
       e.preventDefault();
       const r = el.getBoundingClientRect();
       aplicar(a => zoomEnPunto(a, factorRueda(e.deltaY, e.deltaMode), e.clientX - r.left, e.clientY - r.top, el.clientWidth, el.clientHeight));
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [aplicar]);
+  }, [aplicar, ruedaSinCtrl]);
 
   const centro = () => ({ x: tam.W / 2, y: tam.H / 2 });
   const zoomBoton = (factor) => {
@@ -138,7 +139,7 @@ export default function ZoomPan({ vista, onVista, style, children }) {
         onPointerDown={sinGesto}
         style={{ position: 'absolute', top: 8, right: 8, display: 'flex', flexDirection: 'column', borderRadius: 6, overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}
       >
-        <button type="button" aria-label="Acercar" title="Acercar (Ctrl + rueda)" disabled={!puedeAcercar}
+        <button type="button" aria-label="Acercar" title={ruedaSinCtrl ? 'Acercar (rueda del mouse)' : 'Acercar (Ctrl + rueda)'} disabled={!puedeAcercar}
           onClick={() => zoomBoton(PASO_BOTON)} style={{ ...botonStyle, opacity: puedeAcercar ? 1 : 0.5, cursor: puedeAcercar ? 'pointer' : 'not-allowed' }}>
           <IconoAgregar size={16} />
         </button>
@@ -158,7 +159,7 @@ export default function ZoomPan({ vista, onVista, style, children }) {
           padding: '3px 8px', borderRadius: 999, fontFamily: 'var(--font-ui)', fontSize: 11,
           background: 'var(--bg-card-solid)', color: 'var(--text-muted)', border: '1px solid var(--border)',
         }}>
-          Ctrl + rueda para acercar
+          {ruedaSinCtrl ? 'Rueda para acercar' : 'Ctrl + rueda para acercar'}
         </div>
       )}
     </div>

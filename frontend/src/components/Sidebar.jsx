@@ -5,6 +5,7 @@ import { IconoAjustes, IconoCerrar, IconoCuadricula, IconoFlechaAdelante, IconoF
 import { useAuth } from '../auth/AuthContext';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import pixelrustLogo from '../assets/pixelrust-logo.png';
+import { radioAvatarPx } from '../lib/avatarCrop';
 
 const AVATAR_STORAGE_KEY = 'corria-avatar-color';
 const NAME_STORAGE_KEY = 'corria-display-name';
@@ -804,8 +805,9 @@ export default function Sidebar({
                 <img
                   src={avatarFoto} alt=""
                   style={{
-                    width: 35, height: 35, borderRadius: 10, objectFit: 'cover',
+                    width: 35, height: 35, borderRadius: radioAvatarPx(35), objectFit: 'cover',
                     flexShrink: 0, boxShadow: '0 4px 12px rgba(20,50,163,0.18)',
+                    border: `2px solid ${avatarColor}`, boxSizing: 'border-box',
                   }}
                 />
               ) : (
@@ -814,10 +816,9 @@ export default function Sidebar({
                     width: 35,
                     height: 35,
 
-                    borderRadius: 10,
+                    borderRadius: radioAvatarPx(35),
 
-                    background:
-                      `linear-gradient(135deg, ${avatarColor}, var(--accent-amber))`,
+                    background: avatarColor,
 
                     display: 'flex',
 
@@ -933,8 +934,9 @@ export default function Sidebar({
                 <img
                   src={avatarFoto} alt=""
                   style={{
-                    width: 35, height: 35, borderRadius: 10, objectFit: 'cover',
+                    width: 35, height: 35, borderRadius: radioAvatarPx(35), objectFit: 'cover',
                     boxShadow: '0 4px 12px rgba(20,50,163,0.18)',
+                    border: `2px solid ${avatarColor}`, boxSizing: 'border-box',
                   }}
                 />
               ) : (
@@ -943,10 +945,9 @@ export default function Sidebar({
                     width: 35,
                     height: 35,
 
-                    borderRadius: 10,
+                    borderRadius: radioAvatarPx(35),
 
-                    background:
-                      `linear-gradient(135deg, ${avatarColor}, var(--accent-amber))`,
+                    background: avatarColor,
 
                     display: 'flex',
 
