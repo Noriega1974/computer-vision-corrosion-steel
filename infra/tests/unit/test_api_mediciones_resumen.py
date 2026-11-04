@@ -243,9 +243,11 @@ def test_recientes_con_rango_marca_truncado_y_recorta(h):
 def test_recientes_solo_desde_o_solo_hasta(h):
     _poner(h, [], pagina=1000)
     _recientes(h, desde="2026-10-26")
-    assert _valores(h.tabla.kwargs[-1]) == ["medicion", "2026-10-26T05:00:00", "~"]
+    assert _valores(h.tabla.kwargs[-1]) == ["medicion", "2026-10-26T05:00:00"]
     _recientes(h, hasta="2026-10-26")
-    assert _valores(h.tabla.kwargs[-1]) == ["medicion", "", "2026-10-27T04:59:59.999999+00:00"]
+    valores = _valores(h.tabla.kwargs[-1])
+    assert valores == ["medicion", "2026-10-27T04:59:59.999999+00:00"]
+    assert "" not in valores  # real DynamoDB rejects empty key values
 
 
 def test_recientes_super_admin_sin_filtro_de_empresa(h, monkeypatch):
