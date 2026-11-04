@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useResumenDiario } from '../hooks/useResumenDiario';
 import { anioColombia } from '../lib/fechas';
 import { aniosDesde } from '../lib/resumenDiario';
-import { puntosTendencia, textoPromedioDia, textoDetalleDia, pctTexto } from '../lib/tendenciaDiaria';
+import { puntosTendencia, textoPromedioDia, textoDetalleDia, resumenAccesible } from '../lib/tendenciaDiaria';
+import { formatoPct } from '../lib/textUtils';
 import { nivelColor, nivelLabel } from '../lib/statusUtils';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import Skeleton, { SkeletonLinea } from './Skeleton';
@@ -34,6 +35,8 @@ export default function TendenciaPunto({ punto }) {
   // Lectura del punto bajo el cursor; va en una línea fija sobre la gráfica
   // para no tapar los ejes.
   const [puntoActivo, setPuntoActivo] = useState(null);
+  // A hovered day of the previous point must not linger when another is chosen.
+  useEffect(() => { setPuntoActivo(null); }, [idPunto]);
 
   const trendData = useMemo(() => puntosTendencia(resumen.dias), [resumen.dias]);
 
@@ -53,17 +56,23 @@ export default function TendenciaPunto({ punto }) {
     contenido = <div style={AVISO_STYLE}>Este punto necesita mediciones en al menos dos días para mostrar su tendencia</div>;
   } else {
     const d = puntoActivo ?? trendData[trendData.length - 1];
+    const ultimo = trendData[trendData.length - 1];
     contenido = (
-      <div>
+      <div role="group" aria-label={`Tendencia del área corroída. Último día: ${textoPromedioDia(ultimo)}`}>
         <div aria-live="off" style={{
           fontFamily: 'var(--font-data)', fontSize: 'var(--text-2xs)', color: 'var(--text-muted)',
           marginBottom: 'var(--space-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
           <div style={{ minHeight: 16, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {d.etiqueta} · <strong style={{ color: 'var(--accent-amber)' }}>{pctTexto(d.promedio)}</strong> promedio
+            {d.etiqueta} · <strong style={{ color: 'var(--accent-amber)' }}>{formatoPct(d.promedio)}</strong> promedio
           </div>
           <div style={{ minHeight: 16, overflow: 'hidden', textOverflow: 'ellipsis' }}>{textoDetalleDia(d, nivelLabel)}</div>
         </div>
+        {/* The chart is pointer-only; the list below is its equivalent for keyboard and screen readers. */}
+        <ul className="sr-only-pw" aria-label="Últimos 7 días con mediciones">
+          {resumenAccesible(trendData, nivelLabel).map((linea) => <li key={linea}>{linea}</li>)}
+        </ul>
+        <div aria-hidden="true">
         <ResponsiveContainer width="100%" height={ALTO_GRAFICA}>
           <AreaChart
             data={trendData}
@@ -91,6 +100,12 @@ export default function TendenciaPunto({ punto }) {
             />
           </AreaChart>
         </ResponsiveContainer>
+        </div>
+        {resumen.truncado && (
+          <div role="note" style={{ fontFamily: 'var(--font-ui)', fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', marginTop: 'var(--space-1)' }}>
+            Datos parciales: este punto tiene más mediciones de las que se pueden resumir.
+          </div>
+        )}
       </div>
     );
   }
