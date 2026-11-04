@@ -107,3 +107,13 @@ def test_ruta_resumen_diario_get_con_cognito_en_la_lambda_de_mediciones():
     metodos = api.find_resources("AWS::ApiGateway::Method", {"Properties": {"HttpMethod": "GET", "AuthorizationType": "COGNITO_USER_POOLS"}})
     de_la_ruta = [m for m in metodos.values() if m["Properties"]["ResourceId"] == {"Ref": id_recurso}]
     assert len(de_la_ruta) == 1 and "Mediciones" in str(de_la_ruta[0]["Properties"]["Integration"]["Uri"])
+
+
+def test_ruta_indicadores_get_con_cognito_en_la_lambda_de_mediciones():
+    api, _ = _stacks()
+    recursos = api.find_resources("AWS::ApiGateway::Resource", {"Properties": {"PathPart": "indicadores"}})
+    assert len(recursos) == 1
+    id_recurso = next(iter(recursos))
+    metodos = api.find_resources("AWS::ApiGateway::Method", {"Properties": {"HttpMethod": "GET", "AuthorizationType": "COGNITO_USER_POOLS"}})
+    de_la_ruta = [m for m in metodos.values() if m["Properties"]["ResourceId"] == {"Ref": id_recurso}]
+    assert len(de_la_ruta) == 1 and "Mediciones" in str(de_la_ruta[0]["Properties"]["Integration"]["Uri"])

@@ -19,6 +19,8 @@ Rutas:
                                       ?anio=YYYY (obligatorio), ?id_punto=BLQ-... (opcional),
                                       ?empresa_id=EMP-... (opcional, solo lo respeta super_admin);
                                       solo lectura, pagina todo (sin el tope de 1000)
+  GET    /indicadores              → indicadores globales del sistema (ver `_indicadores`):
+                                      ?empresa_id=EMP-... (opcional, solo lo respeta super_admin)
   GET    /mediciones/recientes     → últimas N mediciones, filtrado por empresa (cualquier rol)
                                       ?limit=N (def. 20, máx. 1000), ?resumen=1 quita campos pesados,
                                       ?desde=YYYY-MM-DD&hasta=YYYY-MM-DD acota por día local (UTC-5)
@@ -476,6 +478,195 @@ def _resumen_diario(event: dict) -> dict:
     })
 
 
+# ── Indicadores globales (GET /indicadores) ──────────────────────────────────
+
+VENTANA_DIAS = 30
+LISTA_SUBIERON_MAX = 10
+PAGINA_ESTADO = 100       # ítems por página al buscar los dos últimos días de un punto
+MAX_PAGINAS_ESTADO = 10   # tope de páginas por punto (acota el costo de un punto enorme)
+
+
+def _ahora() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _nivel_ponderado(suma_niveles: int, n: int) -> int | None:
+    """Media de niveles redondeada half-up (igual que resumen-diario)."""
+    return int(math.floor(suma_niveles / n + 0.5)) if n else None
+
+
+def _puntos_en_alcance(creador: dict, empresa_filtro: str | None) -> list:
+    """Puntos (bloques) activos del alcance del usuario: super_admin todos o los
+    de `empresa_filtro`; el resto, los de su empresa. Lee la tabla `bloques`
+    con proyección (mismo origen que GET /bloques)."""
+    nombres = {"#i": "id_bloque", "#n": "nombre", "#a": "activo", "#e": "empresa_id"}
+    kwargs: dict = {"ProjectionExpression": "#i, #n, #a, #e", "ExpressionAttributeNames": nombres}
+    if creador.get("rol") == "super_admin":
+        empresa = empresa_filtro
+    else:
+        empresa = creador.get("empresa_id")
+        if not empresa:
+            return []   # sin empresa: no ve ningún punto
+    if empresa:
+        operacion = tabla_bloques.query
+        kwargs["IndexName"] = "empresa_id-index"
+        kwargs["KeyConditionExpression"] = Key("empresa_id").eq(empresa)
+    else:
+        operacion = tabla_bloques.scan
+    items: list = []
+    for _ in range(MAX_PAGINAS_RESUMEN):
+        resp = operacion(**kwargs)
+        items.extend(resp.get("Items", []))
+        ultima = resp.get("LastEvaluatedKey")
+        if not ultima:
+            break
+        kwargs = {**kwargs, "ExclusiveStartKey": ultima}
+    return [b for b in items if b.get("activo") is not False and b.get("id_bloque")]
+
+
+def _estado_actual(id_punto: str) -> dict | None:
+    """Estado del punto en su último día local medido y en el anterior.
+
+    Una Query por punto (ScanIndexForward=False, proyección mínima) que pagina
+    solo hasta ver 3 días locales distintos (el tercero confirma que el segundo
+    está completo) o agotar la partición, con tope MAX_PAGINAS_ESTADO. Costo:
+    O(P) consultas secuenciales, cada una de pocas páginas; P < 200.
+    Devuelve None si el punto no tiene mediciones."""
+    nombres = {"#t": "timestamp", "#n": "nivel_corrosion", "#p": "area_corroida_pct"}
+    kwargs = {
+        "KeyConditionExpression": Key("id_punto").eq(id_punto) & Key("sk").begins_with(SK_MEDICION_PREFIJO),
+        "ScanIndexForward": False,
+        "Limit": PAGINA_ESTADO,
+        "ProjectionExpression": "#t, #n, #p",
+        "ExpressionAttributeNames": nombres,
+    }
+    dias: dict = {}   # dia -> [suma_pct, n_pct, suma_niv, n_niv]; dict conserva el orden (recientes primero)
+    for _ in range(MAX_PAGINAS_ESTADO):
+        resp = tabla.query(**kwargs)
+        for it in resp.get("Items", []):
+            dia = _dia_local(it.get("timestamp"))
+            if not dia:
+                continue
+            if dia not in dias and len(dias) >= 3:
+                continue
+            acc = dias.setdefault(dia, [0.0, 0, 0, 0])
+            pct = _numero(it.get("area_corroida_pct"))
+            if pct is not None:
+                acc[0] += pct
+                acc[1] += 1
+            nivel = _nivel(it.get("nivel_corrosion"))
+            if nivel is not None:
+                acc[2] += nivel
+                acc[3] += 1
+        ultima = resp.get("LastEvaluatedKey")
+        if not ultima or len(dias) >= 3:
+            break
+        kwargs = {**kwargs, "ExclusiveStartKey": ultima}
+    if not dias:
+        return None
+    # Los ítems llegan por sk (≈ timestamp) desc, pero se ordena por día por si el sk difiere.
+    ordenados = sorted(dias, reverse=True)
+
+    def resumen(dia):
+        sp, npct, sn, nn = dias[dia]
+        return {"fecha": dia, "promedio_pct": sp / npct if npct else None, "nivel": _nivel_ponderado(sn, nn)}
+
+    actual = resumen(ordenados[0])
+    actual["anterior_nivel"] = resumen(ordenados[1])["nivel"] if len(ordenados) > 1 else None
+    return actual
+
+
+def _contar_mediciones(desde_ts: str, empresa: str | None, filtrar: bool) -> int:
+    kwargs = {
+        "IndexName": "tipo-timestamp-index",
+        "KeyConditionExpression": Key("tipo_registro").eq("medicion") & Key("timestamp").gte(desde_ts),
+        "Select": "COUNT",
+    }
+    if filtrar:
+        kwargs["FilterExpression"] = Attr("empresa_id").eq(empresa)
+    total = 0
+    for _ in range(MAX_PAGINAS_RESUMEN):
+        resp = tabla.query(**kwargs)
+        total += resp.get("Count", 0)
+        ultima = resp.get("LastEvaluatedKey")
+        if not ultima:
+            break
+        kwargs = {**kwargs, "ExclusiveStartKey": ultima}
+    return total
+
+
+def _indicadores(event: dict) -> dict:
+    """GET /indicadores[?empresa_id=]: estado actual de cada punto activo del
+    alcance (super_admin: todo o `empresa_id`; el resto: su empresa), calculado
+    en el servidor. Solo lectura."""
+    creador = _usuario_actual(event)
+    if not creador:
+        return _respuesta(403, {"error": "No tienes permiso para ver los indicadores. Pide ayuda a un administrador"})
+    es_super = creador.get("rol") == "super_admin"
+    qp = event.get("queryStringParameters") or {}
+    empresa_filtro = (qp.get("empresa_id") or "").strip() or None if es_super else None
+
+    ahora = _ahora()
+    hoy = ahora.astimezone(TZ_LOCAL).date()
+    inicio = hoy - timedelta(days=VENTANA_DIAS - 1)   # ventana: hoy y los 29 días locales anteriores
+    inicio_iso = inicio.isoformat()
+
+    puntos = sorted(_puntos_en_alcance(creador, empresa_filtro), key=lambda b: (str(b.get("nombre") or ""), b["id_bloque"]))
+    por_nivel = [0, 0, 0, 0]
+    sin_mediciones = 0
+    criticos, subieron, con_30d, atrasados = [], [], 0, []
+    for b in puntos:
+        nombre = b.get("nombre") or b["id_bloque"]
+        est = _estado_actual(b["id_bloque"])
+        if est is None:
+            sin_mediciones += 1
+            atrasados.append((0, None, nombre, b["id_bloque"]))
+            continue
+        fecha = est["fecha"]
+        dentro = fecha >= inicio_iso
+        if est["nivel"] is not None:
+            por_nivel[est["nivel"]] += 1
+        else:
+            sin_mediciones += 1   # medido, pero sin nivel válido: no cuenta en ningún nivel
+        if dentro:
+            con_30d += 1
+        if est["promedio_pct"] is not None:
+            criticos.append((est["promedio_pct"], est["nivel"] if est["nivel"] is not None else -1, fecha, b["id_bloque"], nombre))
+        if dentro and est["nivel"] is not None and est["anterior_nivel"] is not None and est["nivel"] > est["anterior_nivel"]:
+            subieron.append({"id_punto": b["id_bloque"], "nombre": nombre, "de": est["anterior_nivel"], "a": est["nivel"], "fecha": fecha})
+        atrasados.append((1, fecha, nombre, b["id_bloque"]))
+
+    mas_critico = None
+    if criticos:
+        pct, nivel, fecha, idp, nombre = max(criticos, key=lambda c: (c[0], c[1], c[2]))
+        mas_critico = {"id_punto": idp, "nombre": nombre, "promedio_pct": pct, "nivel": nivel if nivel >= 0 else None, "fecha": fecha}
+
+    mas_atrasado = None
+    if atrasados:
+        # Sin mediciones primero; luego la medición más antigua.
+        _, fecha, nombre, idp = min(atrasados, key=lambda a: (a[0], a[1] or "", a[2]))
+        dias = (hoy - date.fromisoformat(fecha)).days if fecha else None
+        mas_atrasado = {"id_punto": idp, "nombre": nombre, "dias": dias, "fecha": fecha}
+
+    subieron.sort(key=lambda s: (-(s["a"] - s["de"]), -s["a"], s["nombre"]))
+    empresa_conteo = empresa_filtro if es_super else creador.get("empresa_id")
+    if not es_super and not empresa_conteo:
+        mediciones_30d = 0
+    else:
+        mediciones_30d = _contar_mediciones(_inicio_dia_utc(inicio), empresa_conteo, bool(empresa_conteo))
+
+    return _respuesta(200, {
+        "total_puntos": len(puntos),
+        "por_nivel": por_nivel,
+        "sin_mediciones": sin_mediciones,
+        "mas_critico": mas_critico,
+        "subieron_nivel": {"cantidad": len(subieron), "puntos": subieron[:LISTA_SUBIERON_MAX]},
+        "cobertura": {"con_medicion_30d": con_30d, "total_puntos": len(puntos), "mas_atrasado": mas_atrasado},
+        "mediciones_30d": mediciones_30d,
+        "generado_en": ahora.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    })
+
+
 ADVERTENCIA_S3 = "La medición se eliminó, pero una de sus imágenes no se pudo borrar del almacenamiento."
 
 
@@ -789,6 +980,10 @@ def lambda_handler(event: dict, context) -> dict:
         # ── PATCH /mediciones/{id_punto} ─────────────────────────────────────
         if http_method == "PATCH" and id_punto:
             return _renombrar_medicion(event, id_punto)
+
+        # ── GET /indicadores ─────────────────────────────────────────────────
+        if http_method == "GET" and resource == "/indicadores":
+            return _indicadores(event)
 
         # ── GET /mediciones/resumen-diario ───────────────────────────────────
         if resource == "/mediciones/resumen-diario":
