@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
 import { useMedicionesPunto } from '../hooks/useMedicionesPunto';
 import { useResumenDiario } from '../hooks/useResumenDiario';
 import { useMedicionesDia } from '../hooks/useMedicionesDia';
@@ -8,13 +7,13 @@ import {
 } from '../lib/statusUtils';
 import Skeleton, { SkeletonLinea } from './Skeleton';
 import { useConteoRecordado } from '../hooks/useConteoRecordado';
-import { formatFecha } from '../utils/dateFormat';
 import { formatoPct, etiquetaBase } from '../lib/textUtils';
 import { agruparPorLote } from '../lib/galeriaCarpetas';
-import { aniosDesde, textoImagenesYLotes } from '../lib/resumenDiario';
+import { aniosDesde, textoMedicionesConLotes, textoMedicionesDia } from '../lib/resumenDiario';
 import { formatearFechaDiaPunto } from '../lib/historialPunto';
 import TarjetaLote, { FichaDetalleLote } from './TarjetaLote';
-import { IconoCamara, IconoHumedad, IconoLluvia, IconoReloj, IconoTemperatura, IconoViento } from './Iconos';
+import { Mosaico, TesteraFoto } from './Mosaico';
+import { IconoHumedad, IconoLluvia, IconoReloj, IconoTemperatura, IconoViento } from './Iconos';
 
 // Estilos de texto compartidos con el esqueleto: mismo line-height cargado o no.
 const RESUMEN_STYLE = {
@@ -158,48 +157,47 @@ export default function PlantDetail({ punto }) {
           </div>
         </div>
 
-        {/* 3. Clima: cada dato en una línea (icono, valor, nombre) */}
-        {stats.length > 0 && (
-          <div style={{
-            background: 'var(--bg-card)', border: '1px solid var(--border)',
-            borderRadius: 8, padding: '5px 8px',
-            display: 'grid',
-            gridTemplateColumns: 'auto auto',
-            justifyContent: 'space-between',
-            gap: '3px 10px',
-          }}>
-            {stats.map(({ Icon, label, v }) => (
-              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, whiteSpace: 'nowrap' }}>
-                <Icon size={14} strokeWidth={2} style={{ color: 'var(--accent-amber)', flexShrink: 0 }} />
-                <span style={{
-                  fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 13,
-                  color: 'var(--text-primary)', letterSpacing: '-0.01em',
-                }}>
-                  {v}
-                </span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {label}
-                </span>
-              </div>
-            ))}
+        {/* 3. Conteo ("X mediciones con Y lotes") junto al clima, en el mismo bloque */}
+        <div style={{
+          background: 'var(--bg-card)', border: '1px solid var(--border)',
+          borderRadius: 8, padding: '5px 8px', display: 'flex', flexDirection: 'column', gap: 4,
+        }}>
+          <div style={RESUMEN_STYLE}>
+            {resumen.loading ? (
+              <span aria-busy="true"><SkeletonLinea width={200} /></span>
+            ) : resumen.error ? (
+              <span style={{ color: 'var(--accent-red)' }}>No se pudo cargar el conteo de mediciones</span>
+            ) : (
+              <strong style={{ color: 'var(--text-primary)', fontSize: 13 }}>
+                {textoMedicionesConLotes(resumen.totales.imagenes, resumen.totales.lotes)}
+              </strong>
+            )}
           </div>
-        )}
-
-        {/* 4. Resumen: conteo unificado de imágenes/lotes y última área corroída */}
-        <div style={RESUMEN_STYLE}>
-          {resumen.loading ? (
-            <span aria-busy="true"><SkeletonLinea width={200} /></span>
-          ) : resumen.error ? (
-            <span style={{ color: 'var(--accent-red)' }}>No se pudo cargar el conteo de imágenes</span>
-          ) : (
-            <strong style={{ color: 'var(--text-primary)' }}>
-              {textoImagenesYLotes(resumen.totales.imagenes, {
-                count: resumen.totales.lotes,
-                imagenes: resumen.totales.imagenes_en_lotes,
-              })}
-            </strong>
+          {stats.length > 0 && (
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'auto auto', justifyContent: 'space-between',
+              gap: '3px 10px', paddingTop: 4, borderTop: '1px solid var(--border)',
+            }}>
+              {stats.map(({ Icon, label, v }) => (
+                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, whiteSpace: 'nowrap' }}>
+                  <Icon size={14} strokeWidth={2} style={{ color: 'var(--accent-amber)', flexShrink: 0 }} />
+                  <span style={{
+                    fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 13,
+                    color: 'var(--text-primary)', letterSpacing: '-0.01em',
+                  }}>
+                    {v}
+                  </span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {label}
+                  </span>
+                </div>
+              ))}
+            </div>
           )}
-          {' · '}
+        </div>
+
+        {/* 4. Última área corroída */}
+        <div style={RESUMEN_STYLE}>
           {cargandoUltima
             ? 'Cargando la última lectura...'
             : errorUltima
@@ -312,7 +310,7 @@ export default function PlantDetail({ punto }) {
                       fontWeight: 600,
                       fontVariantNumeric: 'tabular-nums',
                     }}>
-                      {formatearFechaDiaPunto(diaResumen.fecha)} · {textoImagenesYLotes(diaResumen.total, diaResumen.lotes)}
+                      {formatearFechaDiaPunto(diaResumen.fecha)} · {textoMedicionesDia(diaResumen.total, diaResumen.lotes)}
                     </div>
                   )}
                 </div>
@@ -384,7 +382,7 @@ const botonVolverStyle = {
   cursor: 'pointer',
 };
 
-// Caja de un día: fecha como título, "N imágenes · x lotes con y imágenes" debajo.
+// Caja de un día: fecha como título, "N mediciones · x lotes" debajo.
 function CajaDia({ dia, onAbrir }) {
   const nivel = dia.peor_nivel;
   const color = nivel == null ? 'var(--text-muted)' : nivelColor(nivel);
@@ -408,7 +406,7 @@ function CajaDia({ dia, onAbrir }) {
           fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)',
           marginTop: 2, fontVariantNumeric: 'tabular-nums',
         }}>
-          {textoImagenesYLotes(dia.total, dia.lotes)}
+          {textoMedicionesDia(dia.total, dia.lotes)}
         </div>
       </div>
 
@@ -429,97 +427,23 @@ function CajaDia({ dia, onAbrir }) {
   );
 }
 
-// Filas de fotos en tandas de FILAS_POR_TANDA con "Mostrar más".
+// Fotos en una cuadrícula de altura fija con scroll, en tandas de FILAS_POR_TANDA
+// con "Mostrar más". Cada casilla abre el detalle de esa foto en la galería.
 function ListaFilas({ filas, visibles, onMas, idPunto }) {
   const mostradas = filas.slice(0, visibles);
+  if (filas.length === 0) return null;
   return (
     <>
-      {mostradas.map((m, i) => (
-        <MedicionRow key={m.id_medicion ?? i} medicion={m} idPunto={idPunto} />
-      ))}
+      <Mosaico altoMax={280} label="Fotos">
+        {mostradas.map((m, i) => (
+          <TesteraFoto key={m.id_medicion ?? i} medicion={m} idPunto={idPunto} />
+        ))}
+      </Mosaico>
       {filas.length > visibles && (
         <button type="button" onClick={onMas} style={{ ...botonVolverStyle, alignSelf: 'center', margin: '4px 0' }}>
           Mostrar más ({filas.length - visibles} restantes)
         </button>
       )}
     </>
-  );
-}
-
-// Cada fila abre el detalle de esa foto en la galería.
-function MedicionRow({ medicion, idPunto }) {
-  const nivel = medicion.nivel_corrosion ?? 0;
-  const color = nivelColor(nivel);
-  const fecha = formatFecha(medicion.timestamp, { conHora: true });
-
-  const idBloque = medicion.bloque_id ?? idPunto;
-  const contenido = (
-    <>
-      {/* Miniatura -- 36px, así que usa url_thumbnail (~400px) en vez de
-          bajar la foto original completa para mostrar un cuadrito */}
-      {medicion.url_imagen ? (
-        <img
-          src={medicion.url_thumbnail || medicion.url_imagen}
-          alt=""
-          loading="lazy"
-          style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 4, flexShrink: 0, border: '1px solid var(--border)' }}
-        />
-      ) : (
-        <div style={{
-          width: 36, height: 36, borderRadius: 4, flexShrink: 0,
-          background: `${color}15`, border: `1px solid ${color}30`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color,
-        }}>
-          <IconoCamara size={16} aria-hidden="true" />
-        </div>
-      )}
-
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {medicion.nombre && (
-          <div style={{
-            fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2,
-            fontFamily: 'var(--font-ui)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
-            {medicion.nombre}
-          </div>
-        )}
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-          <span style={{ ...HISTORIAL_LINEA_STYLE, color, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            {/* Decorative: the label carries the meaning */}
-            <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
-            {nivelLabel(nivel)}
-          </span>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{fecha}</span>
-        </div>
-        <div style={{ height: 3, background: 'var(--border)', borderRadius: 2 }}>
-          <div style={{
-            height: '100%',
-            width: `${Math.min(100, (medicion.area_corroida_pct ?? 0) * 2)}%`,
-            background: color, borderRadius: 2,
-          }} />
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, display: 'flex', justifyContent: 'space-between' }}>
-          <span>Área corroída: {formatoPct(medicion.area_corroida_pct)} {etiquetaBase(medicion)}</span>
-          {medicion.notas && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 100 }}>{medicion.notas}</span>}
-        </div>
-      </div>
-    </>
-  );
-
-  if (!medicion.id_medicion) {
-    return <div className="historial-fila">{contenido}</div>;
-  }
-  const destino = idBloque
-    ? `/galeria/${encodeURIComponent(medicion.id_medicion)}?punto=${encodeURIComponent(idBloque)}`
-    : `/galeria/${encodeURIComponent(medicion.id_medicion)}`;
-  return (
-    <Link
-      to={destino}
-      className="historial-fila historial-fila--link"
-      aria-label={`Ver foto del ${fecha}: ${nivelLabel(nivel)}, ${formatoPct(medicion.area_corroida_pct)}`}
-    >
-      {contenido}
-    </Link>
   );
 }

@@ -276,6 +276,52 @@ export function FichaDetalleLote({ lote, onVolver, textoVolver = '← Volver', a
   const total = lote.total ?? 0;
   const fechaTexto = lote.ultimaFecha ? formatFecha(lote.ultimaFecha, { conHora: true }) : 'Sin fecha';
 
+  if (compacta) {
+    const chip = {
+      display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 7px', borderRadius: 999,
+      background: 'var(--bg-inset)', border: '1px solid var(--border)', color: 'var(--text-secondary)',
+      fontSize: 'var(--text-3xs)', fontWeight: 600, whiteSpace: 'nowrap',
+    };
+    return (
+      <div style={{
+        display: 'flex', flexDirection: 'column', gap: 4, padding: '6px 10px', marginBottom: 6,
+        background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8,
+        fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+            {onVolver && (
+              <button type="button" onClick={onVolver} style={{
+                padding: '2px 8px', background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 999,
+                cursor: 'pointer', color: 'var(--text-secondary)', fontWeight: 600, fontSize: 'var(--text-3xs)', flexShrink: 0,
+              }}>{textoVolver}</button>
+            )}
+            <span style={{
+              fontWeight: 700, fontSize: 'var(--text-xs)', color: 'var(--text-primary)',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              Lote: {lote.nombre}
+            </span>
+            <EstadoLoteBadge estado={lote.estado} />
+          </div>
+          {acciones && <div style={{ marginLeft: 'auto' }}>{acciones}</div>}
+        </div>
+        <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-muted)' }}>
+          {total} {total === 1 ? 'imagen' : 'imágenes'} · Fecha: {fechaTexto}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }} role="group" aria-label="Resumen del lote">
+          <span style={chip}>{total} img</span>
+          <span style={{ ...chip, color, background: bg, borderColor: `${color}45`, fontWeight: 700 }}>
+            <NivelIcon nivel={peorNivel} size={11} color={color} />
+            {nivelLabel(peorNivel)}
+          </span>
+          <span style={chip}>máx {formatoPct(lote.peorPct ?? 0)}</span>
+          <span style={chip}>prom {formatoPct(lote.promedioPct ?? 0)}</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{
       display: 'flex',

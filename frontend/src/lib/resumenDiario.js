@@ -43,3 +43,19 @@ export function textoImagenesYLotes(total, lotes) {
   const imagenes = Number(lotes?.imagenes) || 0;
   return `${plural(total, 'imagen', 'imágenes')} · ${plural(count, 'lote', 'lotes')} con ${plural(imagenes, 'imagen', 'imágenes')}`;
 }
+
+// "X mediciones con Y lotes" (header of a location). Without batches: "X mediciones".
+export function textoMedicionesConLotes(mediciones, lotes) {
+  const n = Number(mediciones) || 0;
+  const l = Number(lotes) || 0;
+  const base = plural(n, 'medición', 'mediciones');
+  return l > 0 ? `${base} con ${plural(l, 'lote', 'lotes')}` : base;
+}
+
+// "N mediciones · x lotes" (box of one day). Without batches: "N mediciones".
+export function textoMedicionesDia(total, lotes) {
+  const n = Number(total) || 0;
+  const l = Number(lotes?.count) || 0;
+  const base = plural(n, 'medición', 'mediciones');
+  return l > 0 ? `${base} · ${plural(l, 'lote', 'lotes')}` : base;
+}

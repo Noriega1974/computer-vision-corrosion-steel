@@ -335,8 +335,9 @@ export default function GaleriaFotos({
               lote={loteAbierto}
               onVolver={() => { setLoteAbiertoId(null); salirDeSeleccion(); }}
               textoVolver="← Todos los lotes del punto"
+              compacta
               acciones={puedeGestionar ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <button
                     type="button"
                     onClick={() => accionDeLote(null)}
@@ -344,13 +345,13 @@ export default function GaleriaFotos({
                     title={tituloAccionLote}
                     style={{
                       opacity: accionesLoteBloqueadas ? 0.5 : 1,
-                      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+                      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 9px',
                       background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 7,
                       cursor: accionesLoteBloqueadas ? 'not-allowed' : 'pointer', color: 'var(--text-primary)',
-                      fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
+                      fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-2xs)',
                     }}
                   >
-                    <IconoCasillaMarcada size={14} aria-hidden="true" />
+                    <IconoCasillaMarcada size={13} aria-hidden="true" />
                     Seleccionar lote completo
                   </button>
                   <button
@@ -360,13 +361,13 @@ export default function GaleriaFotos({
                     title={tituloAccionLote}
                     style={{
                       opacity: accionesLoteBloqueadas ? 0.5 : 1,
-                      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+                      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 9px',
                       background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 7,
                       cursor: accionesLoteBloqueadas ? 'not-allowed' : 'pointer', color: 'var(--text-secondary)',
-                      fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
+                      fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-2xs)',
                     }}
                   >
-                    <IconoMoverACarpeta size={14} aria-hidden="true" />
+                    <IconoMoverACarpeta size={13} aria-hidden="true" />
                     Mover lote
                   </button>
                   <button
@@ -376,13 +377,13 @@ export default function GaleriaFotos({
                     title={tituloAccionLote}
                     style={{
                       opacity: accionesLoteBloqueadas ? 0.5 : 1,
-                      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+                      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 9px',
                       background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.3)', borderRadius: 7,
                       cursor: accionesLoteBloqueadas ? 'not-allowed' : 'pointer', color: 'var(--accent-red)',
-                      fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
+                      fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-2xs)',
                     }}
                   >
-                    <IconoEliminar size={14} aria-hidden="true" />
+                    <IconoEliminar size={13} aria-hidden="true" />
                     Eliminar lote
                   </button>
                 </div>

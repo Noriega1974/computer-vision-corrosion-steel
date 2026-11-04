@@ -2342,3 +2342,100 @@ select option {
     letter-spacing: 0;
   }
 }
+
+/* ── Mosaico: cuadrícula de fotos cuadradas en un área definida con scroll ── */
+.mosaico {
+  --mosaico-min: 96px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--mosaico-min), 1fr));
+  gap: 6px;
+  max-height: var(--mosaico-alto, 300px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px;
+  align-content: start;
+}
+.mosaico--ancho { --mosaico-min: 140px; gap: 10px; }
+.mosaico--sin-tope { max-height: none; overflow: visible; }
+.mosaico:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 1px; }
+
+.mosaico-tile {
+  position: relative;
+  display: block;
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-inset);
+  color: #fff;
+  text-decoration: none;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  text-align: left;
+  transition: border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.mosaico-tile:hover { border-color: var(--border-strong); }
+.mosaico-tile:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 1px; }
+@media (hover: hover) and (pointer: fine) {
+  .mosaico-tile:hover { transform: translateY(-1px); }
+}
+.mosaico-tile--lote { border-color: var(--border-strong); }
+.mosaico-tile--abierto { box-shadow: 0 0 0 2px var(--accent-amber); }
+.mosaico-tile__img {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; display: block;
+}
+.mosaico-tile__vacio {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  color: var(--text-faint);
+}
+.mosaico-tile__punto {
+  position: absolute; top: 6px; left: 6px; width: 10px; height: 10px; border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.9); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.mosaico-tile__cuenta {
+  position: absolute; top: 5px; right: 5px; padding: 1px 6px; border-radius: 999px;
+  background: rgba(0, 0, 0, 0.62); color: #fff; font-size: 10px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.mosaico-tile__pie {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 6px 5px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.78), rgba(0, 0, 0, 0));
+  display: flex; flex-direction: column; gap: 1px; min-width: 0;
+}
+.mosaico-tile__pct {
+  font-weight: 800; font-size: 12px; line-height: 1.1; font-variant-numeric: tabular-nums;
+}
+.mosaico-tile__nombre {
+  font-size: 10px; line-height: 1.15; opacity: 0.9;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.mosaico-tile__estado {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 4px; padding: 6px; text-align: center;
+  background: rgba(0, 0, 0, 0.5); font-size: 11px; font-weight: 700;
+}
+.mosaico-tile__estado--error { background: rgba(127, 29, 29, 0.78); }
+.mosaico-tile__accion {
+  position: absolute; z-index: 2; display: inline-flex; align-items: center; justify-content: center;
+  min-width: 24px; height: 24px; padding: 0 6px; border-radius: 6px; border: none; cursor: pointer;
+  background: rgba(0, 0, 0, 0.68); color: #fff; font-family: var(--font-ui); font-size: 10px; font-weight: 700;
+}
+.mosaico-tile__accion:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+.mosaico-tile__accion--quitar { top: 4px; right: 4px; }
+.mosaico-tile__accion--reintentar { bottom: 4px; left: 50%; transform: translateX(-50%); }
+.mosaico-expandido {
+  grid-column: 1 / -1; padding: 8px; border-radius: 8px;
+  background: var(--bg-inset); border: 1px solid var(--border);
+}
+.mosaico-tile__barra {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0, 0, 0, 0.45);
+}
+.mosaico-tile__barra > span {
+  display: block; height: 100%; background: var(--accent-amber); transition: width 0.3s var(--ease-out);
+}
+@media (prefers-reduced-motion: reduce) {
+  .mosaico-tile, .mosaico-tile__barra > span { transition: none; }
+  .mosaico-tile:hover { transform: none; }
+}
