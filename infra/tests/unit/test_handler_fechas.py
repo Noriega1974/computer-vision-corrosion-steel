@@ -132,6 +132,26 @@ def test_fecha_futura_es_rechazada_con_400(h, reloj):
     assert h.tabla_mediciones.escritos == []
 
 
+def test_el_dia_futuro_es_el_de_colombia_y_no_el_de_utc(h, reloj):
+    # 21:30 in Colombia on Nov 2 is already Nov 3 in UTC: Nov 3 is still the future.
+    reloj["ahora"] = datetime(2026, 11, 3, 2, 30, 0, tzinfo=timezone.utc)
+    resp = h.lambda_handler(_evento("2026-11-03"), None)
+    assert resp["statusCode"] == 400
+    assert "futura" in json.loads(resp["body"])["error"].lower()
+    assert h.tabla_mediciones.escritos == []
+    resp = h.lambda_handler(_evento("2026-11-02"), None)
+    assert resp["statusCode"] == 200, resp["body"]
+    assert h.tabla_mediciones.escritos[0]["timestamp"].startswith("2026-11-02T")
+
+
+@pytest.mark.parametrize("instante,dia", [
+    (datetime(2026, 10, 27, 4, 59, 59, tzinfo=timezone.utc), date(2026, 10, 26)),
+    (datetime(2026, 10, 27, 5, 0, 0, tzinfo=timezone.utc), date(2026, 10, 27)),
+])
+def test_dia_colombia_mismos_vectores_que_el_backend_de_mediciones(h, instante, dia):
+    assert h._dia_colombia(instante) == dia
+
+
 @pytest.mark.parametrize("ausente", [None, "", "ausente"])
 def test_sin_fecha_usa_el_instante_actual(h, reloj, ausente):
     evento = _evento(None)
@@ -163,8 +183,9 @@ def test_timestamp_no_string_es_rechazado_con_400_sin_500(h, valor_no_str):
 
 
 def test_fecha_de_hoy_antes_del_mediodia_utc_nunca_queda_en_el_futuro(h, reloj):
-    # 03:10 UTC: 12:00 + offset would be ~15:10 of the same day, i.e. the future.
-    reloj["ahora"] = datetime(2026, 11, 2, 3, 10, 5, 250000, tzinfo=timezone.utc)
+    # 06:10 UTC (01:10 in Colombia, same calendar day): 12:00 + offset would be
+    # ~18:10 of that day, i.e. the future.
+    reloj["ahora"] = datetime(2026, 11, 2, 6, 10, 5, 250000, tzinfo=timezone.utc)
     resp = h.lambda_handler(_evento("2026-11-02"), None)
     assert resp["statusCode"] == 200, resp["body"]
     ts = datetime.fromisoformat(h.tabla_mediciones.escritos[0]["timestamp"])

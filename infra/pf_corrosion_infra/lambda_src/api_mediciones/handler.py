@@ -23,7 +23,7 @@ Rutas:
                                       ?limit=N (def. 20, máx. 1000), ?resumen=1 quita campos pesados,
                                       ?desde=YYYY-MM-DD&hasta=YYYY-MM-DD acota por día local (UTC-5)
                                       sobre el GSI; con rango el límite por defecto es 1000 y la
-                                      respuesta trae `truncado`. `limit`/`limite` no numérico → 400
+                                      respuesta trae `truncado`. `limit`/`limite` (ambos nombres valen) no numérico → 400
   DELETE /mediciones/{id_punto}    → elimina una medición puntual (super_admin/admin/tecnico)
                                       requiere querystring ?id_medicion=MED-...
   POST   /mediciones/lote/eliminar → elimina varias (máx. 100), body {"items":[{id_punto,id_medicion}]}
@@ -58,6 +58,7 @@ logger.setLevel(logging.INFO)
 TABLA_MEDICIONES = os.environ["TABLA_MEDICIONES"]
 TABLA_USUARIOS = os.environ["TABLA_USUARIOS"]
 TABLA_BLOQUES = os.environ["TABLA_BLOQUES"]
+TABLA_EMPRESAS = os.environ["TABLA_EMPRESAS"]
 BUCKET_NAME = os.environ["BUCKET_NAME"]
 REGION = os.environ["REGION"]
 
@@ -96,6 +97,7 @@ dynamodb = boto3.resource("dynamodb", region_name=REGION)
 tabla = dynamodb.Table(TABLA_MEDICIONES)
 tabla_usuarios = dynamodb.Table(TABLA_USUARIOS)
 tabla_bloques = dynamodb.Table(TABLA_BLOQUES)
+tabla_empresas = dynamodb.Table(TABLA_EMPRESAS)
 # Cliente de bajo nivel (con la conversión de tipos de boto3) para TransactWriteItems.
 cliente_ddb = dynamodb.meta.client
 s3 = boto3.client("s3", region_name=REGION)
@@ -139,6 +141,32 @@ def _usuario_actual(event: dict) -> dict | None:
     )
     items = resp.get("Items", [])
     return items[0] if items else None
+
+
+# ── Cuenta o afiliación desactivada ──────────────────────────────────────────
+# Copia idéntica en api_mediciones, api_puntos e inference (no hay módulo
+# compartido entre lambdas): si cambia una, cambian las tres.
+
+MENSAJE_CUENTA_DESACTIVADA = "Tu cuenta está desactivada. Pide ayuda a un administrador"
+MENSAJE_AFILIACION_DESACTIVADA = "Tu afiliación está desactivada. Pide ayuda a un administrador"
+
+
+def _rechazo_cuenta_inactiva(creador: dict | None) -> dict | None:
+    """403 si el usuario (`activo=false`) o su afiliación (`activa=false`)
+    fue desactivado; None si puede continuar. super_admin y quien no tiene
+    registro quedan fuera: lo segundo lo resuelve cada ruta con su propio
+    chequeo de rol. Sin esto un token todavía vigente seguiría operando hasta
+    que Cognito lo expire."""
+    if not creador or creador.get("rol") == "super_admin":
+        return None
+    if creador.get("activo") is False:
+        return _respuesta(403, {"error": MENSAJE_CUENTA_DESACTIVADA})
+    empresa_id = creador.get("empresa_id")
+    if empresa_id:
+        empresa = tabla_empresas.get_item(Key={"id_empresa": empresa_id}).get("Item")
+        if empresa and empresa.get("activa") is False:
+            return _respuesta(403, {"error": MENSAJE_AFILIACION_DESACTIVADA})
+    return None
 
 
 def _agregar_url_imagen(items: list) -> list:
@@ -292,6 +320,16 @@ def _limite(valor, defecto: int, maximo: int) -> int | None:
         return max(1, min(int(str(valor).strip()), maximo))
     except ValueError:
         return None
+
+
+def _limite_pedido(qp: dict):
+    """Valor crudo del límite: se acepta `limit` y `limite` en todos los listados
+    (el primero que venga con valor; `limit` gana si vienen los dos)."""
+    for nombre in ("limit", "limite"):
+        valor = qp.get(nombre)
+        if valor is not None and valor != "":
+            return valor
+    return None
 
 
 ERROR_LIMITE = {"error": "El límite debe ser un número entero. Corrígelo e inténtalo de nuevo"}
@@ -699,6 +737,10 @@ def lambda_handler(event: dict, context) -> dict:
     id_punto = path_params.get("id_punto")
 
     try:
+        rechazo = _rechazo_cuenta_inactiva(_usuario_actual(event))
+        if rechazo:
+            return rechazo
+
         # ── POST /mediciones/lote/eliminar | /mediciones/lote/mover ──────────
         if http_method == "POST" and resource == "/mediciones/lote/eliminar":
             return _lote_eliminar(event)
@@ -723,7 +765,7 @@ def lambda_handler(event: dict, context) -> dict:
             desde, hasta = qp.get("desde"), qp.get("hasta")
             con_rango = bool(desde or hasta)
             # Con rango el límite por defecto es el máximo (se avisa con `truncado`).
-            limite = _limite(qp.get("limit"), LIMITE_RECIENTES_MAX if con_rango else 20, LIMITE_RECIENTES_MAX)
+            limite = _limite(_limite_pedido(qp), LIMITE_RECIENTES_MAX if con_rango else 20, LIMITE_RECIENTES_MAX)
             if limite is None:
                 return _respuesta(400, ERROR_LIMITE)
             condicion = Key("tipo_registro").eq("medicion")
@@ -778,10 +820,16 @@ def lambda_handler(event: dict, context) -> dict:
             desde, hasta = qp.get("desde"), qp.get("hasta")
             con_rango = bool(desde or hasta)
             # Con rango el límite por defecto es el máximo y se avisa si hay más.
-            limite = _limite(qp.get("limite"), LIMITE_PUNTO_MAX if con_rango else 50, LIMITE_PUNTO_MAX)
+            limite = _limite(_limite_pedido(qp), LIMITE_PUNTO_MAX if con_rango else 50, LIMITE_PUNTO_MAX)
             if limite is None:
                 return _respuesta(400, ERROR_LIMITE)
             creador = _usuario_actual(event)
+            # Defensa en profundidad: además del filtro por empresa de cada
+            # ítem, un punto de otra empresa se trata como inexistente.
+            if not creador or creador.get("rol") != "super_admin":
+                bloque = tabla_bloques.get_item(Key={"id_bloque": id_punto}).get("Item")
+                if bloque and bloque.get("empresa_id") != (creador or {}).get("empresa_id"):
+                    return _respuesta(404, {"error": "No se encontró el punto. Actualiza la lista e inténtalo de nuevo"})
             # ?id_medicion=X: la página de detalle pide UNA medición (con todos
             # sus campos) aunque sea antigua. Se filtra en DynamoDB y se pagina
             # hasta hallarla; el Limit de cada página sigue siendo el máximo.
