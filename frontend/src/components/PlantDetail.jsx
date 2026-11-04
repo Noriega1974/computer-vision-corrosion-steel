@@ -89,20 +89,12 @@ export default function PlantDetail({ punto }) {
 
   if (!punto) {
     return (
-      <div style={{
-        background: 'var(--bg-card)', border: '1px solid var(--border)',
-        height: '100%', display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        color: 'var(--text-muted)', gap: 'var(--space-3)',
+      <p style={{
+        margin: 0, color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)',
+        fontSize: 'var(--text-sm)', lineHeight: 1.45,
       }}>
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" opacity="0.3">
-          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="#7a9ab5" strokeWidth="1.5"/>
-          <circle cx="12" cy="9" r="2.5" stroke="#7a9ab5" strokeWidth="1.5"/>
-        </svg>
-        <div style={{ fontSize: 'var(--text-xs)', letterSpacing: '0.02em', textTransform: 'uppercase', textAlign: 'center', padding: '0 16px', fontWeight: 500 }}>
-          Selecciona un punto en el mapa
-        </div>
-      </div>
+        Selecciona un punto en el mapa o en la lista para ver su historial.
+      </p>
     );
   }
 
@@ -123,7 +115,6 @@ export default function PlantDetail({ punto }) {
 
   return (
     <div style={{
-      background: 'var(--bg-card)', border: '1px solid var(--border)',
       height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden',
     }}>
       {/* Encabezado compacto del punto: 1) nombre + estado, 2) ciudad,
@@ -161,10 +152,7 @@ export default function PlantDetail({ punto }) {
         </div>
 
         {/* 3. Resumen compacto: conteo, clima en una fila y última área corroída */}
-        <div style={{
-          background: 'var(--bg-card)', border: '1px solid var(--border)',
-          borderRadius: 8, padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: 3,
-        }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           <div style={RESUMEN_STYLE}>
             {resumen.loading ? (
               <span aria-busy="true"><SkeletonLinea width={200} /></span>

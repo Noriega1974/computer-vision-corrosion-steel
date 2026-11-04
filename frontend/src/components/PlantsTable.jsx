@@ -58,12 +58,11 @@ export default function PlantsTable({
 
   return (
     <div style={{
-      background: 'var(--bg-card)', border: '1px solid var(--border)',
-      borderRadius: 8, display: 'flex', flexDirection: 'column',
+      display: 'flex', flexDirection: 'column',
       height: '100%', minHeight: 0, overflow: 'hidden',
     }}>
       {/* Header */}
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+      <div style={{ padding: '0 8px 10px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         <div style={{
           fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 'var(--text-sm)',
           letterSpacing: '0.04em', color: 'var(--text-primary)',

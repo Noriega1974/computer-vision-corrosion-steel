@@ -26,19 +26,24 @@ const estiloValor = {
 };
 const estiloEtiqueta = {
   marginTop: 'var(--space-1)',
-  fontSize: 'var(--text-xs)',
+  fontSize: 'var(--text-sm)',
   color: 'var(--text-primary)',
   fontFamily: 'var(--font-ui)',
   fontWeight: 500,
   lineHeight: 1.3,
 };
+// 13px in the UI face; muted (not faint) so the contrast holds in both themes.
 const estiloSub = {
   marginTop: 2,
-  fontSize: 'var(--text-2xs)',
-  color: 'var(--text-faint)',
+  fontSize: 'var(--text-sm)',
+  color: 'var(--text-muted)',
   fontFamily: 'var(--font-ui)',
-  lineHeight: 1.35,
-  overflowWrap: 'anywhere',
+  lineHeight: 1.4,
+  overflowWrap: 'break-word',
+};
+const estiloNumero = { fontFamily: 'var(--font-data)', fontVariantNumeric: 'tabular-nums' };
+const estiloTextoValor = {
+  fontFamily: 'var(--font-ui)', fontSize: 'var(--text-md)', fontWeight: 600, letterSpacing: 0,
 };
 
 // Cada tarjeta responde una pregunta; las lineas finas entre celdas las pone
@@ -85,7 +90,7 @@ function ListaSubieron({ puntos: puntosProp, cantidad, id }) {
       id={id}
       style={{
         margin: 'var(--space-1) 0 0', padding: 0, listStyle: 'none',
-        fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-ui)',
+        fontSize: 'var(--text-sm)', fontFamily: 'var(--font-ui)',
         color: 'var(--text-muted)', lineHeight: 1.45,
       }}
     >
@@ -150,20 +155,20 @@ export default function KPIBar({ empresaId = null }) {
             >
               <BarraNiveles porNivel={datos?.por_nivel} />
               <div style={estiloSub}>{resumenNiveles(datos?.por_nivel) || 'Ningún punto medido'}</div>
-              {sinMed && <div style={{ ...estiloSub, color: 'var(--text-muted)' }}>{sinMed}</div>}
+              {sinMed && <div style={estiloSub}>{sinMed}</div>}
             </Tarjeta>
 
             <Tarjeta
               etiqueta="Punto más crítico"
               valor={critico
-                ? <span style={{ fontSize: 'var(--text-lg)', letterSpacing: '-0.02em', overflowWrap: 'anywhere' }}>{critico.nombre}</span>
+                ? <span className="kpi-nombre" title={critico.nombre} style={{ ...estiloTextoValor, fontSize: 'var(--text-lg)' }}>{critico.nombre}</span>
                 : 'Sin datos'}
               color={critico ? undefined : 'var(--text-faint)'}
               cargando={cargando}
             >
               {critico ? (
                 <div style={estiloSub}>
-                  <span style={{ color: nivelColorTexto(critico.nivel), fontWeight: 600 }}>
+                  <span style={{ color: nivelColorTexto(critico.nivel), fontWeight: 600, ...estiloNumero, fontFamily: 'var(--font-ui)' }}>
                     {textoPromedio(critico.promedio_pct)}
                   </span>
                   {` · ${fechaCorta(critico.fecha)}`}
@@ -198,10 +203,15 @@ export default function KPIBar({ empresaId = null }) {
 
             <Tarjeta
               etiqueta={`Medidos en ${VENTANA_DIAS} días`}
-              valor={textoCobertura(datos?.cobertura)}
+              valor={(
+                <span title={textoCobertura(datos?.cobertura)}>
+                  <span>{Number(datos?.cobertura?.con_medicion_30d) || 0}</span>
+                  <span style={estiloTextoValor}>{` de ${Number(datos?.cobertura?.total_puntos) || 0} ${Number(datos?.cobertura?.total_puntos) === 1 ? 'punto' : 'puntos'}`}</span>
+                </span>
+              )}
               cargando={cargando}
             >
-              {atrasado && <div style={estiloSub}>{atrasado}</div>}
+              {atrasado && <div className="kpi-sub-recortado" title={atrasado} style={estiloSub}>{atrasado}</div>}
             </Tarjeta>
           </div>
 
@@ -209,7 +219,7 @@ export default function KPIBar({ empresaId = null }) {
             {cargando ? <Skeleton width="30%" height={10} /> : textoMediciones30d(datos?.mediciones_30d)}
           </div>
           {!cargando && esParcial(datos) && (
-            <div role="note" style={{ ...estiloSub, marginTop: 'var(--space-1)', color: 'var(--text-muted)' }}>
+            <div role="note" style={{ ...estiloSub, marginTop: 'var(--space-1)' }}>
               Datos parciales: algunos puntos tienen demasiadas mediciones y las cifras pueden estar incompletas.
             </div>
           )}

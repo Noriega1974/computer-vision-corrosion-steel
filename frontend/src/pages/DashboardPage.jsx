@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { IconoFlechaAbajo, IconoFlechaArriba, IconoReloj, IconoSubir } from '../components/Iconos';
 
@@ -87,6 +87,20 @@ export default function DashboardPage() {
   }, [searchParams, puntos]);
 
 
+  // On narrow screens the detail sits far below the list and the map: bring it into
+  // view when the user picks a point (not on the first render, not for a deselect).
+  const detalleRef = useRef(null);
+  const idSeleccionadoPrevio = useRef(null);
+  const idSeleccionado = selectedPunto?.id_bloque ?? null;
+  useEffect(() => {
+    const previo = idSeleccionadoPrevio.current;
+    idSeleccionadoPrevio.current = idSeleccionado;
+    if (!idSeleccionado || idSeleccionado === previo) return;
+    if (!window.matchMedia('(max-width: 1024px)').matches) return;
+    const reducir = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    detalleRef.current?.scrollIntoView({ behavior: reducir ? 'auto' : 'smooth', block: 'start' });
+  }, [idSeleccionado]);
+
   return (
 
     <div
@@ -115,59 +129,29 @@ export default function DashboardPage() {
             KPI SECTION
             ======================================================== */}
 
-        <section
-          className="dashboard-section section-kpi"
-          style={{
-            padding: '12px 18px 16px',
-          }}
-        >
-
-          {/* Header en una sola línea: título y el botón a la derecha. Compacto para dejarles el alto a las dos tarjetas sin
-              empujar el mapa hacia abajo. */}
-
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 'var(--space-3)',
-              marginBottom: 'var(--space-2)',
-            }}
-          >
-
-            <div
-              className="dashboard-section-title"
-            >
+        <section className="dashboard-kpi" aria-labelledby="titulo-indicadores">
+          {/* Título de la sección y acción alineados; las dos tarjetas de abajo son el único nivel de superficie. */}
+          <div className="dashboard-kpi__cabecera">
+            <h2 id="titulo-indicadores" className="dashboard-section-title">
               Indicadores globales
-            </div>
-
-
-            {/* Nueva medición */}
+            </h2>
 
             {puedeSubir && (
-            <Link
-              to="/upload"
-              className="dashboard-action"
-              style={{ padding: '6px 14px', flexShrink: 0 }}
-            >
-
-              <IconoSubir size={14} />
-
-              Nueva medición
-
-            </Link>
+              <Link
+                to="/upload"
+                className="dashboard-action"
+                style={{ padding: '6px 14px', flexShrink: 0 }}
+              >
+                <IconoSubir size={14} />
+                Nueva medición
+              </Link>
             )}
-
           </div>
-
-
-          {/* KPI cards */}
 
           <div className="indicadores-split">
             <KPIBar empresaId={esSuperAdmin && selectedZona?.id_empresa && selectedZona.id_empresa !== 'propia' ? selectedZona.id_empresa : null} />
             <TendenciaPunto punto={selectedPunto} />
           </div>
-
         </section>
 
 
@@ -285,7 +269,8 @@ export default function DashboardPage() {
               DETALLE DE UBICACIÓN
               ====================================================== */}
           <section
-            className="dashboard-section section-detail"
+            ref={detalleRef}
+            className={`dashboard-section section-detail${selectedPunto ? '' : ' section-detail--vacio'}`}
             style={{
               padding: '16px',
               display: 'flex',

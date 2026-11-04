@@ -896,29 +896,34 @@ body {
 .ind-card-label {
   margin-bottom: var(--space-2);
   font-family: var(--font-ui);
-  font-size: var(--text-2xs);
+  font-size: var(--text-sm);
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
   flex: 1;
 }
 
 .kpi-celda {
-  padding: 2px 12px;
+  padding: 10px 16px;
   min-width: 0;
 }
 
-/* Linea fina vertical entre celdas; vale para cualquier cantidad de KPI. */
-.kpi-celda:first-child       { padding-left: 0; }
-.kpi-celda:last-child        { padding-right: 0; }
-.kpi-celda + .kpi-celda      { border-left: 1px solid var(--border); }
+/* 2x2: filetes finos entre celdas (vertical entre columnas, horizontal entre filas). */
+.kpi-celda:nth-child(odd)  { padding-left: 0; }
+.kpi-celda:nth-child(even) { padding-right: 0; border-left: 1px solid var(--border); }
+.kpi-celda:nth-child(n+3)  { border-top: 1px solid var(--border); }
+.kpi-celda:nth-child(-n+2) { padding-top: 2px; }
+
+/* Nombre de punto en una sola línea: elipsis y title con el nombre completo. */
+.kpi-nombre { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.kpi-sub-recortado {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
 
 /* Detalle de ubicación: filas del historial; cada una abre su foto. */
 .historial-fila {
@@ -951,16 +956,14 @@ body {
   }
 }
 
-/* Telefonos: los KPI pasan a 2x2 sin lineas, separados por espacio. */
+/* Telefonos: una columna, separadas por un filete horizontal. */
 @media (max-width: 480px) {
-  .kpi-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    row-gap: var(--space-3);
-  }
+  .kpi-grid { grid-template-columns: minmax(0, 1fr); }
   .kpi-celda,
-  .kpi-celda:first-child,
-  .kpi-celda:last-child { padding: 0 8px 0 0; }
-  .kpi-celda + .kpi-celda { border-left: none; }
+  .kpi-celda:nth-child(odd),
+  .kpi-celda:nth-child(even) { padding: 10px 0; border-left: none; }
+  .kpi-celda:nth-child(n+2) { border-top: 1px solid var(--border); }
+  .kpi-celda:first-child { padding-top: 2px; }
 }
 
 
@@ -2571,17 +2574,31 @@ select option {
 .punto-card__conteo { font-variant-numeric: tabular-nums; }
 .punto-card__desc { margin: 0; font-size: var(--text-sm); color: var(--text-muted); overflow-wrap: anywhere; }
 .punto-card__acciones {
-  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
+  display: flex; flex-wrap: wrap; gap: 8px;
   padding-top: 10px; border-top: 1px solid var(--border);
 }
 .btn-accion--texto {
-  min-height: 44px; padding: 0 8px; align-items: center; justify-content: center; gap: 6px;
+  flex: 1 1 auto; min-height: 44px; padding: 0 12px; align-items: center; justify-content: center; gap: 6px;
   font-family: var(--font-ui); font-size: var(--text-sm); font-weight: 600; white-space: nowrap;
 }
 @media (max-width: 640px) {
   .puntos-cards { display: flex; }
   .puntos-tabla { display: none; }
 }
-@media (max-width: 400px) {
-  .punto-card__acciones { grid-template-columns: 1fr; }
+
+/* ── Dashboard: indicadores sin tarjeta contenedora ── */
+.dashboard-kpi__cabecera {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-3); margin-bottom: var(--space-2);
+}
+.dashboard-kpi__cabecera .dashboard-section-title { margin: 0; }
+
+/* Sin punto elegido el detalle es una pista corta, no un panel alto y vacío. */
+.main-grid > .section-detail--vacio {
+  height: auto !important;
+  min-height: 0 !important;
+  align-self: start;
+}
+@media (max-width: 1024px) {
+  .main-grid > .section-detail--vacio { height: auto !important; min-height: 0 !important; }
 }
