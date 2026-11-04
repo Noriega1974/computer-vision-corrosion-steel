@@ -14,7 +14,7 @@ import {
   debeActualizarProgreso,
   ejecutarColaConcurrencia,
   esReanudable,
-  nombreDesdeArchivo,
+  normalizarEntrada,
 } from '../lib/gestorSubida';
 
 // Background batch upload. Lives above the routes (see App.jsx), so it owns
@@ -84,15 +84,16 @@ function useGestorSubida() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [running]);
 
-  // Adds already-validated files, up to LOTE_MAX in total. Returns how many were dropped by the cap.
+  // Adds already-validated files (or { file, nombre } to keep a typed name), up to
+  // LOTE_MAX in total. Returns how many were dropped by the cap.
   const agregar = useCallback((files) => {
     const lista = Array.from(files ?? []);
     const hueco = Math.max(0, LOTE_MAX - itemsRef.current.length);
     const tomados = lista.slice(0, hueco);
-    const nuevos = tomados.map((file) => ({
+    const nuevos = tomados.map(normalizarEntrada).map(({ file, nombre }) => ({
       id: ++contadorId,
       file,
-      nombre: nombreDesdeArchivo(file),
+      nombre,
       gps: undefined,  // read from EXIF right before uploading the photo
       estado: 'cola',
       progreso: 0,

@@ -2,8 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { IconoAgregarImagen, IconoCheck, IconoError, IconoEliminar, IconoFlechaAdelante, IconoFlechaAtras } from './Iconos';
 import { nivelColor, nivelLabel } from '../lib/statusUtils';
 import { formatoPct, etiquetaBase } from '../lib/textUtils';
-import { LOTE_MAX } from '../hooks/useUploadLote';
-import { paginar, alternarSeleccion, seleccionarIds, podarSeleccion } from '../lib/gestorSubida';
+import { LOTE_MAX, paginar, alternarSeleccion, seleccionarIds, podarSeleccion } from '../lib/gestorSubida';
 import ConfirmDialog from './ConfirmDialog';
 import NotaPctAproximado from './NotaPctAproximado';
 import { Mosaico } from './Mosaico';
@@ -67,7 +66,7 @@ function TesteraCola({ it, ocupado, iniciado, seleccionando, seleccionada, onAlt
       ) : estado === 'error' ? (
         <div className="mosaico-tile__estado mosaico-tile__estado--error" title={it.error}>
           <IconoError size={18} aria-hidden="true" />
-          <span>Error</span>
+          <span className="mosaico-tile__error-msg">{it.error || 'Error'}</span>
         </div>
       ) : (
         <>
@@ -135,10 +134,33 @@ export default function UploadCola({ lote, onQuitar, onQuitarVarias, onReintenta
   const quitarSeleccion = () => {
     onQuitarVarias([...seleccion]);
     salirDeSeleccion();
+    // The toolbar (and the button that opened the dialog) disappear: land on the grid.
+    requestAnimationFrame(() => listaRef.current?.focus());
   };
 
-  // Move focus to the summary when the batch ends so keyboard/AT users land on the outcome.
-  useEffect(() => { if (terminado) resumenRef.current?.focus(); }, [terminado]);
+  // Once the batch starts the rows are fixed: close any selection UI left open.
+  useEffect(() => {
+    if (!iniciado) return;
+    setConfirmando(false);
+    setSeleccionando(false);
+    setSeleccion((prev) => (prev.size ? new Set() : prev));
+  }, [iniciado]);
+
+  // Rows removed can leave the requested page past the end: follow the clamped page.
+  useEffect(() => {
+    if (paginaPedida !== pagina) setPaginaPedida(pagina);
+  }, [paginaPedida, pagina]);
+
+  // Move focus to the summary only when the batch ENDS while this view is open
+  // (running -> finished), not when returning to a batch that already finished.
+  const vioCorrerRef = useRef(false);
+  useEffect(() => {
+    if (running) vioCorrerRef.current = true;
+    if (terminado && vioCorrerRef.current) {
+      vioCorrerRef.current = false;
+      resumenRef.current?.focus();
+    }
+  }, [running, terminado]);
 
   const irAPagina = (n) => {
     setPaginaPedida(n);
@@ -210,7 +232,7 @@ export default function UploadCola({ lote, onQuitar, onQuitarVarias, onReintenta
         </div>
       )}
 
-      {confirmando && (
+      {confirmando && !iniciado && (
         <ConfirmDialog
           title={`Quitar ${seleccion.size} imágenes`}
           message="Se quitarán de la lista y no se analizarán. Las fotos originales no se borran de tu dispositivo."

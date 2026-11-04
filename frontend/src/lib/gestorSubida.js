@@ -208,6 +208,14 @@ const TIPOS_OK = ['image/jpeg', 'image/png', 'image/jpg'];
 // Default photo name: file name without extension.
 export const nombreDesdeArchivo = (file) => (file?.name || '').replace(/\.[^.]+$/, '').slice(0, NOMBRE_MAX);
 
+// A queue entry is a File or { file, nombre }: the second form carries the name the
+// user already typed (switching between single and batch mode must not lose it).
+export function normalizarEntrada(entrada) {
+  const file = entrada?.file ?? entrada;
+  const escrito = typeof entrada?.nombre === 'string' ? entrada.nombre : null;
+  return { file, nombre: escrito === null ? nombreDesdeArchivo(file) : escrito.slice(0, NOMBRE_MAX) };
+}
+
 // Batch id: "LOT-" + UUID (40 chars, within the server's 64-char/[A-Za-z0-9_-] rule).
 // Two users batching into the same point at the same millisecond must not share a folder.
 export const generarLoteId = () => {

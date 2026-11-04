@@ -5,7 +5,8 @@ import { IconoAgregarImagen, IconoCamara, IconoCheck, IconoEnfocar, IconoUbicaci
 import exifr from 'exifr';
 import { useBloques } from '../hooks/useBloques';
 import { useUploadMedicion, MAX_FOTO_MB } from '../hooks/useUploadMedicion';
-import { useUploadLote, clasificarArchivos, generarLoteId, sugerirNombreLote, LOTE_MAX, NOMBRE_MAX } from '../hooks/useUploadLote';
+import { useUploadManager } from '../hooks/UploadManagerContext';
+import { clasificarArchivos, generarLoteId, sugerirNombreLote, LOTE_MAX, NOMBRE_MAX } from '../lib/gestorSubida';
 import UploadCola from '../components/UploadCola';
 import BarraProgresoSubida from '../components/BarraProgresoSubida';
 import { nivelColor, nivelColorTexto, nivelBg, nivelLabel } from '../lib/statusUtils';
@@ -136,16 +137,17 @@ export default function UploadPage() {
   // Cola de varias fotos (gestor de subida en segundo plano). `modo` es la elección de
   // arriba: 'individual' guarda cada foto como medición propia; 'lote' las agrupa bajo un
   // nombre. Cambiar de modo conserva las fotos y solo cambia cómo se guardarán.
-  const lote = useUploadLote();
+  const lote = useUploadManager();
   const [modo, setModo] = useState('individual');
   const [nombreLote, setNombreLote] = useState('');
-  const [loteIdActivo, setLoteIdActivo] = useState(null);
   // La cola se muestra mientras tenga fotos; una sola foto individual usa el flujo de una foto.
   const modoLote = lote.iniciado || lote.items.length > 0;
   // Cola (varias fotos o carga por lotes) frente al flujo de una sola foto.
-  const usaCola = modoLote || modo === 'lote';
-  // Una sesión ya iniciada conserva su lote (o la falta de él).
-  const agrupar = lote.iniciado ? Boolean(loteIdActivo) : modo === 'lote';
+  const usaCola = modoLote || agrupar;
+  // Una sesión ya iniciada manda: modo, nombre y botones salen de la sesión del gestor (que
+  // sobrevive al salir de esta página), no del estado local, que al volver arranca de cero.
+  const agrupar = lote.iniciado ? Boolean(lote.sesion?.loteId) : modo === 'lote';
+  const modoActivo = agrupar ? 'lote' : 'individual';
   const cambioDeModoBloqueado = lote.iniciado || uploading;
   const [avisoArchivos, setAvisoArchivos] = useState(null);  // {rechazados: string[], excedidos: number}
 
@@ -212,23 +214,17 @@ export default function UploadPage() {
     setImagen(null); setNombre(''); setPreview(null); setExifGps(null);
   }, []);
 
-  // Cambiar de modo conserva las fotos. Una foto suelta pasa a la cola al agrupar; en la
-  // cola, una sola foto individual vuelve al flujo de una foto (efecto de abajo).
+  // Cambiar de modo conserva las fotos. Una foto suelta pasa a la cola al agrupar; la cola
+  // no se colapsa sola al flujo de una foto: se queda hasta que el usuario la vacíe.
   const cambiarModo = useCallback((nuevo) => {
     if (cambioDeModoBloqueado || nuevo === modo) return;
+    // La foto suelta pasa a la cola con el nombre que ya escribió el usuario.
     if (nuevo === 'lote' && imagen) {
-      lote.agregar([imagen]);
+      lote.agregar([{ file: imagen, nombre }]);
       limpiarFotoUnica();
     }
     setModo(nuevo);
-  }, [cambioDeModoBloqueado, modo, imagen, lote, limpiarFotoUnica]);
-
-  useEffect(() => {
-    if (modo !== 'individual' || lote.iniciado || lote.items.length !== 1) return;
-    const archivo = lote.items[0].file;
-    lote.limpiar();
-    procesarImagen(archivo);
-  }, [modo, lote, procesarImagen]);
+  }, [cambioDeModoBloqueado, modo, imagen, nombre, lote, limpiarFotoUnica]);
 
   // Drag & drop
   const handleDrop = useCallback(e => {
@@ -250,25 +246,11 @@ export default function UploadPage() {
   const reiniciarLote = useCallback(() => {
     lote.limpiar();
     setNombreLote('');
-    setLoteIdActivo(null);
     setAvisoArchivos(null);
     setErrorLocal(null);
   }, [lote]);
 
   const faltaAlgo = (usaCola ? (!bloqueSeleccionado || lote.items.length === 0) : (!imagen || !bloqueSeleccionado)) || fechaInvalida;
-
-  // Body of one /medicion request in batch mode: shared fields plus the row's
-  // own name and EXIF GPS, and the batch folder identity (lote_id + lote_nombre).
-  const construirBodyLote = (it, idLote = loteIdActivo, nombreLoteFinal = (nombreLote.trim() || sugerirNombreLote(esMedicionPasada ? fechaMedicion : hoyColombiaISO()))) => ({
-    fuente: 'movil',
-    bloque_id: bloqueSeleccionado.id_bloque,
-    ...(idLote && { lote_id: idLote }),
-    ...(nombreLoteFinal && { lote_nombre: nombreLoteFinal }),
-    ...(it.nombre?.trim() && { nombre: it.nombre.trim() }),
-    ...(notas && { notas }),
-    ...(it.gps && { latitud_real: it.gps.latitude, longitud_real: it.gps.longitude }),
-    ...(esMedicionPasada && { timestamp_medicion: fechaMedicion }),
-  });
 
   const irAGaleria = () => navigate(
     bloqueSeleccionado?.empresa_id && bloqueSeleccionado?.id_bloque
@@ -297,13 +279,11 @@ export default function UploadPage() {
     if (usaCola) {
       if (!bloqueSeleccionado || lote.running || lote.items.length === 0) return;
       setErrorLocal(null);
-      const loteId = agrupar ? (loteIdActivo || generarLoteId()) : null;
-      // With the default date (upload day) the local day is captured ONCE here and sent
+      const loteId = agrupar ? generarLoteId() : null;
+      // With the default date (upload day) the Colombia day is captured ONCE here and sent
       // for every photo: a batch that crosses midnight must not split across two days.
       const fechaLote = esMedicionPasada ? fechaMedicion : hoyColombiaISO();
       const nombreLoteFinal = agrupar ? (nombreLote.trim() || sugerirNombreLote(fechaLote)) : null;
-      setLoteIdActivo(loteId);
-      if (agrupar && !nombreLote.trim()) setNombreLote(nombreLoteFinal);
       lote.iniciar({
         loteId,
         loteNombre: nombreLoteFinal,
@@ -411,7 +391,7 @@ export default function UploadPage() {
 
             <div style={{ marginBottom: 'var(--space-3)' }}>
               <div
-                role="radiogroup"
+                role="group"
                 aria-label="Tipo de carga"
                 style={{
                   display: 'inline-flex', padding: 3, gap: 2, borderRadius: 9, maxWidth: '100%',
@@ -423,13 +403,12 @@ export default function UploadPage() {
                   { valor: 'individual', titulo: 'Muestras individuales' },
                   { valor: 'lote', titulo: 'Carga por lotes' },
                 ].map((op) => {
-                  const activo = modo === op.valor;
+                  const activo = modoActivo === op.valor;
                   return (
                     <button
                       key={op.valor}
                       type="button"
-                      role="radio"
-                      aria-checked={activo}
+                      aria-pressed={activo}
                       disabled={cambioDeModoBloqueado}
                       onClick={() => cambiarModo(op.valor)}
                       style={{
@@ -450,6 +429,12 @@ export default function UploadPage() {
                 {agrupar ? 'Se agrupan bajo un nombre en la galería.' : 'Cada imagen se guarda como una medición independiente.'}
               </div>
             </div>
+
+            {lote.iniciado && lote.sesion?.loteNombre && (
+              <div style={{ marginBottom: 'var(--space-3)', fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
+                Lote: <strong style={{ color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>{lote.sesion.loteNombre}</strong>
+              </div>
+            )}
 
             {!lote.iniciado && agrupar && (
               <div style={{ marginBottom: 'var(--space-3)' }}>
@@ -662,9 +647,9 @@ export default function UploadPage() {
                 )}
               </div>
             )}
-            {modo === 'lote' && (
+            {usaCola && (agrupar || lote.items.length > 1) && (
               <div style={{ marginTop: 8, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
-                Todo el lote usa esta fecha.
+                {agrupar ? 'Todo el lote usa esta fecha.' : 'Todas las fotos usan esta fecha.'}
               </div>
             )}
           </Section>

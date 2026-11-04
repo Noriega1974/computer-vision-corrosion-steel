@@ -2431,6 +2431,10 @@ select option {
   background: rgba(0, 0, 0, 0.5); font-size: 11px; font-weight: 700;
 }
 .mosaico-tile__estado--error { background: rgba(127, 29, 29, 0.78); }
+.mosaico-tile__error-msg {
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 10px; font-weight: 600; line-height: 1.2;
+}
 .mosaico-tile__accion {
   position: absolute; z-index: 2; display: inline-flex; align-items: center; justify-content: center;
   min-width: 24px; height: 24px; padding: 0 6px; border-radius: 6px; border: none; cursor: pointer;

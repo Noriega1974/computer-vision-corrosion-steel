@@ -19,6 +19,7 @@ import {
   debeActualizarProgreso,
   clasificarArchivos,
   nombreDesdeArchivo,
+  normalizarEntrada,
   generarLoteId,
   sugerirNombreLote,
 } from './gestorSubida.js';
@@ -345,5 +346,21 @@ describe('gestorSubida: multi-select helpers', () => {
     const items = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
     assert.deepEqual(quitarSeleccionadas(items, new Set(['b'])).map((x) => x.id), ['a', 'c']);
     assert.equal(quitarSeleccionadas(items, new Set()), items);
+  });
+});
+
+describe('normalizarEntrada', () => {
+  const foto = (name) => ({ name });
+
+  it('un File suelto toma el nombre del archivo sin extensión', () => {
+    assert.deepEqual(normalizarEntrada(foto('Placa 12.jpg')), { file: foto('Placa 12.jpg'), nombre: 'Placa 12' });
+  });
+
+  it('{ file, nombre } conserva el nombre ya escrito, incluso vacío, y lo recorta', () => {
+    const f = foto('x.png');
+    assert.equal(normalizarEntrada({ file: f, nombre: 'Lado norte' }).nombre, 'Lado norte');
+    assert.equal(normalizarEntrada({ file: f, nombre: '' }).nombre, '');
+    assert.equal(normalizarEntrada({ file: f, nombre: 'a'.repeat(200) }).nombre.length, 80);
+    assert.equal(normalizarEntrada({ file: f, nombre: 'a' }).file, f);
   });
 });
