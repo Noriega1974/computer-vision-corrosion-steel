@@ -2510,6 +2510,7 @@ select option {
 }
 .subida-barra__relleno--ok { background: var(--accent-green); }
 .subida-barra__relleno--error { background: var(--accent-red); }
+.subida-barra__relleno--detenida { background: var(--text-muted); }
 .subida-punto {
   display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px;
   background: var(--accent-amber); vertical-align: middle;
@@ -2517,10 +2518,15 @@ select option {
 .subida-punto--activo { animation: pw-pulso 1.4s ease-in-out infinite; }
 .subida-punto--ok { background: var(--accent-green); }
 .subida-punto--error { background: var(--accent-red); }
+.subida-punto--detenida { background: var(--text-muted); }
 @keyframes pw-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @keyframes pw-rayas { from { background-position: 0 0; } to { background-position: 22.6px 0; } }
 @keyframes pw-pulso { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.75); } }
 .subida-tarjeta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.subida-accion { min-height: 32px; }
+.subida-accion:disabled { opacity: 0.6; cursor: not-allowed; }
+.subida-accion:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+@media (max-width: 640px) { .subida-accion { min-height: 44px; } }
 @media (prefers-reduced-motion: reduce) {
   .subida-barra__relleno { transition: none; }
   .subida-barra__relleno--activo::after, .subida-barra__relleno--rayas, .subida-punto--activo { animation: none; }

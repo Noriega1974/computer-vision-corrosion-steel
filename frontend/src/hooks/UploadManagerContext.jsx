@@ -14,12 +14,14 @@ import {
   debeActualizarProgreso,
   ejecutarColaConcurrencia,
   esReanudable,
+  esAbortoPorDetener,
+  errorDetenido,
   normalizarEntrada,
 } from '../lib/gestorSubida';
 
 // Background batch upload. Lives above the routes (see App.jsx), so it owns
 // the File objects and keeps uploading while the user navigates the app.
-// Row states: 'cola' | 'subiendo' | 'analizando' | 'listo' | 'error'.
+// Row states: 'cola' | 'subiendo' | 'analizando' | 'listo' | 'error' | 'detenida'.
 // Preview URLs are not created here: UploadCola makes them only for visible rows.
 
 let contadorId = 0;
@@ -59,6 +61,7 @@ function useGestorSubida() {
   const [sesion, setSesion] = useState(null);
   const [anuncio, setAnuncio] = useState('');
   const [avisoCerrado, setAvisoCerrado] = useState(false);
+  const [deteniendo, setDeteniendo] = useState(false);
 
   const itemsRef = useRef(items);
   itemsRef.current = items;
@@ -70,6 +73,8 @@ function useGestorSubida() {
   // see `cancelado()` and stop. `abortRef` aborts the S3 transfers in flight.
   const genRef = useRef(0);
   const abortRef = useRef(null);
+  // User-requested stop of the current run ("Detener"): reset when a run starts.
+  const paradaRef = useRef(false);
   const ultimoProgresoRef = useRef(new Map());  // item id -> last published tick (ms)
 
   const patch = useCallback((id, cambios) => {
@@ -127,11 +132,13 @@ function useGestorSubida() {
     abortRef.current?.abort();
     abortRef.current = null;
     runningRef.current = false;
+    paradaRef.current = false;
     sesionRef.current = null;
     ultimoProgresoRef.current.clear();
     setItems([]);
     setSesion(null);
     setRunning(false);
+    setDeteniendo(false);
     setAnuncio('');
     setAvisoCerrado(false);
   }, []);
@@ -172,6 +179,7 @@ function useGestorSubida() {
         parchar(it.id, { gps });
       }
       if (cancelado()) throw new Error('Subida cancelada.');
+      if (paradaRef.current) throw errorDetenido();
       const body = construirBody(sesionRef.current, actual, gps);
       return await subirUnaMedicion(
         it.file,
@@ -199,6 +207,8 @@ function useGestorSubida() {
     } catch (err) {
       const e = err instanceof Error ? err : new Error(String(err ?? ''));
       e.fase = fase;
+      // "Detener" aborted the S3 transfer before the analysis: nothing was stored.
+      if (esAbortoPorDetener(e, { detenerPedido: paradaRef.current, fase })) throw errorDetenido();
       // The server rejected the stored key (expired/consumed): the next attempt uploads again.
       if (e.status === 400) parchar(it.id, { imagenKey: null });
       throw e;
@@ -212,6 +222,8 @@ function useGestorSubida() {
     const filas = ids.map((id) => itemsRef.current.find((x) => x.id === id)).filter(Boolean);
     if (filas.length === 0) return;
     runningRef.current = true;
+    paradaRef.current = false;
+    setDeteniendo(false);
     setRunning(true);
     setAvisoCerrado(false);
     const gen = genRef.current;
@@ -224,6 +236,7 @@ function useGestorSubida() {
         items: filas,
         tarea,
         cancelado,
+        detenerPedido: () => paradaRef.current,
         onItemUpdate: (id, cambios) => {
           patch(id, cambios);
           if (cambios.estado === 'listo' || cambios.estado === 'error') anunciar(id, cambios.estado === 'listo');
@@ -242,7 +255,15 @@ function useGestorSubida() {
     } finally {
       // After a logout the state was already reset (and may belong to a new run).
       if (!cancelado()) {
+        // Rows never dispatched because of the stop are 'detenida', not waiting.
+        if (paradaRef.current) {
+          const idsFilas = new Set(filas.map((f) => f.id));
+          setItems((prev) => prev.map((it) => (idsFilas.has(it.id) && it.estado === 'cola'
+            ? { ...it, estado: 'detenida', reintentando: false } : it)));
+        }
+        paradaRef.current = false;
         runningRef.current = false;
+        setDeteniendo(false);
         setRunning(false);
         ultimoProgresoRef.current.clear();
       }
@@ -270,6 +291,16 @@ function useGestorSubida() {
     [correr],
   );
 
+  // "Detener": no new photo starts; S3 transfers in flight are aborted (nothing is stored
+  // yet); photos already in the analysis step finish normally. The run ends by itself and
+  // leaves the unprocessed rows as 'detenida', resumable with `reanudar` (same lote session).
+  const detener = useCallback(() => {
+    if (!runningRef.current || paradaRef.current) return;
+    paradaRef.current = true;
+    setDeteniendo(true);
+    abortRef.current?.abort();
+  }, []);
+
   const cerrarAviso = useCallback(() => setAvisoCerrado(true), []);
 
   const progreso = useMemo(() => calcularProgresoSubida(items, { running }), [items, running]);
@@ -277,10 +308,10 @@ function useGestorSubida() {
   const terminado = iniciado && !running;
 
   return {
-    items, running, sesion, anuncio, avisoCerrado, progreso, iniciado, terminado,
+    items, running, deteniendo, sesion, anuncio, avisoCerrado, progreso, iniciado, terminado,
     listos: progreso.completadas,
     errores: progreso.fallidas,
-    agregar, quitar, quitarVarias, limpiar, iniciar, reintentar, reanudar, cerrarAviso,
+    agregar, quitar, quitarVarias, limpiar, iniciar, reintentar, reanudar, detener, cerrarAviso,
   };
 }
 

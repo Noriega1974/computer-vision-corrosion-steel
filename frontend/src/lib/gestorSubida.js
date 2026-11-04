@@ -56,7 +56,22 @@ const ESTADOS_PENDIENTES = new Set(['cola', 'subiendo', 'analizando']);
 // failure that certainly did not store anything. Unconfirmed items are left
 // for a manual, per-photo retry after checking the gallery.
 export function esReanudable(it) {
-  return it.estado === 'cola' || (it.estado === 'error' && !it.incierto);
+  return it.estado === 'cola' || it.estado === 'detenida' || (it.estado === 'error' && !it.incierto);
+}
+
+// Error thrown by a task that gave up because the user pressed "Detener": the pool
+// marks the row 'detenida' (not an error) and never retries it.
+export function errorDetenido() {
+  const e = new Error('Subida detenida.');
+  e.detenida = true;
+  return e;
+}
+
+// True when `err` is the abort of an S3 transfer caused by the stop request, and
+// it happened before the analysis started (nothing was stored, safe to resume).
+export function esAbortoPorDetener(err, { detenerPedido, fase }) {
+  return Boolean(detenerPedido) && fase === FASE_PREVIA
+    && (err?.detenida === true || err?.name === 'AbortError' || /cancelad/i.test(String(err?.message || '')));
 }
 
 // Summary for the progress bar and the batch queue.
@@ -67,13 +82,15 @@ export function calcularProgresoSubida(items, { running = false } = {}) {
   let fallidas = 0;
   let inciertas = 0;
   let pendientes = 0;
+  let detenidas = 0;
   let reanudables = 0;
   for (const it of lista) {
     if (it.estado === 'listo') completadas += 1;
     else if (it.estado === 'error') {
       fallidas += 1;
       if (it.incierto) inciertas += 1;
-    } else if (ESTADOS_PENDIENTES.has(it.estado)) pendientes += 1;
+    } else if (it.estado === 'detenida') detenidas += 1;
+    else if (ESTADOS_PENDIENTES.has(it.estado)) pendientes += 1;
     if (esReanudable(it)) reanudables += 1;
   }
   // Floor, so 999 of 1000 never reads as 100 %.
@@ -81,10 +98,11 @@ export function calcularProgresoSubida(items, { running = false } = {}) {
   let estadoGlobal = 'vacio';
   if (total > 0) {
     if (running) estadoGlobal = 'en_curso';
+    else if (detenidas > 0) estadoGlobal = 'detenida';
     else if (fallidas > 0 || pendientes > 0) estadoGlobal = 'con_errores';
     else estadoGlobal = 'completado';
   }
-  return { total, completadas, fallidas, inciertas, pendientes, reanudables, porcentaje, estadoGlobal };
+  return { total, completadas, fallidas, inciertas, pendientes, detenidas, reanudables, porcentaje, estadoGlobal };
 }
 
 const esperarPorDefecto = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -95,6 +113,10 @@ const esperarPorDefecto = (ms) => new Promise((r) => setTimeout(r, ms));
 // `onItemUpdate(id, cambios)` receives row patches ('listo' / 'error' / retry flag).
 // `cancelado()` is polled between steps: once true no new item starts, no retry
 // is scheduled and no further patch is emitted (logout aborts the pool this way).
+// `detenerPedido()` is the user-requested stop ("Detener"): no new item starts, and
+// an item that had not reached the analysis yet is marked 'detenida' instead of
+// retried. Items already analyzing finish normally, so no half-stored state remains.
+// The rows never dispatched stay in 'cola'; the caller marks them 'detenida'.
 export async function ejecutarColaConcurrencia({
   items,
   tarea,
@@ -104,6 +126,7 @@ export async function ejecutarColaConcurrencia({
   esperar = esperarPorDefecto,
   onItemUpdate,
   cancelado = () => false,
+  detenerPedido = () => false,
 }) {
   const cola = Array.from(items ?? []);
   const total = cola.length;
@@ -111,7 +134,16 @@ export async function ejecutarColaConcurrencia({
   let siguiente = 0;
   let completadas = 0;
   let fallidas = 0;
+  let detenidas = 0;
   let detenido = false;
+
+  function marcarDetenida(item, idx, intento) {
+    detenidas += 1;
+    resultados[idx] = { id: item.id, ok: false, detenida: true, intentos: intento };
+    onItemUpdate?.(item.id, {
+      estado: 'detenida', error: null, incierto: false, reintentando: false, progreso: 0, intentos: intento,
+    });
+  }
 
   async function procesarUno(item, idx) {
     for (let intento = 1; ; intento += 1) {
@@ -127,11 +159,16 @@ export async function ejecutarColaConcurrencia({
         return;
       } catch (err) {
         if (cancelado()) return;
+        if (err?.detenida === true) { marcarDetenida(item, idx, intento); return; }
         const tipo = clasificarFallo(err);
         if (tipo === 'reintentar' && intento <= maxReintentos) {
+          // Stop requested and the analysis never started: do not retry, resume later.
+          if (detenerPedido() && err?.fase !== FASE_MEDICION) { marcarDetenida(item, idx, intento); return; }
           onItemUpdate?.(item.id, { reintentando: true, intentos: intento });
           const ms = demoraBaseMs * 2 ** (intento - 1);
           if (ms > 0) await esperar(ms);
+          if (cancelado()) return;
+          if (detenerPedido() && err?.fase !== FASE_MEDICION) { marcarDetenida(item, idx, intento); return; }
           continue;
         }
         if (tipo === 'detener') detenido = true;
@@ -151,7 +188,7 @@ export async function ejecutarColaConcurrencia({
   }
 
   async function trabajador() {
-    while (!detenido && !cancelado() && siguiente < total) {
+    while (!detenido && !cancelado() && !detenerPedido() && siguiente < total) {
       const idx = siguiente;
       siguiente += 1;
       await procesarUno(cola[idx], idx);
@@ -160,7 +197,7 @@ export async function ejecutarColaConcurrencia({
 
   const n = Math.max(1, Math.min(concurrencia, total));
   await Promise.all(Array.from({ length: total ? n : 0 }, trabajador));
-  return { total, completadas, fallidas, detenido, resultados };
+  return { total, completadas, fallidas, detenidas, detenido, detenidoPorUsuario: detenerPedido(), resultados };
 }
 
 // Paging helpers for the batch queue (only visible rows get a preview URL).

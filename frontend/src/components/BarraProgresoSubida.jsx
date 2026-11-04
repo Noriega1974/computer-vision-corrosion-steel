@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { IconoCheck, IconoCerrar, IconoSubir } from './Iconos';
 import { useUploadManager } from '../hooks/UploadManagerContext';
+import ConfirmDialog from './ConfirmDialog';
 
 const visuallyHidden = {
   position: 'absolute', width: 1, height: 1, overflow: 'hidden',
@@ -17,18 +18,21 @@ const btnBase = {
 // top of the dashboard while a batch runs, and after it ends until closed.
 // `enlaceNuevaMedicion` adds a link back to the upload page (dashboard only).
 export default function BarraProgresoSubida({ enlaceNuevaMedicion = false, style }) {
-  const { iniciado, running, sesion, progreso, avisoCerrado, reanudar, cerrarAviso } = useUploadManager();
+  const { iniciado, running, deteniendo, sesion, progreso, avisoCerrado, reanudar, detener, cerrarAviso } = useUploadManager();
+  const [confirmando, setConfirmando] = useState(false);
   if (!iniciado || avisoCerrado) return null;
 
-  const { total, completadas, fallidas, inciertas, reanudables, porcentaje } = progreso;
+  const { total, completadas, fallidas, inciertas, detenidas, reanudables, porcentaje } = progreso;
   const textoAvance = `${completadas} de ${total} imágenes (${porcentaje} %)`;
+  const detenida = !running && detenidas > 0;
   const terminadoOk = !running && fallidas === 0 && reanudables === 0 && inciertas === 0 && total > 0;
-  const conError = !running && fallidas > 0;
+  const conError = !running && !detenida && fallidas > 0;
   const titulo = running
-    ? (sesion?.loteId ? 'Analizando el lote' : 'Analizando las imágenes')
+    ? (deteniendo ? 'Deteniendo la subida' : (sesion?.loteId ? 'Analizando el lote' : 'Analizando las imágenes'))
+    : detenida ? 'Subida detenida'
     : (fallidas > 0 || reanudables > 0 ? 'Subida con imágenes pendientes' : (sesion?.loteId ? 'Lote analizado' : 'Imágenes analizadas'));
-  const claseRelleno = `subida-barra__relleno${running ? ' subida-barra__relleno--activo subida-barra__relleno--rayas' : ''}${terminadoOk ? ' subida-barra__relleno--ok' : ''}${conError ? ' subida-barra__relleno--error' : ''}`;
-  const clasePunto = `subida-punto${running ? ' subida-punto--activo' : ''}${terminadoOk ? ' subida-punto--ok' : ''}${conError ? ' subida-punto--error' : ''}`;
+  const claseRelleno = `subida-barra__relleno${running ? ' subida-barra__relleno--activo subida-barra__relleno--rayas' : ''}${terminadoOk ? ' subida-barra__relleno--ok' : ''}${conError ? ' subida-barra__relleno--error' : ''}${detenida ? ' subida-barra__relleno--detenida' : ''}`;
+  const clasePunto = `subida-punto${running ? ' subida-punto--activo' : ''}${terminadoOk ? ' subida-punto--ok' : ''}${conError ? ' subida-punto--error' : ''}${detenida ? ' subida-punto--detenida' : ''}`;
 
   return (
     <section
@@ -53,24 +57,40 @@ export default function BarraProgresoSubida({ enlaceNuevaMedicion = false, style
           </div>
           <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: 1 }}>
             <span style={numStyle}>{textoAvance}</span>
+            {detenidas > 0 && <> · <span style={numStyle}>{detenidas}</span> {detenidas === 1 ? 'pendiente' : 'pendientes'}</>}
             {fallidas > 0 && <> · <span style={numStyle}>{fallidas}</span> con error</>}
             {sesion?.bloqueNombre && <> · {sesion.bloqueNombre}</>}
           </div>
         </div>
-        {(enlaceNuevaMedicion || (!running && reanudables > 0)) && (
+        {(enlaceNuevaMedicion || running || (!running && reanudables > 0)) && (
           <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+            {running && (
+              <button
+                type="button"
+                className="subida-accion"
+                disabled={deteniendo}
+                onClick={() => setConfirmando(true)}
+                style={{ ...btnBase, background: 'var(--bg-inset)', border: '1px solid var(--border-strong)', color: 'var(--text-primary)' }}
+              >
+                {deteniendo ? 'Deteniendo…' : 'Detener'}
+              </button>
+            )}
             {!running && reanudables > 0 && (
               <button
                 type="button"
+                className="subida-accion"
                 onClick={reanudar}
                 style={{ ...btnBase, background: 'var(--accent-amber)', border: 'none', color: 'white' }}
               >
-                {reanudables === 1 ? 'Reanudar la imagen faltante' : `Reanudar las ${reanudables} faltantes`}
+                {detenida
+                  ? 'Reanudar pendientes'
+                  : (reanudables === 1 ? 'Reanudar la imagen faltante' : `Reanudar las ${reanudables} faltantes`)}
               </button>
             )}
             {enlaceNuevaMedicion && (
               <Link
                 to="/upload"
+                className="subida-accion"
                 style={{
                   ...btnBase, background: 'var(--bg-inset)', border: '1px solid var(--border)',
                   color: 'var(--text-secondary)', textDecoration: 'none',
@@ -83,7 +103,17 @@ export default function BarraProgresoSubida({ enlaceNuevaMedicion = false, style
             )}
           </div>
         )}
-        {!running && (
+        {!running && detenida && (
+          <button
+            type="button"
+            className="subida-accion"
+            onClick={cerrarAviso}
+            style={{ ...btnBase, background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-primary)' }}
+          >
+            Cerrar
+          </button>
+        )}
+        {!running && !detenida && (
           <button
             type="button"
             onClick={cerrarAviso}
@@ -107,9 +137,19 @@ export default function BarraProgresoSubida({ enlaceNuevaMedicion = false, style
         <div className={claseRelleno} style={{ width: `${porcentaje}%` }} />
       </div>
 
-      {running && (
+      {running && !deteniendo && (
         <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>
           Puedes seguir navegando mientras termina el análisis. No cierres esta pestaña.
+        </div>
+      )}
+      {running && deteniendo && (
+        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+          Las fotos que ya se están analizando terminan; las demás quedan pendientes.
+        </div>
+      )}
+      {detenida && (
+        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+          Las fotos analizadas se conservan. Las pendientes no se subirán hasta que las reanudes.
         </div>
       )}
       {!running && inciertas > 0 && (
@@ -118,9 +158,21 @@ export default function BarraProgresoSubida({ enlaceNuevaMedicion = false, style
         </div>
       )}
 
+      {confirmando && running && (
+        <ConfirmDialog
+          title="Detener la subida"
+          message="Se detendrá la subida. Las fotos ya analizadas se conservan; las pendientes no se subirán."
+          confirmLabel="Detener"
+          cancelLabel="Seguir subiendo"
+          tone="danger"
+          onConfirm={() => { setConfirmando(false); detener(); }}
+          onCancel={() => setConfirmando(false)}
+        />
+      )}
+
       {/* Announces only the end of a run, never the moving percentage. */}
       <span role="status" aria-live="polite" style={visuallyHidden}>
-        {running ? '' : `Subida terminada: ${completadas} de ${total} imágenes analizadas${fallidas ? `, ${fallidas} con error` : ''}.`}
+        {running ? '' : `${detenida ? 'Subida detenida' : 'Subida terminada'}: ${completadas} de ${total} imágenes analizadas${fallidas ? `, ${fallidas} con error` : ''}.`}
       </span>
     </section>
   );

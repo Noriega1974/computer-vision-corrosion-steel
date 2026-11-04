@@ -109,8 +109,9 @@ function TesteraCola({ it, ocupado, iniciado, seleccionando, seleccionada, onAlt
 // Queue for a batch upload (up to LOTE_MAX rows). Paged, FILAS_POR_PAGINA rows
 // at a time, so a 1000-photo batch never renders 1000 rows or previews at once.
 // The polite live region announces only per-row completion.
-export default function UploadCola({ lote, onQuitar, onQuitarVarias, onReintentar, onAgregar, onVerGaleria, onSubirMas, agrupado = true }) {
-  const { items, running, anuncio, iniciado, terminado, listos, errores } = lote;
+export default function UploadCola({ lote, onQuitar, onQuitarVarias, onReintentar, onReanudar, onAgregar, onVerGaleria, onSubirMas, agrupado = true }) {
+  const { items, running, anuncio, iniciado, terminado, listos, errores, progreso } = lote;
+  const detenidas = progreso?.detenidas ?? 0;
   const resumenRef = useRef(null);
   const inputRef = useRef(null);
   const listaRef = useRef(null);
@@ -177,12 +178,15 @@ export default function UploadCola({ lote, onQuitar, onQuitarVarias, onReintenta
           <h3 ref={resumenRef} tabIndex={-1} style={{
             margin: 0, fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 16, color: 'var(--text-primary)',
           }}>
+            {detenidas > 0 && <>Subida detenida: </>}
             <span style={numStyle}>{listos}</span> de <span style={numStyle}>{items.length}</span> imágenes analizadas
+            {detenidas > 0 && <> · <span style={numStyle}>{detenidas}</span> {detenidas === 1 ? 'pendiente' : 'pendientes'}</>}
             {errores > 0 && <> · <span style={numStyle}>{errores}</span> con error</>}
           </h3>
           <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-3)', flexWrap: 'wrap' }}>
-            <button type="button" onClick={onSubirMas} style={btnSecondary}>{agrupado ? 'Subir otro lote' : 'Subir más imágenes'}</button>
-            <button type="button" onClick={onVerGaleria} style={btnPrimary}>Ver en la galería</button>
+            {detenidas > 0 && <button type="button" onClick={onReanudar} style={btnPrimary}>Reanudar pendientes</button>}
+            {detenidas === 0 && <button type="button" onClick={onSubirMas} style={btnSecondary}>{agrupado ? 'Subir otro lote' : 'Subir más imágenes'}</button>}
+            <button type="button" onClick={onVerGaleria} style={detenidas > 0 ? btnSecondary : btnPrimary}>Ver en la galería</button>
           </div>
         </div>
       )}

@@ -51,6 +51,7 @@ export function estadoTesteraSubida(it) {
     case 'subiendo': return `Subiendo ${it.progreso ?? 0} %`;
     case 'analizando': return 'Analizando';
     case 'listo': return 'Listo';
+    case 'detenida': return 'Detenida';
     default: return 'Error';
   }
 }
