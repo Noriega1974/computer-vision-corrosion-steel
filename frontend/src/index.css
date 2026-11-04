@@ -2408,7 +2408,8 @@ select option {
   border: 2px solid rgba(255, 255, 255, 0.9); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
 }
 .mosaico-tile__cuenta {
-  position: absolute; top: 5px; right: 5px; padding: 1px 6px; border-radius: 999px;
+  /* Second row on the right so it never collides with the day label of the first row. */
+  position: absolute; top: 24px; right: 5px; padding: 1px 6px; border-radius: 999px;
   background: rgba(0, 0, 0, 0.62); color: #fff; font-size: 10px; font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -2451,8 +2452,13 @@ select option {
 .mosaico-tile--seleccionada .mosaico-tile__casilla { background: var(--accent-amber); border-color: var(--accent-amber); }
 .mosaico-tile__accion--reintentar { bottom: 4px; left: 50%; transform: translateX(-50%); }
 .mosaico-tile__dia {
-  position: absolute; top: 5px; left: 22px; max-width: calc(100% - 60px); padding: 1px 6px; border-radius: 999px;
+  position: absolute; top: 5px; left: 22px; max-width: calc(100% - 28px); padding: 1px 6px; border-radius: 999px;
   background: rgba(0, 0, 0, 0.62); color: #fff; font-size: 10px; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.mosaico-tile__empresa {
+  position: absolute; top: 24px; left: 5px; max-width: calc(100% - 40px); padding: 1px 6px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88); color: #1f2937; font-size: 10px; font-weight: 700;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .mosaico-expandido {

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { IconoCamara, IconoMoverACarpeta } from './Iconos';
 import { nivelColor, nivelLabel } from '../lib/statusUtils';
-import { formatFecha } from '../utils/dateFormat';
+import { formatFecha, horaCorta } from '../utils/dateFormat';
 import {
   destinoMedicion, etiquetaTestera, etiquetaTesteraLote, miniaturaDe, nombreCorto, textoPctMedicion,
 } from '../lib/mosaico';
@@ -30,21 +30,17 @@ function Imagen({ src, alt = '' }) {
   return <img className="mosaico-tile__img" src={src} alt={alt} loading="lazy" decoding="async" onError={() => setFallo(true)} />;
 }
 
-// Hora local corta (HH:mm) del timestamp, tomada del formato elegido por el usuario.
-function horaCorta(ts) {
-  const t = formatFecha(ts, { conHora: true });
-  return /\d{2}:\d{2}$/.test(t) ? t.slice(-5) : '';
-}
-
 // Casilla de una foto: miniatura cuadrada, punto de nivel, % y nombre corto.
 // Navega al detalle de la foto en la galería.
-export function TesteraFoto({ medicion, idPunto, mostrarFecha = false, subtitulo = null, etiquetaDia = null }) {
+// `empresa` (solo super_admin): chip con la zona de la foto. `detalle`: texto extra
+// (p. ej. "Por Ana") que va en el nombre accesible y en el tooltip.
+export function TesteraFoto({ medicion, idPunto, mostrarFecha = false, subtitulo = null, etiquetaDia = null, empresa = null, detalle = '' }) {
   const nivel = medicion.nivel_corrosion ?? 0;
   const color = nivelColor(nivel);
   const src = miniaturaDe(medicion);
   const fecha = formatFecha(medicion.timestamp, { conHora: true });
   const to = destinoMedicion(medicion, idPunto);
-  const label = `${etiquetaTestera(medicion, fecha)}`;
+  const label = [etiquetaTestera(medicion, fecha), empresa, detalle].filter(Boolean).join(', ');
   const contenido = (
     <>
       {src ? <Imagen src={src} /> : (
@@ -52,6 +48,7 @@ export function TesteraFoto({ medicion, idPunto, mostrarFecha = false, subtitulo
       )}
       <span className="mosaico-tile__punto" aria-hidden="true" style={{ background: color }} title={nivelLabel(nivel)} />
       {etiquetaDia && <span className="mosaico-tile__dia">{etiquetaDia}</span>}
+      {empresa && <span className="mosaico-tile__empresa" aria-hidden="true">{empresa}</span>}
       <span className="mosaico-tile__pie">
         <span className="mosaico-tile__pct">{textoPctMedicion(medicion)}</span>
         <span className="mosaico-tile__nombre">
@@ -61,15 +58,15 @@ export function TesteraFoto({ medicion, idPunto, mostrarFecha = false, subtitulo
     </>
   );
   if (!to) {
-    return <div className="mosaico-tile" role="img" aria-label={label}>{contenido}</div>;
+    return <div className="mosaico-tile" role="img" aria-label={label} title={detalle || undefined}>{contenido}</div>;
   }
   return (
-    <Link to={to} className="mosaico-tile" aria-label={`Ver foto: ${label}`}>{contenido}</Link>
+    <Link to={to} className="mosaico-tile" aria-label={`Ver foto: ${label}`} title={detalle || undefined}>{contenido}</Link>
   );
 }
 
 // Casilla de un lote: portada, nombre, cantidad y peor nivel. Abre/cierra su contenido.
-export function TesteraLote({ nombre, total, peorNivel, peorPct, preview, abierto = false, onClick, etiquetaDia = null }) {
+export function TesteraLote({ nombre, total, peorNivel, peorPct, preview, abierto = false, onClick, etiquetaDia = null, empresa = null }) {
   const nivel = peorNivel ?? 0;
   const color = nivelColor(nivel);
   return (
@@ -77,7 +74,7 @@ export function TesteraLote({ nombre, total, peorNivel, peorPct, preview, abiert
         type="button"
         onClick={onClick}
         aria-expanded={onClick ? abierto : undefined}
-        aria-label={etiquetaTesteraLote(nombre, total, nivel)}
+        aria-label={[etiquetaTesteraLote(nombre, total, nivel), empresa].filter(Boolean).join(', ')}
         className={`mosaico-tile mosaico-tile--lote${abierto ? ' mosaico-tile--abierto' : ''}`}
       >
         {preview ? <Imagen src={preview} /> : (
@@ -86,6 +83,7 @@ export function TesteraLote({ nombre, total, peorNivel, peorPct, preview, abiert
         <span className="mosaico-tile__punto" aria-hidden="true" style={{ background: color }} />
         <span className="mosaico-tile__cuenta">{total}</span>
         {etiquetaDia && <span className="mosaico-tile__dia">{etiquetaDia}</span>}
+        {empresa && <span className="mosaico-tile__empresa" aria-hidden="true">{empresa}</span>}
         <span className="mosaico-tile__pie">
           <span className="mosaico-tile__pct">{nivelLabel(nivel)}{peorPct != null ? ` · ${formatoPct(peorPct)}` : ''}</span>
           <span className="mosaico-tile__nombre">{nombre || 'Lote sin nombre'}</span>

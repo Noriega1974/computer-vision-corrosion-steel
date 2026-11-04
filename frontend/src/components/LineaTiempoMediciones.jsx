@@ -25,7 +25,7 @@ import { useAuth } from '../auth/AuthContext';
 import { NIVELES, nivelColor, nivelColorTexto, nivelLabel, nivelBg } from '../lib/statusUtils';
 import { formatoPct, etiquetaBase } from '../lib/textUtils';
 import { hoyColombiaISO, fechaUltimaMedicionISO, anioColombia } from '../lib/fechas';
-import { formatFecha } from '../utils/dateFormat';
+import { horaCorta } from '../utils/dateFormat';
 import { tiempoRelativo } from '../lib/tiempoRelativo';
 import {
   filtrarMedicionesLineaTiempo,
@@ -91,22 +91,34 @@ function NivelBadge({ nivel }) {
 // Eventos de un día como cuadrícula de casillas cuadradas: una foto suelta es una
 // miniatura; un lote es una casilla con su portada que, al abrirla, muestra sus fotos
 // en una fila completa de la misma cuadrícula.
-function EventosDia({ eventos, etiquetaDia }) {
+function EventosDia({ eventos, etiquetaDia, nombreEmpresa = null }) {
   const [abiertos, setAbiertos] = useState(() => new Set());
   const alternar = (id) => setAbiertos((prev) => {
     const sig = new Set(prev);
     if (sig.has(id)) sig.delete(id); else sig.add(id);
     return sig;
   });
-  const subtituloDe = (m) => {
-    const hora = formatFecha(m.timestamp, { conHora: true }).slice(-5);
-    return [hora, m.bloque_nombre].filter(Boolean).join(' · ');
+  const subtituloDe = (m) => [horaCorta(m.timestamp), m.bloque_nombre].filter(Boolean).join(' · ');
+  // Zona de la foto: solo la ve el super_admin (ve varias).
+  const empresaDe = (id) => (nombreEmpresa && id ? nombreEmpresa(id) : null);
+  const autorDe = (m) => {
+    const autor = autorDeMedicion(m);
+    return autor ? `Por ${autor}` : '';
   };
   return (
     <>
       {eventos.map((ev) => {
         if (ev.tipo !== 'lote') {
-          return <TesteraFoto key={`med-${ev.id}`} medicion={ev.medicion} subtitulo={subtituloDe(ev.medicion)} etiquetaDia={etiquetaDia} />;
+          return (
+            <TesteraFoto
+              key={`med-${ev.id}`}
+              medicion={ev.medicion}
+              subtitulo={subtituloDe(ev.medicion)}
+              etiquetaDia={etiquetaDia}
+              empresa={empresaDe(ev.medicion.empresa_id)}
+              detalle={autorDe(ev.medicion)}
+            />
+          );
         }
         const abierto = abiertos.has(ev.id);
         const portada = ev.mediciones.map(miniaturaDe).find(Boolean) ?? null;
@@ -121,6 +133,7 @@ function EventosDia({ eventos, etiquetaDia }) {
               abierto={abierto}
               onClick={() => alternar(ev.id)}
               etiquetaDia={etiquetaDia}
+              empresa={empresaDe(ev.empresaId)}
             />
             {abierto && (
               <div className="mosaico-expandido">
@@ -130,7 +143,7 @@ function EventosDia({ eventos, etiquetaDia }) {
                 </div>
                 <Mosaico ancho sinTope label={`Fotos del lote ${ev.loteNombre}`}>
                   {ev.mediciones.map((m) => (
-                    <TesteraFoto key={m.id_medicion} medicion={m} subtitulo={subtituloDe(m)} />
+                    <TesteraFoto key={m.id_medicion} medicion={m} subtitulo={subtituloDe(m)} detalle={autorDe(m)} />
                   ))}
                 </Mosaico>
               </div>
@@ -850,7 +863,12 @@ export default function LineaTiempoMediciones() {
           {/* One continuous grid for every day: tiles flow without empty rows; each tile carries its day. */}
           <Mosaico ancho altoMax={520} label="Actividad por día">
             {diasPaginados.map((dia) => (
-              <EventosDia key={dia.fechaISO} eventos={dia.eventos} etiquetaDia={dia.etiquetaDia} />
+              <EventosDia
+                key={dia.fechaISO}
+                eventos={dia.eventos}
+                etiquetaDia={dia.etiquetaDia}
+                nombreEmpresa={esSuperAdmin ? nombreEmpresa : null}
+              />
             ))}
           </Mosaico>
 

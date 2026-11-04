@@ -14,6 +14,14 @@ export function setDateFormat(formato) {
   localStorage.setItem(STORAGE_KEY, formato);
 }
 
+// Hora corta HH:mm de un timestamp ('' si no hay fecha válida). Usa formatFecha,
+// que ya resuelve la zona y el formato, y valida el resultado: cortar los
+// últimos 5 caracteres a ciegas devolvería basura ("fecha") con "Sin fecha".
+export function horaCorta(timestamp) {
+  const t = formatFecha(timestamp, { conHora: true });
+  return /\d{2}:\d{2}$/.test(t) ? t.slice(-5) : '';
+}
+
 // Formatea un timestamp según la preferencia guardada.
 // `conHora`: agrega HH:mm. `conSegundos`: agrega también los segundos.
 export function formatFecha(timestamp, { conHora = false, conSegundos = false } = {}) {
