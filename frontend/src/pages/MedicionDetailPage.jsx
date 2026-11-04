@@ -1,3 +1,4 @@
+import { puedeGestionarMedicion } from '../lib/permisosMediciones';
 import ErrorEstado from '../components/ErrorEstado';
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
@@ -304,7 +305,8 @@ export default function MedicionDetailPage() {
     user?.groups?.includes('super_admin') ||
     user?.groups?.includes('admin');
   // Eliminar también lo puede tecnico (renombrar sigue siendo de admins).
-  const puedeEliminar = isAdmin || user?.groups?.includes('tecnico');
+  // El técnico solo elimina las mediciones que él tomó.
+  const puedeEliminar = Boolean(medicion) && puedeGestionarMedicion(user?.groups, user?.sub, medicion);
   const esSuperAdmin = user?.groups?.includes('super_admin');
   // Zona: nombre de la afiliación dueña de la medición. Un no-super_admin
   // solo ve mediciones de su propia empresa (scopeado por el backend), así

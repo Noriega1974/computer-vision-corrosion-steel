@@ -4,6 +4,7 @@ import { useLocation } from 'react-router-dom';
 import { IconoCasillaMarcada, IconoEliminar, IconoMoverACarpeta, IconoSinResultados, IconoVolver } from './Iconos';
 import MedicionCard from './MedicionCard';
 import BarraSeleccion from './BarraSeleccion';
+import { puedeGestionarMedicion, puedeGestionarLote } from '../lib/permisosMediciones';
 import { EliminarLoteDialog, MoverLoteDialog } from './LoteDialogs';
 import { useAuth } from '../auth/AuthContext';
 import { useAccionesLote } from '../hooks/useAccionesLote';
@@ -64,6 +65,8 @@ export default function GaleriaFotos({
   const location = useLocation();
   const { user } = useAuth();
   const puedeGestionar = ROLES_GESTION.some(r => user?.groups?.includes(r));
+  // El técnico solo mueve y elimina lo que él tomó (regla del backend): las demás fotos no se pueden marcar.
+  const gestionable = (m) => Boolean(idPuntoDe(m)) && puedeGestionarMedicion(user?.groups, user?.sub, m);
   const { eliminar, mover, procesando } = useAccionesLote();
   const [seleccionando, setSeleccionando] = useState(false);
   const [marcadas, setMarcadas] = useState(() => new Set());
@@ -131,7 +134,7 @@ export default function GaleriaFotos({
   // nunca las fotos escondidas dentro de una carpeta de lote que no está abierta.
   // Con una acción de lote, el universo es el lote entero aunque los filtros oculten parte.
   const universo = seleccionLoteCompleto && loteAbierto ? loteCompleto : visibles;
-  const elegibles = universo.filter(m => idPuntoDe(m));
+  const elegibles = universo.filter(gestionable);
   const elegidas = elegibles.filter(m => marcadas.has(m.id_medicion));
   const ocultasPorFiltro = seleccionLoteCompleto && loteAbierto
     ? contarOcultasPorFiltro(elegidas, visibles, marcadas, idPuntoDe)
@@ -141,7 +144,7 @@ export default function GaleriaFotos({
     setSeleccionando(false); setSeleccionLoteCompleto(false); setMarcadas(new Set()); setDialogo(null);
   };
   const accionDeLote = (dialogoInicial) => {
-    const idsLote = new Set(loteCompleto.filter(m => idPuntoDe(m)).map(m => m.id_medicion));
+    const idsLote = new Set(loteCompleto.filter(gestionable).map(m => m.id_medicion));
     setSeleccionLoteCompleto(true);
     setSeleccionando(true);
     setMarcadas(idsLote);
@@ -329,7 +332,7 @@ export default function GaleriaFotos({
               onVolver={() => { setLoteAbiertoId(null); salirDeSeleccion(); }}
               textoVolver="← Todos los lotes del punto"
               compacta
-              acciones={puedeGestionar ? (
+              acciones={puedeGestionar && puedeGestionarLote(user?.groups, user?.sub, loteCompleto) ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <button
                     type="button"
@@ -448,7 +451,7 @@ export default function GaleriaFotos({
                   contexto={contexto?.(m)}
                   to={m.bloque_id ? `/galeria/${m.id_medicion}?punto=${encodeURIComponent(m.bloque_id)}` : `/galeria/${m.id_medicion}`}
                   state={{ filters: { nivelFilter, fechaInicio, fechaFin, orden, loteAbiertoId }, volver: volverA }}
-                  seleccion={seleccionando && idPuntoDe(m) ? {
+                  seleccion={seleccionando && gestionable(m) ? {
                     marcada: marcadas.has(m.id_medicion),
                     onToggle: () => alternar(m.id_medicion),
                   } : undefined}
