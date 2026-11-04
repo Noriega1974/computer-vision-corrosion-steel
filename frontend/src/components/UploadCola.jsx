@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { IconoAgregarImagen, IconoError, IconoEliminar, IconoFlechaAdelante, IconoFlechaAtras, IconoUbicacion } from './Iconos';
-import NivelIcon from './NivelIcon';
+import { IconoAgregarImagen, IconoError, IconoEliminar, IconoFlechaAdelante, IconoFlechaAtras } from './Iconos';
 import { nivelColor, nivelLabel } from '../lib/statusUtils';
 import { formatoPct, etiquetaBase } from '../lib/textUtils';
 import { LOTE_MAX } from '../hooks/useUploadLote';
 import { paginar } from '../lib/gestorSubida';
 import NotaPctAproximado from './NotaPctAproximado';
+import { Mosaico } from './Mosaico';
+import { estadoTesteraSubida } from '../lib/mosaico';
 
 const visuallyHidden = {
   position: 'absolute', width: 1, height: 1, overflow: 'hidden',
@@ -22,76 +23,74 @@ const btnSecondary = {
 };
 const btnPrimary = { ...btnBase, background: 'var(--accent-amber)', border: 'none', color: 'white' };
 
-// Elapsed seconds while the server analyzes one photo. The interval exists
-// only while this row is in the analyzing state.
-function SegundosAnalisis({ desde }) {
-  const [s, setS] = useState(0);
-  useEffect(() => {
-    const tick = () => setS(Math.max(0, Math.floor((Date.now() - desde) / 1000)));
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [desde]);
-  return <span style={numStyle}>{s} s</span>;
-}
-
-function EstadoFila({ it, ocupado, onReintentar }) {
-  if (it.estado === 'cola') return <span>{it.reintentando ? 'Reintentando en unos segundos' : 'En cola'}</span>;
-  if (it.estado === 'subiendo') {
-    return (
-      <span>
-        Subiendo <span style={numStyle}>{it.progreso} %</span>
-        {it.reintentando && ' · Reintentando'}
-      </span>
-    );
-  }
-  if (it.estado === 'analizando') {
-    return (
-      <span>
-        Analizando · <SegundosAnalisis desde={it.inicioAnalisis} />
-        {it.reintentando && ' · Reintentando'}
-      </span>
-    );
-  }
-  if (it.estado === 'listo') {
-    const r = it.resultado ?? {};
-    const nivel = r.nivel_corrosion;
-    const color = nivel == null ? 'var(--text-primary)' : nivelColor(nivel);
-    return (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color }}>
-        {nivel != null && <NivelIcon nivel={nivel} size={18} color={color} />}
-        <span>
-          Listo{nivel != null && <> · <strong>{nivelLabel(nivel)}</strong></>}
-          {r.area_corroida_pct != null && <> · <span style={numStyle}>{formatoPct(r.area_corroida_pct)}</span> {etiquetaBase(r)}</>}
-        </span>
-      </span>
-    );
-  }
-  return (
-    <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
-      <span style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 6, color: 'var(--accent-red)' }}>
-        <IconoError size={16} aria-hidden="true" style={{ flexShrink: 0, marginTop: 2 }} />
-        <span>Error: {it.error}</span>
-      </span>
-      <button type="button" disabled={ocupado} onClick={onReintentar}
-        style={{ ...btnSecondary, padding: '5px 12px', opacity: ocupado ? 0.6 : 1, cursor: ocupado ? 'not-allowed' : 'pointer' }}>
-        Reintentar
-      </button>
-    </span>
-  );
-}
-
-// Thumbnail with its own object URL: created on mount and revoked on unmount,
-// so only the rows on the visible page hold a preview in memory.
-function Miniatura({ file }) {
+// Preview with its own object URL: created on mount and revoked on unmount,
+// so only the tiles on the visible page hold a preview in memory.
+function Previa({ file }) {
   const [url, setUrl] = useState(null);
   useEffect(() => {
     const u = URL.createObjectURL(file);
     setUrl(u);
     return () => URL.revokeObjectURL(u);
   }, [file]);
-  const estilo = { width: 56, height: 56, objectFit: 'cover', borderRadius: 6, flexShrink: 0, background: 'var(--bg-card)' };
-  return url ? <img src={url} alt="" width={56} height={56} decoding="async" loading="lazy" style={estilo} /> : <div aria-hidden="true" style={estilo} />;
+  return url ? <img className="mosaico-tile__img" src={url} alt="" decoding="async" loading="lazy" /> : null;
+}
+
+// One square tile of the queue: preview, status overlay and its actions.
+function TesteraCola({ it, ocupado, iniciado, onQuitar, onReintentar }) {
+  const nombre = it.nombre || it.file.name;
+  const estado = it.estado;
+  const r = it.resultado ?? {};
+  const nivel = r.nivel_corrosion;
+  const color = nivel == null ? 'var(--accent-green)' : nivelColor(nivel);
+  const texto = estado === 'listo' && nivel != null
+    ? `Listo, ${nivelLabel(nivel)}${r.area_corroida_pct != null ? `, ${formatoPct(r.area_corroida_pct)}` : ''}`
+    : estado === 'error' ? `Error: ${it.error}` : estadoTesteraSubida(it);
+  return (
+    <div className="mosaico-tile" role="group" aria-label={`${nombre}: ${texto}`}>
+      <Previa file={it.file} />
+      {estado === 'listo' ? (
+        <>
+          <span className="mosaico-tile__punto" aria-hidden="true" style={{ background: color }} />
+          <span className="mosaico-tile__pie">
+            <span className="mosaico-tile__pct">
+              {r.area_corroida_pct != null ? formatoPct(r.area_corroida_pct) : 'Listo'}
+            </span>
+            <span className="mosaico-tile__nombre">{nivel != null ? nivelLabel(nivel) : nombre}</span>
+          </span>
+        </>
+      ) : estado === 'error' ? (
+        <div className="mosaico-tile__estado mosaico-tile__estado--error" title={it.error}>
+          <IconoError size={18} aria-hidden="true" />
+          <span>Error</span>
+        </div>
+      ) : (
+        <>
+          <span className="mosaico-tile__pie">
+            <span className="mosaico-tile__pct">{estadoTesteraSubida(it)}</span>
+            <span className="mosaico-tile__nombre">{nombre}</span>
+          </span>
+          {estado === 'subiendo' && (
+            <span className="mosaico-tile__barra" aria-hidden="true"><span style={{ width: `${it.progreso ?? 0}%` }} /></span>
+          )}
+          {estado === 'analizando' && <span className="mosaico-tile__barra mosaico-tile__barra--indet" aria-hidden="true"><span /></span>}
+        </>
+      )}
+      {estado === 'error' && (
+        <button type="button" disabled={ocupado} onClick={onReintentar}
+          className="mosaico-tile__accion mosaico-tile__accion--reintentar"
+          style={{ opacity: ocupado ? 0.6 : 1, cursor: ocupado ? 'not-allowed' : 'pointer' }}>
+          Reintentar
+        </button>
+      )}
+      {!iniciado && (
+        <button type="button" onClick={onQuitar}
+          aria-label={`Quitar ${nombre} de la lista`}
+          className="mosaico-tile__accion mosaico-tile__accion--quitar">
+          <IconoEliminar size={13} aria-hidden="true" />
+        </button>
+      )}
+    </div>
+  );
 }
 
 // Queue for a batch upload (up to LOTE_MAX rows). Paged, FILAS_POR_PAGINA rows
@@ -143,49 +142,24 @@ export default function UploadCola({ lote, onQuitar, onReintentar, onAgregar, on
         </span>
       </div>
 
-      <ul
+      <Mosaico
         ref={listaRef}
         tabIndex={-1}
-        aria-label={paginas > 1 ? `Imágenes del lote, página ${pagina + 1} de ${paginas}` : 'Imágenes del lote'}
-        style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', outline: 'none' }}
+        altoMax={420}
+        label={paginas > 1 ? `Imágenes del lote, página ${pagina + 1} de ${paginas}` : 'Imágenes del lote'}
+        style={{ outline: 'none' }}
       >
         {filas.map((it) => (
-          <li key={it.id} style={{
-            display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-start', flexWrap: 'wrap',
-            padding: 10, background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 8,
-          }}>
-            <Miniatura file={it.file} />
-            <div style={{ flex: '1 1 200px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', padding: '3px 9px',
-                  background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 6,
-                  fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 'var(--text-xs)',
-                  color: 'var(--text-primary)', overflowWrap: 'anywhere',
-                }}>
-                  {it.nombre || it.file.name}
-                </span>
-              </div>
-              {it.gps && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--text-2xs)', color: 'var(--accent-green)' }}>
-                  <IconoUbicacion size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
-                  GPS detectado
-                </span>
-              )}
-              <div style={{ fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-                <EstadoFila it={it} ocupado={running} onReintentar={() => onReintentar(it.id)} />
-              </div>
-            </div>
-            {!iniciado && (
-              <button type="button" onClick={() => onQuitar(it.id)}
-                aria-label={`Quitar ${it.nombre || it.file.name} de la lista`}
-                style={{ ...btnSecondary, padding: 8, display: 'inline-flex', flexShrink: 0 }}>
-                <IconoEliminar size={16} aria-hidden="true" />
-              </button>
-            )}
-          </li>
+          <TesteraCola
+            key={it.id}
+            it={it}
+            ocupado={running}
+            iniciado={iniciado}
+            onQuitar={() => onQuitar(it.id)}
+            onReintentar={() => onReintentar(it.id)}
+          />
         ))}
-      </ul>
+      </Mosaico>
 
       {paginas > 1 && (
         <nav aria-label="Páginas del lote" style={{

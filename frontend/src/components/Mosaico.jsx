@@ -10,9 +10,10 @@ import {
 
 // Contenedor de la cuadrícula: alto máximo definido con scroll interno.
 // `ancho` usa casillas más grandes (~140px) para áreas amplias.
-export function Mosaico({ children, ancho = false, altoMax = 300, sinTope = false, label, style, ...resto }) {
+export const Mosaico = React.forwardRef(function Mosaico({ children, ancho = false, altoMax = 300, sinTope = false, label, style, ...resto }, ref) {
   return (
     <div
+      ref={ref}
       className={`mosaico${ancho ? ' mosaico--ancho' : ''}${sinTope ? ' mosaico--sin-tope' : ''}`}
       style={{ '--mosaico-alto': `${altoMax}px`, ...style }}
       role="group"
@@ -22,7 +23,7 @@ export function Mosaico({ children, ancho = false, altoMax = 300, sinTope = fals
       {children}
     </div>
   );
-}
+});
 
 function Imagen({ src, alt = '' }) {
   const [fallo, setFallo] = useState(false);

@@ -134,11 +134,15 @@ export default function UploadPage() {
 
   // Multi-photo mode (2+ files or explicit batch selection): queue handled by useUploadLote.
   const lote = useUploadLote();
-  const [modoSubida, setModoSubida] = useState(() => (lote.iniciado || lote.items.length > 0 ? 'lote' : 'individual'));
-  const modoLote = modoSubida === 'lote';
-  const [avisoArchivos, setAvisoArchivos] = useState(null);  // {rechazados: string[], excedidos: number}
   const [nombreLote, setNombreLote] = useState('');
   const [loteIdActivo, setLoteIdActivo] = useState(null);
+  // Cola de varias fotos: existe mientras haya fotos en ella. Con una sola foto se
+  // usa el flujo individual; la opción de agrupar en un lote solo aparece con 2 o más.
+  const modoLote = lote.iniciado || lote.items.length > 0;
+  const [agruparEnLote, setAgruparEnLote] = useState(true);
+  // Con una sola foto en la cola no hay lote que formar; una sesión ya iniciada conserva el suyo.
+  const agrupar = lote.iniciado ? Boolean(loteIdActivo) : (agruparEnLote && lote.items.length > 1);
+  const [avisoArchivos, setAvisoArchivos] = useState(null);  // {rechazados: string[], excedidos: number}
 
   // Detalles opcionales
   const [nombre, setNombre] = useState('');           // nombre de la foto (para buscarla luego)
@@ -194,7 +198,7 @@ export default function UploadPage() {
     } else if (validos.length === 1) {
       procesarImagen(validos[0]);
     } else if (validos.length >= 2) {
-      setModoSubida('lote');
+      setAgruparEnLote(true);
       excedidos = lote.agregar(validos);
     }
     setAvisoArchivos(rechazados.length || excedidos ? { rechazados, excedidos } : null);
@@ -267,13 +271,13 @@ export default function UploadPage() {
     if (modoLote) {
       if (!bloqueSeleccionado || lote.running || lote.items.length === 0) return;
       setErrorLocal(null);
-      const loteId = loteIdActivo || generarLoteId();
+      const loteId = agrupar ? (loteIdActivo || generarLoteId()) : null;
       // With the default date (upload day) the local day is captured ONCE here and sent
       // for every photo: a batch that crosses midnight must not split across two days.
       const fechaLote = esMedicionPasada ? fechaMedicion : hoyLocalISO();
-      const nombreLoteFinal = nombreLote.trim() || sugerirNombreLote(fechaLote);
+      const nombreLoteFinal = agrupar ? (nombreLote.trim() || sugerirNombreLote(fechaLote)) : null;
       setLoteIdActivo(loteId);
-      if (!nombreLote.trim()) setNombreLote(nombreLoteFinal);
+      if (agrupar && !nombreLote.trim()) setNombreLote(nombreLoteFinal);
       lote.iniciar({
         loteId,
         loteNombre: nombreLoteFinal,
@@ -360,82 +364,8 @@ export default function UploadPage() {
 
         <form onSubmit={handleSubmit}>
 
-          {/* Selector de modo: Muestras individuales vs Carga por lotes */}
-          <div
-            role="radiogroup"
-            aria-label="Tipo de carga"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-              gap: 'var(--space-2-5)',
-              marginBottom: 'var(--space-4)',
-            }}
-          >
-            <button
-              type="button"
-              role="radio"
-              aria-checked={!modoLote}
-              disabled={uploading || lote.running || lote.iniciado}
-              onClick={() => {
-                if (modoLote && !lote.running && !lote.iniciado) {
-                  setModoSubida('individual');
-                  setErrorLocal(null);
-                }
-              }}
-              style={{
-                padding: '12px 14px',
-                textAlign: 'left',
-                borderRadius: 9,
-                border: `1px solid ${!modoLote ? 'var(--accent-amber)' : 'var(--border)'}`,
-                background: !modoLote ? 'color-mix(in srgb, var(--accent-amber) 12%, var(--bg-card))' : 'var(--bg-inset)',
-                cursor: uploading || lote.running || lote.iniciado ? 'default' : 'pointer',
-                fontFamily: 'var(--font-ui)',
-                opacity: (uploading || lote.running || lote.iniciado) && modoLote ? 0.6 : 1,
-                transition: 'border-color var(--dur-fast), background-color var(--dur-fast)',
-              }}
-            >
-              <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
-                Muestras individuales
-              </div>
-              <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-secondary)', marginTop: 2 }}>
-                Una sola imagen con nombre propio
-              </div>
-            </button>
-
-            <button
-              type="button"
-              role="radio"
-              aria-checked={modoLote}
-              disabled={uploading || lote.running}
-              onClick={() => {
-                if (!modoLote && !uploading) {
-                  setModoSubida('lote');
-                  setErrorLocal(null);
-                }
-              }}
-              style={{
-                padding: '12px 14px',
-                textAlign: 'left',
-                borderRadius: 9,
-                border: `1px solid ${modoLote ? 'var(--accent-amber)' : 'var(--border)'}`,
-                background: modoLote ? 'color-mix(in srgb, var(--accent-amber) 12%, var(--bg-card))' : 'var(--bg-inset)',
-                cursor: uploading || lote.running ? 'default' : 'pointer',
-                fontFamily: 'var(--font-ui)',
-                opacity: (uploading || lote.running) && !modoLote ? 0.6 : 1,
-                transition: 'border-color var(--dur-fast), background-color var(--dur-fast)',
-              }}
-            >
-              <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
-                Carga por lotes de imágenes
-              </div>
-              <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-secondary)', marginTop: 2 }}>
-                Hasta 1.000 imágenes agrupadas bajo un nombre de lote
-              </div>
-            </button>
-          </div>
-
           {/* ─── SECCIÓN 1: Imagen ─── */}
-          <Section title={modoLote ? '1. Imágenes' : '1. Imagen'} accent="var(--accent-amber)">
+          <Section title={modoLote ? '1. Imágenes' : '1. Imagen o imágenes'} accent="var(--accent-amber)">
             <div
               role="note"
               style={{
@@ -467,8 +397,48 @@ export default function UploadPage() {
               </div>
             </div>
 
+            {modoLote && !lote.iniciado && lote.items.length > 1 && (
+              <div
+                role="radiogroup"
+                aria-label="Cómo subir las imágenes"
+                style={{
+                  display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: 'var(--space-2)', marginBottom: 'var(--space-3)',
+                }}
+              >
+                {[
+                  { valor: true, titulo: 'Un lote', detalle: `Las ${lote.items.length} imágenes agrupadas bajo un nombre` },
+                  { valor: false, titulo: 'Fotos individuales', detalle: 'Cada imagen se guarda por separado, sin lote' },
+                ].map((op) => {
+                  const activo = agrupar === op.valor;
+                  return (
+                    <button
+                      key={String(op.valor)}
+                      type="button"
+                      role="radio"
+                      aria-checked={activo}
+                      onClick={() => setAgruparEnLote(op.valor)}
+                      style={{
+                        padding: '9px 12px', textAlign: 'left', borderRadius: 9, cursor: 'pointer',
+                        border: `1px solid ${activo ? 'var(--accent-amber)' : 'var(--border)'}`,
+                        background: activo ? 'color-mix(in srgb, var(--accent-amber) 12%, var(--bg-card))' : 'var(--bg-inset)',
+                        fontFamily: 'var(--font-ui)',
+                        transition: 'border-color var(--dur-fast), background-color var(--dur-fast)',
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
+                        {op.titulo}{op.valor ? ' (recomendado)' : ''}
+                      </div>
+                      <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-secondary)', marginTop: 2 }}>{op.detalle}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             {modoLote && !lote.iniciado && (
               <>
+                {agrupar && (
                 <div style={{ marginBottom: 'var(--space-3)' }}>
                   <label htmlFor="upload-nombre-lote" style={labelStyle}>
                     Nombre del lote (opcional)
@@ -488,6 +458,7 @@ export default function UploadPage() {
                     Las imágenes del lote se agruparán bajo este nombre en la galería y en la línea de tiempo.
                   </div>
                 </div>
+                )}
 
                 <div
                   style={{
@@ -501,49 +472,12 @@ export default function UploadPage() {
                     fontFamily: 'var(--font-ui)',
                   }}
                 >
-                  Máximo 1.000 imágenes por lote. Ten en cuenta que entre más imágenes incluyas, más tiempo tomará el análisis.
+                  Máximo 1.000 imágenes por carga. Ten en cuenta que entre más imágenes incluyas, más tiempo tomará el análisis.
                 </div>
               </>
             )}
 
-            {modoLote && lote.items.length === 0 ? (
-              <div
-                role="button"
-                tabIndex={0}
-                aria-label={`Seleccionar imágenes del lote: JPG o PNG, máximo ${MAX_FOTO_MB} MB cada una, hasta ${LOTE_MAX} por lote`}
-                onDrop={handleDrop}
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                style={{
-                  border: `2px dashed ${dragOver ? 'var(--accent-amber)' : 'var(--border)'}`,
-                  borderRadius: 10, padding: '36px 20px', textAlign: 'center',
-                  background: dragOver ? 'var(--bg-card-hover)' : 'var(--bg-inset)',
-                  cursor: 'pointer', transition: 'border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out)',
-                }}
-                onClick={() => document.getElementById('file-input-lote').click()}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    document.getElementById('file-input-lote').click();
-                  }
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'center', color: 'var(--text-muted)', marginBottom: 'var(--space-2-5)' }}>
-                  <IconoAgregarImagen size={36} aria-hidden="true" />
-                </div>
-                <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 'var(--space-1)' }}>
-                  Arrastra las imágenes del lote aquí o haz clic para seleccionar
-                </div>
-                <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>
-                  JPG o PNG · Máximo 50 MB cada una · Hasta {LOTE_MAX} imágenes por lote
-                </div>
-                <input
-                  id="file-input-lote" name="imagenes-lote" type="file" multiple
-                  accept="image/jpeg,image/png" tabIndex={-1}
-                  onChange={handleFileInput} style={{ display: 'none' }}
-                />
-              </div>
-            ) : modoLote ? (
+            {modoLote ? (
               <>
                 {lote.iniciado && <BarraProgresoSubida style={{ marginBottom: 'var(--space-3)' }} />}
                 <UploadCola
@@ -585,7 +519,7 @@ export default function UploadPage() {
                   <IconoAgregarImagen size={36} aria-hidden="true" />
                 </div>
                 <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 'var(--space-1)' }}>
-                  Arrastra una o varias imágenes aquí o haz clic para seleccionar
+                  Arrastra una o varias imágenes aquí o haz clic para seleccionar. Con más de una podrás agruparlas en un lote
                 </div>
                 <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>JPG o PNG · Máximo 50 MB cada una · Hasta {LOTE_MAX} por tanda</div>
                 <input
@@ -747,7 +681,7 @@ export default function UploadPage() {
                   fontFamily: 'var(--font-ui)',
                 }}
               >
-                Todo el lote recibirá la fecha elegida (la de subida o la fecha pasada que selecciones).
+                Todas las imágenes recibirán la fecha elegida (la de subida o la fecha pasada que selecciones).
               </div>
             )}
           </Section>

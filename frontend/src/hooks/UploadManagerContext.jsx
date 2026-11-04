@@ -30,8 +30,8 @@ function construirBody(sesion, it, gps) {
   return {
     fuente: 'movil',
     bloque_id: sesion.bloqueId,
-    lote_id: sesion.loteId,
-    lote_nombre: sesion.loteNombre,
+    ...(sesion.loteId && { lote_id: sesion.loteId }),
+    ...(sesion.loteNombre && { lote_nombre: sesion.loteNombre }),
     timestamp_medicion: sesion.timestampMedicion,
     ...(it.nombre?.trim() && { nombre: it.nombre.trim() }),
     ...(sesion.notas && { notas: sesion.notas }),

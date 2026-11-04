@@ -2439,3 +2439,49 @@ select option {
   .mosaico-tile, .mosaico-tile__barra > span { transition: none; }
   .mosaico-tile:hover { transform: none; }
 }
+.mosaico-tile__barra--indet > span {
+  width: 40% !important; animation: pw-indet 1.2s ease-in-out infinite;
+}
+@keyframes pw-indet { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+@media (prefers-reduced-motion: reduce) {
+  .mosaico-tile__barra--indet > span { animation: none; width: 100% !important; opacity: 0.6; }
+}
+
+/* ── Barra de progreso de subida ── */
+.subida-barra {
+  height: 8px; border-radius: 999px; background: var(--bg-inset);
+  overflow: hidden; border: 1px solid var(--border);
+}
+.subida-barra__relleno {
+  position: relative; height: 100%; border-radius: 999px; background: var(--accent-amber);
+  transition: width 0.5s var(--ease-out), background-color 0.4s var(--ease-out);
+  overflow: hidden;
+}
+.subida-barra__relleno--activo::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(110deg, transparent 20%, rgba(255, 255, 255, 0.45) 50%, transparent 80%);
+  background-size: 200% 100%;
+  animation: pw-shimmer 1.4s linear infinite;
+}
+.subida-barra__relleno--rayas {
+  background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.18) 0 8px, transparent 8px 16px);
+  background-size: 22.6px 22.6px;
+  animation: pw-rayas 0.9s linear infinite;
+}
+.subida-barra__relleno--ok { background: var(--accent-green); }
+.subida-barra__relleno--error { background: var(--accent-red); }
+.subida-punto {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px;
+  background: var(--accent-amber); vertical-align: middle;
+}
+.subida-punto--activo { animation: pw-pulso 1.4s ease-in-out infinite; }
+.subida-punto--ok { background: var(--accent-green); }
+.subida-punto--error { background: var(--accent-red); }
+@keyframes pw-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes pw-rayas { from { background-position: 0 0; } to { background-position: 22.6px 0; } }
+@keyframes pw-pulso { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.75); } }
+.subida-tarjeta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+@media (prefers-reduced-motion: reduce) {
+  .subida-barra__relleno { transition: none; }
+  .subida-barra__relleno--activo::after, .subida-barra__relleno--rayas, .subida-punto--activo { animation: none; }
+}
