@@ -182,7 +182,7 @@ export default function DashboardPage() {
           className="main-grid"
           style={{
             display: 'grid',
-            gridTemplateColumns: 'minmax(220px, 0.8fr) minmax(0, 1.5fr) minmax(340px, 1.4fr)',
+            gridTemplateColumns: 'minmax(220px, 0.8fr) minmax(0, 1.8fr) minmax(320px, 1.15fr)',
             gap: 18,
             height: 'clamp(540px, 66vh, 820px)',
           }}

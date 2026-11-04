@@ -41,6 +41,7 @@ replicado de api_usuarios/handler.py — no hay módulo compartido entre
 lambdas) salvo que sea super_admin, que ve todas las empresas.
 """
 import json
+import math
 import logging
 import os
 import re
@@ -367,16 +368,21 @@ def _resumen_diario(event: dict) -> dict:
         dia = _dia_local(it.get("timestamp"))
         if not dia or not dia.startswith(f"{anio:04d}-"):
             continue
-        d = dias.setdefault(dia, {"fecha": dia, "total": 0, "por_nivel": [0, 0, 0, 0], "_lotes": {}, "peor_nivel": None, "max_pct": None})
+        d = dias.setdefault(dia, {"fecha": dia, "total": 0, "por_nivel": [0, 0, 0, 0], "_lotes": {}, "peor_nivel": None, "max_pct": None,
+                                                "_sum_pct": 0.0, "_n_pct": 0, "_sum_niv": 0, "_n_niv": 0})
         d["total"] += 1
         imagenes += 1
         nivel = _nivel(it.get("nivel_corrosion"))
         if nivel is not None:
             d["por_nivel"][nivel] += 1
+            d["_sum_niv"] += nivel
+            d["_n_niv"] += 1
             d["peor_nivel"] = nivel if d["peor_nivel"] is None else max(d["peor_nivel"], nivel)
         pct = _numero(it.get("area_corroida_pct"))
         if pct is not None:
             d["max_pct"] = pct if d["max_pct"] is None else max(d["max_pct"], pct)
+            d["_sum_pct"] += pct
+            d["_n_pct"] += 1
         lote = it.get("lote_id")
         if lote:
             d["_lotes"][lote] = d["_lotes"].get(lote, 0) + 1
@@ -387,6 +393,13 @@ def _resumen_diario(event: dict) -> dict:
     for dia in sorted(dias):
         d = dias[dia]
         lotes = d.pop("_lotes")
+        # Promedios del día (sobre las mediciones que tienen el dato): alimentan la
+        # tendencia del panel. nivel_ponderado = promedio de niveles redondeado al más cercano.
+        n_pct, n_niv = d.pop("_n_pct"), d.pop("_n_niv")
+        suma_pct, suma_niv = d.pop("_sum_pct"), d.pop("_sum_niv")
+        d["promedio_pct"] = suma_pct / n_pct if n_pct else None
+        d["nivel_promedio"] = round(suma_niv / n_niv, 2) if n_niv else None
+        d["nivel_ponderado"] = int(math.floor(suma_niv / n_niv + 0.5)) if n_niv else None
         d["lotes"] = {"count": len(lotes), "imagenes": sum(lotes.values())}
         salida.append(d)
     return _respuesta(200, {
