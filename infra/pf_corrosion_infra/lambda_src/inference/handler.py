@@ -85,6 +85,7 @@ BUCKET_NAME = os.environ["BUCKET_NAME"]
 TABLA_MEDICIONES = os.environ["TABLA_MEDICIONES"]
 TABLA_USUARIOS = os.environ["TABLA_USUARIOS"]
 TABLA_BLOQUES = os.environ["TABLA_BLOQUES"]
+TABLA_EMPRESAS = os.environ["TABLA_EMPRESAS"]
 REGION = os.environ["REGION"]
 
 _primera_inferencia = True  # True hasta que este contenedor atiende su 1a foto
@@ -96,6 +97,7 @@ dynamodb = boto3.resource("dynamodb", region_name=REGION)
 tabla_mediciones = dynamodb.Table(TABLA_MEDICIONES)
 tabla_usuarios = dynamodb.Table(TABLA_USUARIOS)
 tabla_bloques = dynamodb.Table(TABLA_BLOQUES)
+tabla_empresas = dynamodb.Table(TABLA_EMPRESAS)
 
 
 # Pillow avisa por encima de MAX_IMAGE_PIXELS y lanza DecompressionBombError por
@@ -156,7 +158,7 @@ def _claims(event: dict) -> dict:
     return event.get("requestContext", {}).get("authorizer", {}).get("claims", {})
 
 
-def _usuario_actual(event: dict) -> dict | None:
+def _resolver_usuario_actual(event: dict) -> dict | None:
     """Resuelve el ítem completo (rol, empresa_id, id_usuario, ...) del
     usuario autenticado a partir de `sub` (claim del JWT), vía el GSI
     cognito-sub-index de la tabla `usuarios`. Replicado igual en
@@ -171,6 +173,55 @@ def _usuario_actual(event: dict) -> dict | None:
     )
     items = resp.get("Items", [])
     return items[0] if items else None
+
+
+def _usuario_actual(event: dict) -> dict | None:
+    """Memoiza `_resolver_usuario_actual` por invocación (en el propio event):
+    el gate de cuenta inactiva y la ruta llaman a esto en la misma petición y
+    así la tabla `usuarios` se lee una sola vez."""
+    if not isinstance(event, dict):
+        return _resolver_usuario_actual(event)
+    if "_usuario_actual_cache" not in event:
+        event["_usuario_actual_cache"] = _resolver_usuario_actual(event)
+    return event["_usuario_actual_cache"]
+
+
+# ── Cuenta o afiliación desactivada ──────────────────────────────────────────
+# Copia idéntica en api_mediciones, api_puntos e inference (no hay módulo
+# compartido entre lambdas): si cambia una, cambian las tres.
+
+MENSAJE_CUENTA_DESACTIVADA = "Tu cuenta está desactivada. Pide ayuda a un administrador"
+MENSAJE_AFILIACION_DESACTIVADA = "Tu afiliación está desactivada. Pide ayuda a un administrador"
+
+
+def _rechazo_cuenta_inactiva(creador: dict | None) -> dict | None:
+    """403 si el usuario (`activo=false`) o su afiliación (`activa=false`)
+    fue desactivado; None si puede continuar. super_admin y quien no tiene
+    registro quedan fuera: lo segundo lo resuelve cada ruta con su propio
+    chequeo de rol. Sin esto un token todavía vigente seguiría operando hasta
+    que Cognito lo expire."""
+    if not creador or creador.get("rol") == "super_admin":
+        return None
+    if creador.get("activo") is False:
+        return _respuesta(403, {"error": MENSAJE_CUENTA_DESACTIVADA})
+    empresa_id = creador.get("empresa_id")
+    if empresa_id:
+        empresa = tabla_empresas.get_item(Key={"id_empresa": empresa_id}).get("Item")
+        if empresa and empresa.get("activa") is False:
+            return _respuesta(403, {"error": MENSAJE_AFILIACION_DESACTIVADA})
+    return None
+
+
+ROLES_QUE_SUBEN = ("super_admin", "admin", "tecnico")
+MENSAJE_ROL_SIN_SUBIDA = "Tu rol no puede subir mediciones. Pide ayuda a un administrador"
+
+
+def _rechazo_subida(creador: dict | None) -> dict | None:
+    """Subir fotos es solo de super_admin/admin/tecnico y de cuentas activas.
+    Lista blanca: un usuario sin registro o con un rol desconocido no sube."""
+    if not creador or creador.get("rol") not in ROLES_QUE_SUBEN:
+        return _respuesta(403, {"error": MENSAJE_ROL_SIN_SUBIDA})
+    return _rechazo_cuenta_inactiva(creador)
 
 
 # ── Validación de bloque ─────────────────────────────────────────────────────
@@ -396,12 +447,12 @@ def _generar_url_subida(event: dict) -> dict:
     Body: {"content_type": "image/jpeg"}. La politica fija la clave exacta, el
     content-type y el tamano (1 byte a MAX_BYTES_FOTO); S3 rechaza lo demas.
     Mismo bloqueo de rol que POST /medicion: `cliente` no sube fotos."""
-    creador = _usuario_actual(event)
-    if creador and creador.get("rol") == "cliente":
-        return _respuesta(403, {"error": "Tu rol no puede subir mediciones. Pide ayuda a un administrador"})
     sub = _claims(event).get("sub", "")
     if not sub:
         return _respuesta(401, {"error": "No se pudo identificar tu sesión. Cierra sesión y vuelve a ingresar"})
+    rechazo = _rechazo_subida(_usuario_actual(event))
+    if rechazo:
+        return rechazo
 
     try:
         body = json.loads(event.get("body") or "{}")
@@ -820,6 +871,17 @@ def _ahora_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# Colombia has no daylight saving time: the local day is always UTC-5. Same
+# rule as `_dia_local` in api_mediciones (no module is shared between lambdas,
+# so this small helper is copied; keep both in sync).
+TZ_COLOMBIA = timezone(timedelta(hours=-5))
+
+
+def _dia_colombia(ahora: datetime) -> date:
+    """Calendar day in Colombia (UTC-5) of an aware instant."""
+    return ahora.astimezone(TZ_COLOMBIA).date()
+
+
 def _timestamp_fecha_pasada(fecha: date, ahora: datetime) -> str:
     """Timestamp for a user-chosen measurement date: 12:00:00 UTC of that day
     plus an offset taken from the current time of day (microsecond precision).
@@ -846,12 +908,13 @@ def _procesar_solicitud(event: dict, tiempos: dict) -> dict:
     retomar_listo = False    # marcador 'listo' sin respuesta reconstruible y sin medición: se reprocesa
     try:
         creador = _usuario_actual(event)
-        if creador and creador.get("rol") == "cliente":
-            # Subir medición: solo super_admin/admin/tecnico (ver matriz de
-            # permisos) — cliente es de solo lectura.
-            return _respuesta(403, {"error": "Tu rol no puede subir mediciones. Pide ayuda a un administrador"})
-        es_super_admin = bool(creador) and creador.get("rol") == "super_admin"
-        empresa_id_creador = creador.get("empresa_id") if creador else None
+        # Subir medición: solo super_admin/admin/tecnico (ver matriz de
+        # permisos); cliente y quien no tiene registro no suben.
+        rechazo = _rechazo_subida(creador)
+        if rechazo:
+            return rechazo
+        es_super_admin = creador.get("rol") == "super_admin"
+        empresa_id_creador = creador.get("empresa_id")
 
         body = json.loads(event.get("body", "{}"))
 
@@ -882,10 +945,11 @@ def _procesar_solicitud(event: dict, tiempos: dict) -> dict:
                 fecha_parsed = date.fromisoformat(timestamp_custom)
             except (ValueError, TypeError):
                 return _respuesta(400, {"error": "La fecha de la medición no es válida. Elige una fecha del calendario"})
-            # Compared against the UTC day on purpose: users are in Colombia
-            # (UTC-5), so their local "today" is never ahead of the UTC date.
+            # "Future" means after today in Colombia (UTC-5), the same day the
+            # app and the daily summaries use; the UTC date can be a day ahead
+            # during the evening there.
             ahora = _ahora_utc()
-            if fecha_parsed > ahora.date():
+            if fecha_parsed > _dia_colombia(ahora):
                 return _respuesta(400, {"error": "La fecha de la medición no puede ser futura. Elige la fecha de hoy o una anterior"})
             ts = _timestamp_fecha_pasada(fecha_parsed, ahora)
         else:

@@ -19,19 +19,21 @@ export function nivelToStatus(nivel) {
   return ['OK', 'EARLY', 'MODERATE', 'CRITICAL'][nivel] ?? 'OK';
 }
 
+// Única paleta de niveles (relleno de chips, puntos, mapa, leyendas y barra
+// anual): verde / ámbar / naranja intenso / rojo. El ámbar es #f59e0b porque en
+// la barra anual (franjas de 3 px) el leve debía distinguirse del moderado.
+export const COLORES_NIVEL = ['#16a34a', '#f59e0b', '#ea580c', '#dc2626'];
+export const COLOR_NIVEL_DESCONOCIDO = '#64748b';
+
 export function getStatusColor(status) {
-  return {
-    OK:       '#16a34a',
-    EARLY:    '#d97706',
-    MODERATE: '#ea580c',
-    CRITICAL: '#dc2626',
-  }[status] ?? '#64748b';
+  const i = NIVELES.findIndex(n => n.status === status);
+  return COLORES_NIVEL[i] ?? COLOR_NIVEL_DESCONOCIDO;
 }
 
 export function getStatusBg(status) {
   return {
     OK:       'rgba(22,163,74,0.08)',
-    EARLY:    'rgba(217,119,6,0.08)',
+    EARLY:    'rgba(245,158,11,0.10)',
     MODERATE: 'rgba(234,88,12,0.10)',
     CRITICAL: 'rgba(220,38,38,0.10)',
   }[status] ?? 'transparent';
@@ -49,6 +51,14 @@ export function nivelColor(nivel) {
 // Texto único para chips, filtros, mapa, KPI y gráficas: "Severa ≥25 %".
 export function nivelLabel(nivel) {
   return getStatusLabel(nivelToStatus(nivel));
+}
+
+// Color para TEXTO de un nivel: el relleno ámbar (#f59e0b) no llega a 4,5:1 sobre
+// fondo claro, así que el texto usa variables CSS con una variante más oscura en
+// tema claro y la clara en tema oscuro (definidas en index.css).
+export function nivelColorTexto(nivel) {
+  const i = Math.trunc(Number(nivel));
+  return i >= 0 && i < COLORES_NIVEL.length ? `var(--nivel-${i}-texto)` : 'var(--text-muted)';
 }
 
 export function nivelBg(nivel) {

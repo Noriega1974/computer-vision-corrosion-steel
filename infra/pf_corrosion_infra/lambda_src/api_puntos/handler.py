@@ -130,7 +130,7 @@ def _claims(event: dict) -> dict:
     return event.get("requestContext", {}).get("authorizer", {}).get("claims", {})
 
 
-def _usuario_actual(event: dict) -> dict | None:
+def _resolver_usuario_actual(event: dict) -> dict | None:
     """Resuelve el ítem completo (rol, empresa_id, id_usuario, ...) del
     usuario autenticado a partir de `sub` (claim del JWT), vía el GSI
     cognito-sub-index de la tabla `usuarios`. Necesario porque `id_usuario`
@@ -149,6 +149,43 @@ def _usuario_actual(event: dict) -> dict | None:
     )
     items = resp.get("Items", [])
     return items[0] if items else None
+
+
+def _usuario_actual(event: dict) -> dict | None:
+    """Memoiza `_resolver_usuario_actual` por invocación (en el propio event):
+    el gate de cuenta inactiva y la ruta llaman a esto en la misma petición y
+    así la tabla `usuarios` se lee una sola vez."""
+    if not isinstance(event, dict):
+        return _resolver_usuario_actual(event)
+    if "_usuario_actual_cache" not in event:
+        event["_usuario_actual_cache"] = _resolver_usuario_actual(event)
+    return event["_usuario_actual_cache"]
+
+
+# ── Cuenta o afiliación desactivada ──────────────────────────────────────────
+# Copia idéntica en api_mediciones, api_puntos e inference (no hay módulo
+# compartido entre lambdas): si cambia una, cambian las tres.
+
+MENSAJE_CUENTA_DESACTIVADA = "Tu cuenta está desactivada. Pide ayuda a un administrador"
+MENSAJE_AFILIACION_DESACTIVADA = "Tu afiliación está desactivada. Pide ayuda a un administrador"
+
+
+def _rechazo_cuenta_inactiva(creador: dict | None) -> dict | None:
+    """403 si el usuario (`activo=false`) o su afiliación (`activa=false`)
+    fue desactivado; None si puede continuar. super_admin y quien no tiene
+    registro quedan fuera: lo segundo lo resuelve cada ruta con su propio
+    chequeo de rol. Sin esto un token todavía vigente seguiría operando hasta
+    que Cognito lo expire."""
+    if not creador or creador.get("rol") == "super_admin":
+        return None
+    if creador.get("activo") is False:
+        return _respuesta(403, {"error": MENSAJE_CUENTA_DESACTIVADA})
+    empresa_id = creador.get("empresa_id")
+    if empresa_id:
+        empresa = tabla_empresas.get_item(Key={"id_empresa": empresa_id}).get("Item")
+        if empresa and empresa.get("activa") is False:
+            return _respuesta(403, {"error": MENSAJE_AFILIACION_DESACTIVADA})
+    return None
 
 
 # ── Helpers de bloques ───────────────────────────────────────────────────────
@@ -606,6 +643,10 @@ def lambda_handler(event: dict, context) -> dict:
     path_params = event.get("pathParameters") or {}
 
     try:
+        rechazo = _rechazo_cuenta_inactiva(_usuario_actual(event))
+        if rechazo:
+            return rechazo
+
         # ── /bloques y /bloques/{id_bloque} — misma Lambda, rutas aparte ─────
         if resource.startswith("/bloques"):
             return _handle_bloques(event, metodo, path_params.get("id_bloque"))

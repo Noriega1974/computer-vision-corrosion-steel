@@ -81,8 +81,11 @@ def test_agrega_por_dia_local_con_todos_los_niveles_y_lotes(h):
     ])
     cuerpo = json.loads(_resumen(h, anio="2026")["body"])
     d26, d27 = cuerpo["dias"]
+    promedio = d26.pop("promedio_pct")
+    assert promedio == pytest.approx((40.5 + 0.2 + 3 + 0) / 4)
     assert d26 == {"fecha": "2026-10-26", "total": 4, "por_nivel": [2, 1, 0, 1],
-                   "lotes": {"count": 2, "imagenes": 3}, "peor_nivel": 3, "max_pct": 40.5}
+                   "lotes": {"count": 2, "imagenes": 3}, "peor_nivel": 3, "max_pct": 40.5,
+                   "nivel_promedio": 1.0, "nivel_ponderado": 1}
     assert d27["fecha"] == "2026-10-27" and d27["por_nivel"] == [0, 0, 1, 0] and d27["lotes"] == {"count": 0, "imagenes": 0}
     assert cuerpo["totales"] == {"imagenes": 5, "lotes": 2, "imagenes_en_lotes": 3}
     assert cuerpo["truncado"] is False
@@ -262,3 +265,29 @@ def test_recientes_super_admin_sin_filtro_de_empresa(h, monkeypatch):
 def test_recientes_invalido_400(h, qp):
     _poner(h, [])
     assert _recientes(h, **qp)["statusCode"] == 400 and h.tabla.kwargs == []
+
+
+def test_promedios_del_dia_ponderan_todas_las_fotos_no_la_peor(h):
+    # 9 fotos severas y 1 limpia: el promedio es de las 10, el peor sigue siendo el nivel 3.
+    _poner(h, [_med(f"2026-10-26T15:{i:02d}:00+00:00", 3, "30") for i in range(9)]
+              + [_med("2026-10-26T16:00:00+00:00", 0, "0")])
+    d = json.loads(_resumen(h, anio="2026")["body"])["dias"][0]
+    assert d["promedio_pct"] == pytest.approx(27.0)
+    assert d["nivel_promedio"] == 2.7 and d["nivel_ponderado"] == 3 and d["peor_nivel"] == 3
+
+
+def test_nivel_ponderado_redondea_al_mas_cercano_y_medio_sube(h):
+    _poner(h, [_med("2026-10-26T15:00:00+00:00", 1, "1"), _med("2026-10-26T16:00:00+00:00", 2, "2"),
+               _med("2026-10-27T15:00:00+00:00", 0, "0"), _med("2026-10-27T16:00:00+00:00", 0, "0"),
+               _med("2026-10-27T17:00:00+00:00", 1, "1")])
+    d26, d27 = json.loads(_resumen(h, anio="2026")["body"])["dias"]
+    assert d26["nivel_promedio"] == 1.5 and d26["nivel_ponderado"] == 2
+    assert d27["nivel_promedio"] == 0.33 and d27["nivel_ponderado"] == 0
+
+
+def test_promedios_son_null_sin_datos_validos_y_ignoran_los_invalidos(h):
+    _poner(h, [_med("2026-10-26T15:00:00+00:00", None, "nan"),
+               _med("2026-10-27T15:00:00+00:00", None, "4"), _med("2026-10-27T16:00:00+00:00", 2, "x")])
+    d26, d27 = json.loads(_resumen(h, anio="2026")["body"])["dias"]
+    assert d26["promedio_pct"] is None and d26["nivel_promedio"] is None and d26["nivel_ponderado"] is None
+    assert d27["promedio_pct"] == 4 and d27["nivel_ponderado"] == 2

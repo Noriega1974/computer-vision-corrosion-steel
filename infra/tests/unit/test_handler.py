@@ -208,7 +208,10 @@ def test_tiempos_en_log(h, monkeypatch, tmp_path, caplog):
 
 def test_sin_inferencia_no_hay_linea_de_tiempos(h, caplog):
     with caplog.at_level("INFO"):
-        resp = h.lambda_handler({"body": json.dumps({"bloque_id": "BLQ-1"})}, None)
+        resp = h.lambda_handler({
+            "requestContext": {"authorizer": {"claims": {"sub": "sub-1"}}},
+            "body": json.dumps({"bloque_id": "BLQ-1"}),
+        }, None)
     assert resp["statusCode"] == 400
     assert not [r for r in caplog.records if "TIEMPOS_INFERENCIA" in r.getMessage()]
 

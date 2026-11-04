@@ -16,6 +16,8 @@ export function iniciales(nombre) {
   return letras.map(p => Array.from(p)[0]).join('').toUpperCase() || '?';
 }
 
+import { plural } from './textUtils.js';
+
 const tiempo = (m) => new Date(m.timestamp).getTime() || 0;
 const pctNum = (m) => {
   const n = Number(m?.area_corroida_pct ?? 0);
@@ -55,13 +57,10 @@ export function resumenConteoMediciones(mediciones = []) {
   };
 }
 
-// Formatea el conteo unificado: "x imágenes · x lotes con x imágenes".
+// Conteo unificado de la galería y los paneles: "x mediciones · x lotes".
 export function formatearConteoMediciones(mediciones = []) {
-  const { totalImagenes, totalLotes, imagenesEnLotes } = resumenConteoMediciones(mediciones);
-  const txtTotal = `${totalImagenes} ${totalImagenes === 1 ? 'imagen' : 'imágenes'}`;
-  const txtLotes = `${totalLotes} ${totalLotes === 1 ? 'lote' : 'lotes'}`;
-  const txtEnLotes = `${imagenesEnLotes} ${imagenesEnLotes === 1 ? 'imagen' : 'imágenes'}`;
-  return `${txtTotal} · ${txtLotes} con ${txtEnLotes}`;
+  const { totalImagenes, totalLotes } = resumenConteoMediciones(mediciones);
+  return `${plural(totalImagenes, 'medición', 'mediciones')} · ${plural(totalLotes, 'lote', 'lotes')}`;
 }
 
 // Agrupa por la clave dada y devuelve, por grupo, sus mediciones y la más reciente.
@@ -245,10 +244,10 @@ export function contarOcultasPorFiltro(elegidas = [], visibles = [], marcadas = 
 export function etiquetaConteoBloque(cantidadServidor, medicionesDelPunto = [], ventanaCompleta = false) {
   const total = Number.isFinite(Number(cantidadServidor)) ? Number(cantidadServidor) : null;
   if (ventanaCompleta) {
-    const { totalLotes, imagenesEnLotes } = resumenConteoMediciones(medicionesDelPunto);
+    const { totalLotes } = resumenConteoMediciones(medicionesDelPunto);
     const n = total ?? medicionesDelPunto.length;
-    return `${n} ${n === 1 ? 'imagen' : 'imágenes'} · ${totalLotes} ${totalLotes === 1 ? 'lote' : 'lotes'} con ${imagenesEnLotes} ${imagenesEnLotes === 1 ? 'imagen' : 'imágenes'}`;
+    return `${plural(n, 'medición', 'mediciones')} · ${plural(totalLotes, 'lote', 'lotes')}`;
   }
   const n = total ?? medicionesDelPunto.length;
-  return `${n} ${n === 1 ? 'imagen' : 'imágenes'}`;
+  return plural(n, 'medición', 'mediciones');
 }

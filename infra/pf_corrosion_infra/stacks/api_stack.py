@@ -124,6 +124,10 @@ class CorriaApiStack(Stack):
         mediciones_resumen = mediciones.add_resource("resumen-diario")
         mediciones_resumen.add_method("GET", mediciones_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
 
+        # Indicadores globales del sistema (calculados en el servidor; RBAC en el handler).
+        indicadores = self.api.root.add_resource("indicadores")
+        indicadores.add_method("GET", mediciones_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
+
         # Acciones en lote (máx. 100 por solicitud; RBAC en el handler).
         mediciones_lote = mediciones.add_resource("lote")
         for accion in ("eliminar", "mover"):

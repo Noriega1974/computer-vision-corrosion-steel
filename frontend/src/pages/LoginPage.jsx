@@ -1,9 +1,10 @@
 import { AvisoEnLinea } from '../components/Aviso';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth, obtenerRutaInicial } from '../auth/AuthContext';
 import PasswordChecklist from '../components/PasswordChecklist';
 import { isPasswordValid } from '../lib/passwordPolicy';
+import { leerModoOscuro } from '../lib/tema';
 import pixelrustLogo from '../assets/pixelrust-logo.png';
 
 const inputStyle = {
@@ -35,6 +36,12 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const destinoGuardado = location.state?.from;
+
+  // The theme attribute is applied by AppLayout, which is not mounted here: without
+  // this the login always rendered light, even for people who chose dark mode.
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', leerModoOscuro() ? 'dark' : 'light');
+  }, []);
 
   // Paso 1: login inicial
   const [loginMode, setLoginMode] = useState('email'); // 'email' | 'username'
@@ -191,7 +198,7 @@ export default function LoginPage() {
                 type={loginMode === 'email' ? 'email' : 'text'}
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                placeholder={loginMode === 'email' ? 'nombre@example.com' : 'ej: colaborador01'}
+                placeholder={loginMode === 'email' ? 'nombre@empresa.com' : 'ej: colaborador01'}
                 required
                 disabled={submitting}
                 autoComplete="username"

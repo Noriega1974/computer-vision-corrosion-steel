@@ -5,8 +5,8 @@ import {
   EJEMPLO_PCT_FOTO,
   EJEMPLO_PCT_PLACA_EN_CUADRO,
   EJEMPLO_PCT_FONDO,
-  formatoPctGuia,
 } from './ejemploGuia.js';
+import { formatoPct } from './textUtils.js';
 
 describe('ejemploGuia.js — cifras del ejemplo de la guía', () => {
   it('el % sobre la foto es menor que sobre la placa (el fondo diluye)', () => {
@@ -19,8 +19,8 @@ describe('ejemploGuia.js — cifras del ejemplo de la guía', () => {
     assert.equal(Math.round((EJEMPLO_PCT_PLACA_EN_CUADRO + EJEMPLO_PCT_FONDO) * 10) / 10, 100);
   });
 
-  it('formatoPctGuia coincide con el formato de la app (coma decimal, sin espacio)', () => {
-    assert.equal(formatoPctGuia(EJEMPLO_PCT_PLACA), '36,6%');
-    assert.equal(formatoPctGuia(EJEMPLO_PCT_FOTO), '10,1%');
+  it('la guía se escribe con el formato de la app (coma decimal, sin espacio)', () => {
+    assert.equal(formatoPct(EJEMPLO_PCT_PLACA), '36,6%');
+    assert.equal(formatoPct(EJEMPLO_PCT_FOTO), '10,1%');
   });
 });

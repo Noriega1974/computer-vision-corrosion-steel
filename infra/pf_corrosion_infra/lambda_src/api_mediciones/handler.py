@@ -19,12 +19,15 @@ Rutas:
                                       ?anio=YYYY (obligatorio), ?id_punto=BLQ-... (opcional),
                                       ?empresa_id=EMP-... (opcional, solo lo respeta super_admin);
                                       solo lectura, pagina todo (sin el tope de 1000)
+  GET    /indicadores              → indicadores globales del sistema (ver `_indicadores`):
+                                      ?empresa_id=EMP-... (opcional, solo lo respeta super_admin)
   GET    /mediciones/recientes     → últimas N mediciones, filtrado por empresa (cualquier rol)
                                       ?limit=N (def. 20, máx. 1000), ?resumen=1 quita campos pesados,
                                       ?desde=YYYY-MM-DD&hasta=YYYY-MM-DD acota por día local (UTC-5)
                                       sobre el GSI; con rango el límite por defecto es 1000 y la
-                                      respuesta trae `truncado`. `limit`/`limite` no numérico → 400
-  DELETE /mediciones/{id_punto}    → elimina una medición puntual (super_admin/admin/tecnico)
+                                      respuesta trae `truncado`. `limit`/`limite` (ambos nombres valen) no numérico → 400
+  DELETE /mediciones/{id_punto}    → elimina una medición puntual (super_admin/admin/tecnico;
+                                      el tecnico solo las que él mismo tomó)
                                       requiere querystring ?id_medicion=MED-...
   POST   /mediciones/lote/eliminar → elimina varias (máx. 100), body {"items":[{id_punto,id_medicion}]}
   POST   /mediciones/lote/mover    → mueve varias a otro punto, body {"items":[...],"destino_bloque_id"}
@@ -41,6 +44,7 @@ replicado de api_usuarios/handler.py — no hay módulo compartido entre
 lambdas) salvo que sea super_admin, que ve todas las empresas.
 """
 import json
+import math
 import logging
 import os
 import re
@@ -57,6 +61,7 @@ logger.setLevel(logging.INFO)
 TABLA_MEDICIONES = os.environ["TABLA_MEDICIONES"]
 TABLA_USUARIOS = os.environ["TABLA_USUARIOS"]
 TABLA_BLOQUES = os.environ["TABLA_BLOQUES"]
+TABLA_EMPRESAS = os.environ["TABLA_EMPRESAS"]
 BUCKET_NAME = os.environ["BUCKET_NAME"]
 REGION = os.environ["REGION"]
 
@@ -95,6 +100,7 @@ dynamodb = boto3.resource("dynamodb", region_name=REGION)
 tabla = dynamodb.Table(TABLA_MEDICIONES)
 tabla_usuarios = dynamodb.Table(TABLA_USUARIOS)
 tabla_bloques = dynamodb.Table(TABLA_BLOQUES)
+tabla_empresas = dynamodb.Table(TABLA_EMPRESAS)
 # Cliente de bajo nivel (con la conversión de tipos de boto3) para TransactWriteItems.
 cliente_ddb = dynamodb.meta.client
 s3 = boto3.client("s3", region_name=REGION)
@@ -123,7 +129,7 @@ def _claims(event: dict) -> dict:
     return event.get("requestContext", {}).get("authorizer", {}).get("claims", {})
 
 
-def _usuario_actual(event: dict) -> dict | None:
+def _resolver_usuario_actual(event: dict) -> dict | None:
     """Resuelve el ítem completo (rol, empresa_id, id_usuario, ...) del
     usuario autenticado a partir de `sub` (claim del JWT), vía el GSI
     cognito-sub-index de la tabla `usuarios`. Replicado igual en
@@ -138,6 +144,43 @@ def _usuario_actual(event: dict) -> dict | None:
     )
     items = resp.get("Items", [])
     return items[0] if items else None
+
+
+def _usuario_actual(event: dict) -> dict | None:
+    """Memoiza `_resolver_usuario_actual` por invocación (en el propio event):
+    el gate de cuenta inactiva y la ruta llaman a esto en la misma petición y
+    así la tabla `usuarios` se lee una sola vez."""
+    if not isinstance(event, dict):
+        return _resolver_usuario_actual(event)
+    if "_usuario_actual_cache" not in event:
+        event["_usuario_actual_cache"] = _resolver_usuario_actual(event)
+    return event["_usuario_actual_cache"]
+
+
+# ── Cuenta o afiliación desactivada ──────────────────────────────────────────
+# Copia idéntica en api_mediciones, api_puntos e inference (no hay módulo
+# compartido entre lambdas): si cambia una, cambian las tres.
+
+MENSAJE_CUENTA_DESACTIVADA = "Tu cuenta está desactivada. Pide ayuda a un administrador"
+MENSAJE_AFILIACION_DESACTIVADA = "Tu afiliación está desactivada. Pide ayuda a un administrador"
+
+
+def _rechazo_cuenta_inactiva(creador: dict | None) -> dict | None:
+    """403 si el usuario (`activo=false`) o su afiliación (`activa=false`)
+    fue desactivado; None si puede continuar. super_admin y quien no tiene
+    registro quedan fuera: lo segundo lo resuelve cada ruta con su propio
+    chequeo de rol. Sin esto un token todavía vigente seguiría operando hasta
+    que Cognito lo expire."""
+    if not creador or creador.get("rol") == "super_admin":
+        return None
+    if creador.get("activo") is False:
+        return _respuesta(403, {"error": MENSAJE_CUENTA_DESACTIVADA})
+    empresa_id = creador.get("empresa_id")
+    if empresa_id:
+        empresa = tabla_empresas.get_item(Key={"id_empresa": empresa_id}).get("Item")
+        if empresa and empresa.get("activa") is False:
+            return _respuesta(403, {"error": MENSAJE_AFILIACION_DESACTIVADA})
+    return None
 
 
 def _agregar_url_imagen(items: list) -> list:
@@ -210,6 +253,32 @@ def _item_permitido(usuario: dict, item: dict) -> bool:
         return True
     empresa = usuario.get("empresa_id")
     return bool(empresa) and item.get("empresa_id") == empresa
+
+
+def _sub(event: dict) -> str:
+    return _claims(event).get("sub", "") or ""
+
+
+def _es_del_usuario(item: dict, sub: str) -> bool:
+    """La medición la tomó `sub` (inference guarda el `sub` de Cognito en
+    `tomado_por_id` y `usuario_id`)."""
+    return bool(sub) and sub in (item.get("tomado_por_id"), item.get("usuario_id"))
+
+
+def _ajenas_para_tecnico(creador: dict, sub: str, items: list) -> list:
+    """Regla del técnico: solo mueve/elimina lo que él mismo tomó. Para los
+    demás roles devuelve []."""
+    if creador.get("rol") != "tecnico":
+        return []
+    return [i for i in items if not _es_del_usuario(i, sub)]
+
+
+def _rechazo_ajenas(n: int, accion: str) -> dict:
+    if n == 1:
+        msg = f"Solo puedes {accion} las mediciones que tomaste tú. Quita la medición ajena e inténtalo de nuevo"
+    else:
+        msg = f"Solo puedes {accion} las mediciones que tomaste tú. {n} de la selección son de otra persona; quítalas e inténtalo de nuevo"
+    return _respuesta(403, {"error": msg, "cantidad_ajenas": n})
 
 
 # Light attributes read when ?resumen=1. Reading the full item and dropping
@@ -293,6 +362,16 @@ def _limite(valor, defecto: int, maximo: int) -> int | None:
         return None
 
 
+def _limite_pedido(qp: dict):
+    """Valor crudo del límite: se acepta `limit` y `limite` en todos los listados
+    (el primero que venga con valor; `limit` gana si vienen los dos)."""
+    for nombre in ("limit", "limite"):
+        valor = qp.get(nombre)
+        if valor is not None and valor != "":
+            return valor
+    return None
+
+
 ERROR_LIMITE = {"error": "El límite debe ser un número entero. Corrígelo e inténtalo de nuevo"}
 ERROR_RANGO = {"error": "El rango de fechas no es válido. Elige fechas del calendario e inténtalo de nuevo"}
 
@@ -367,16 +446,21 @@ def _resumen_diario(event: dict) -> dict:
         dia = _dia_local(it.get("timestamp"))
         if not dia or not dia.startswith(f"{anio:04d}-"):
             continue
-        d = dias.setdefault(dia, {"fecha": dia, "total": 0, "por_nivel": [0, 0, 0, 0], "_lotes": {}, "peor_nivel": None, "max_pct": None})
+        d = dias.setdefault(dia, {"fecha": dia, "total": 0, "por_nivel": [0, 0, 0, 0], "_lotes": {}, "peor_nivel": None, "max_pct": None,
+                                                "_sum_pct": 0.0, "_n_pct": 0, "_sum_niv": 0, "_n_niv": 0})
         d["total"] += 1
         imagenes += 1
         nivel = _nivel(it.get("nivel_corrosion"))
         if nivel is not None:
             d["por_nivel"][nivel] += 1
+            d["_sum_niv"] += nivel
+            d["_n_niv"] += 1
             d["peor_nivel"] = nivel if d["peor_nivel"] is None else max(d["peor_nivel"], nivel)
         pct = _numero(it.get("area_corroida_pct"))
         if pct is not None:
             d["max_pct"] = pct if d["max_pct"] is None else max(d["max_pct"], pct)
+            d["_sum_pct"] += pct
+            d["_n_pct"] += 1
         lote = it.get("lote_id")
         if lote:
             d["_lotes"][lote] = d["_lotes"].get(lote, 0) + 1
@@ -387,6 +471,13 @@ def _resumen_diario(event: dict) -> dict:
     for dia in sorted(dias):
         d = dias[dia]
         lotes = d.pop("_lotes")
+        # Promedios del día (sobre las mediciones que tienen el dato): alimentan la
+        # tendencia del panel. nivel_ponderado = promedio de niveles redondeado al más cercano.
+        n_pct, n_niv = d.pop("_n_pct"), d.pop("_n_niv")
+        suma_pct, suma_niv = d.pop("_sum_pct"), d.pop("_sum_niv")
+        d["promedio_pct"] = suma_pct / n_pct if n_pct else None
+        d["nivel_promedio"] = round(suma_niv / n_niv, 2) if n_niv else None
+        d["nivel_ponderado"] = int(math.floor(suma_niv / n_niv + 0.5)) if n_niv else None
         d["lotes"] = {"count": len(lotes), "imagenes": sum(lotes.values())}
         salida.append(d)
     return _respuesta(200, {
@@ -395,6 +486,212 @@ def _resumen_diario(event: dict) -> dict:
         "dias": salida,
         "totales": {"imagenes": imagenes, "lotes": len(lotes_total), "imagenes_en_lotes": en_lotes},
         "truncado": truncado,
+    })
+
+
+# ── Indicadores globales (GET /indicadores) ──────────────────────────────────
+
+VENTANA_DIAS = 30
+LISTA_SUBIERON_MAX = 10
+PAGINA_ESTADO = 100       # ítems por página al buscar los dos últimos días de un punto
+MAX_PAGINAS_ESTADO = 10   # tope de páginas por punto (acota el costo de un punto enorme)
+
+
+def _ahora() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _nivel_ponderado(suma_niveles: int, n: int) -> int | None:
+    """Media de niveles redondeada half-up (igual que resumen-diario)."""
+    return int(math.floor(suma_niveles / n + 0.5)) if n else None
+
+
+def _puntos_en_alcance(creador: dict, empresa_filtro: str | None) -> list:
+    """Puntos (bloques) activos del alcance del usuario: super_admin todos o los
+    de `empresa_filtro`; el resto, los de su empresa. Lee la tabla `bloques`
+    con proyección (mismo origen que GET /bloques)."""
+    nombres = {"#i": "id_bloque", "#n": "nombre", "#a": "activo", "#e": "empresa_id"}
+    kwargs: dict = {"ProjectionExpression": "#i, #n, #a, #e", "ExpressionAttributeNames": nombres}
+    if creador.get("rol") == "super_admin":
+        empresa = empresa_filtro
+    else:
+        empresa = creador.get("empresa_id")
+        if not empresa:
+            return []   # sin empresa: no ve ningún punto
+    if empresa:
+        operacion = tabla_bloques.query
+        kwargs["IndexName"] = "empresa_id-index"
+        kwargs["KeyConditionExpression"] = Key("empresa_id").eq(empresa)
+    else:
+        operacion = tabla_bloques.scan
+    items: list = []
+    for _ in range(MAX_PAGINAS_RESUMEN):
+        resp = operacion(**kwargs)
+        items.extend(resp.get("Items", []))
+        ultima = resp.get("LastEvaluatedKey")
+        if not ultima:
+            break
+        kwargs = {**kwargs, "ExclusiveStartKey": ultima}
+    return [b for b in items if b.get("activo") is not False and b.get("id_bloque")]
+
+
+def _estado_actual(id_punto: str, truncado: list | None = None) -> dict | None:
+    """Estado del punto en su último día local medido y en el anterior.
+
+    Una Query por punto (ScanIndexForward=False, proyección mínima) que pagina
+    solo hasta ver 3 días locales distintos (el tercero confirma que el segundo
+    está completo) o agotar la partición, con tope MAX_PAGINAS_ESTADO. Costo:
+    O(P) consultas secuenciales, cada una de pocas páginas; P < 200.
+    Devuelve None si el punto no tiene mediciones. Si se agota el tope de
+    páginas con la partición sin terminar, agrega el id a `truncado` (el
+    estado puede ser incompleto)."""
+    nombres = {"#t": "timestamp", "#n": "nivel_corrosion", "#p": "area_corroida_pct"}
+    kwargs = {
+        "KeyConditionExpression": Key("id_punto").eq(id_punto) & Key("sk").begins_with(SK_MEDICION_PREFIJO),
+        "ScanIndexForward": False,
+        "Limit": PAGINA_ESTADO,
+        "ProjectionExpression": "#t, #n, #p",
+        "ExpressionAttributeNames": nombres,
+    }
+    dias: dict = {}   # dia -> [suma_pct, n_pct, suma_niv, n_niv]; dict conserva el orden (recientes primero)
+    for _ in range(MAX_PAGINAS_ESTADO):
+        resp = tabla.query(**kwargs)
+        for it in resp.get("Items", []):
+            dia = _dia_local(it.get("timestamp"))
+            if not dia:
+                continue
+            if dia not in dias and len(dias) >= 3:
+                continue
+            acc = dias.setdefault(dia, [0.0, 0, 0, 0])
+            pct = _numero(it.get("area_corroida_pct"))
+            if pct is not None:
+                acc[0] += pct
+                acc[1] += 1
+            nivel = _nivel(it.get("nivel_corrosion"))
+            if nivel is not None:
+                acc[2] += nivel
+                acc[3] += 1
+        ultima = resp.get("LastEvaluatedKey")
+        if not ultima or len(dias) >= 3:
+            break
+        kwargs = {**kwargs, "ExclusiveStartKey": ultima}
+    else:
+        logger.warning("indicadores: punto %s truncado tras %d páginas; estado parcial", id_punto, MAX_PAGINAS_ESTADO)
+        if truncado is not None:
+            truncado.append(id_punto)
+    if not dias:
+        return None
+    # Los ítems llegan por sk (≈ timestamp) desc, pero se ordena por día por si el sk difiere.
+    ordenados = sorted(dias, reverse=True)
+
+    def resumen(dia):
+        sp, npct, sn, nn = dias[dia]
+        return {"fecha": dia, "promedio_pct": sp / npct if npct else None, "nivel": _nivel_ponderado(sn, nn)}
+
+    actual = resumen(ordenados[0])
+    actual["anterior_nivel"] = resumen(ordenados[1])["nivel"] if len(ordenados) > 1 else None
+    return actual
+
+
+def _contar_mediciones(desde_ts: str, empresa: str | None, filtrar: bool, truncado: list | None = None) -> int:
+    """Cuenta mediciones desde `desde_ts`. Si se agota MAX_PAGINAS_RESUMEN con
+    más páginas por leer, deja un elemento en `truncado` (el conteo es parcial)."""
+    kwargs = {
+        "IndexName": "tipo-timestamp-index",
+        "KeyConditionExpression": Key("tipo_registro").eq("medicion") & Key("timestamp").gte(desde_ts),
+        "Select": "COUNT",
+    }
+    if filtrar:
+        kwargs["FilterExpression"] = Attr("empresa_id").eq(empresa)
+    total = 0
+    for _ in range(MAX_PAGINAS_RESUMEN):
+        resp = tabla.query(**kwargs)
+        total += resp.get("Count", 0)
+        ultima = resp.get("LastEvaluatedKey")
+        if not ultima:
+            break
+        kwargs = {**kwargs, "ExclusiveStartKey": ultima}
+    else:
+        logger.warning("indicadores: conteo de mediciones truncado tras %d páginas", MAX_PAGINAS_RESUMEN)
+        if truncado is not None:
+            truncado.append(True)
+    return total
+
+
+def _indicadores(event: dict) -> dict:
+    """GET /indicadores[?empresa_id=]: estado actual de cada punto activo del
+    alcance (super_admin: todo o `empresa_id`; el resto: su empresa), calculado
+    en el servidor. Solo lectura."""
+    creador = _usuario_actual(event)
+    if not creador:
+        return _respuesta(403, {"error": "No tienes permiso para ver los indicadores. Pide ayuda a un administrador"})
+    es_super = creador.get("rol") == "super_admin"
+    qp = event.get("queryStringParameters") or {}
+    empresa_filtro = (qp.get("empresa_id") or "").strip() or None if es_super else None
+
+    ahora = _ahora()
+    hoy = ahora.astimezone(TZ_LOCAL).date()
+    inicio = hoy - timedelta(days=VENTANA_DIAS - 1)   # ventana: hoy y los 29 días locales anteriores
+    inicio_iso = inicio.isoformat()
+
+    puntos = sorted(_puntos_en_alcance(creador, empresa_filtro), key=lambda b: (str(b.get("nombre") or ""), b["id_bloque"]))
+    por_nivel = [0, 0, 0, 0]
+    sin_mediciones = 0
+    criticos, subieron, con_30d, atrasados = [], [], 0, []
+    puntos_truncados: list = []
+    for b in puntos:
+        nombre = b.get("nombre") or b["id_bloque"]
+        est = _estado_actual(b["id_bloque"], puntos_truncados)
+        if est is None:
+            sin_mediciones += 1
+            atrasados.append((0, None, nombre, b["id_bloque"]))
+            continue
+        fecha = est["fecha"]
+        dentro = fecha >= inicio_iso
+        if est["nivel"] is not None:
+            por_nivel[est["nivel"]] += 1
+        else:
+            sin_mediciones += 1   # medido, pero sin nivel válido: no cuenta en ningún nivel
+        if dentro:
+            con_30d += 1
+        if est["promedio_pct"] is not None:
+            criticos.append((est["promedio_pct"], est["nivel"] if est["nivel"] is not None else -1, fecha, b["id_bloque"], nombre))
+        if dentro and est["nivel"] is not None and est["anterior_nivel"] is not None and est["nivel"] > est["anterior_nivel"]:
+            subieron.append({"id_punto": b["id_bloque"], "nombre": nombre, "de": est["anterior_nivel"], "a": est["nivel"], "fecha": fecha})
+        atrasados.append((1, fecha, nombre, b["id_bloque"]))
+
+    mas_critico = None
+    if criticos:
+        pct, nivel, fecha, idp, nombre = max(criticos, key=lambda c: (c[0], c[1], c[2]))
+        mas_critico = {"id_punto": idp, "nombre": nombre, "promedio_pct": pct, "nivel": nivel if nivel >= 0 else None, "fecha": fecha}
+
+    mas_atrasado = None
+    if atrasados:
+        # Sin mediciones primero; luego la medición más antigua.
+        _, fecha, nombre, idp = min(atrasados, key=lambda a: (a[0], a[1] or "", a[2]))
+        dias = (hoy - date.fromisoformat(fecha)).days if fecha else None
+        mas_atrasado = {"id_punto": idp, "nombre": nombre, "dias": dias, "fecha": fecha}
+
+    subieron.sort(key=lambda s: (-(s["a"] - s["de"]), -s["a"], s["nombre"]))
+    empresa_conteo = empresa_filtro if es_super else creador.get("empresa_id")
+    conteo_truncado: list = []
+    if not es_super and not empresa_conteo:
+        mediciones_30d = 0
+    else:
+        mediciones_30d = _contar_mediciones(_inicio_dia_utc(inicio), empresa_conteo, bool(empresa_conteo), conteo_truncado)
+
+    return _respuesta(200, {
+        "total_puntos": len(puntos),
+        "por_nivel": por_nivel,
+        "sin_mediciones": sin_mediciones,
+        "mas_critico": mas_critico,
+        "subieron_nivel": {"cantidad": len(subieron), "puntos": subieron[:LISTA_SUBIERON_MAX]},
+        "cobertura": {"con_medicion_30d": con_30d, "total_puntos": len(puntos), "mas_atrasado": mas_atrasado},
+        "mediciones_30d": mediciones_30d,
+        "mediciones_30d_truncado": bool(conteo_truncado),
+        "puntos_truncados": len(puntos_truncados),
+        "parcial": bool(conteo_truncado or puntos_truncados),
+        "generado_en": ahora.strftime("%Y-%m-%dT%H:%M:%SZ"),
     })
 
 
@@ -442,6 +739,8 @@ def _eliminar_medicion(event: dict, id_punto: str) -> dict:
     item = next((i for i in _mediciones_de_punto(id_punto) if i.get("id_medicion") == id_medicion), None)
     if not item or not _item_permitido(creador, item):
         return _respuesta(404, {"error": "No se encontró la medición. Actualiza la lista e inténtalo de nuevo"})
+    if _ajenas_para_tecnico(creador, _sub(event), [item]):
+        return _rechazo_ajenas(1, "eliminar")
 
     huerfanas = _borrar_medicion(item)
     cuerpo = {"ok": True, "id_medicion": id_medicion}
@@ -504,6 +803,9 @@ def _lote_eliminar(event: dict) -> dict:
         return _respuesta(400, {"error": str(e)})
 
     encontrados, errores = _resolver_lote(creador, pedidos)
+    ajenas = _ajenas_para_tecnico(creador, _sub(event), encontrados)
+    if ajenas:
+        return _rechazo_ajenas(len(ajenas), "eliminar")
     ok, advertencias = [], []
     for item in encontrados:
         try:
@@ -615,6 +917,9 @@ def _lote_mover(event: dict) -> dict:
         return _respuesta(400, {"error": "El punto de destino está inactivo. Actívalo o elige otro punto"})
 
     encontrados, errores = _resolver_lote(creador, pedidos)
+    ajenas = _ajenas_para_tecnico(creador, _sub(event), encontrados)
+    if ajenas:
+        return _rechazo_ajenas(len(ajenas), "mover")
     ok = []
     for item in encontrados:
         if item["id_punto"] == destino:
@@ -686,6 +991,10 @@ def lambda_handler(event: dict, context) -> dict:
     id_punto = path_params.get("id_punto")
 
     try:
+        rechazo = _rechazo_cuenta_inactiva(_usuario_actual(event))
+        if rechazo:
+            return rechazo
+
         # ── POST /mediciones/lote/eliminar | /mediciones/lote/mover ──────────
         if http_method == "POST" and resource == "/mediciones/lote/eliminar":
             return _lote_eliminar(event)
@@ -700,6 +1009,10 @@ def lambda_handler(event: dict, context) -> dict:
         if http_method == "PATCH" and id_punto:
             return _renombrar_medicion(event, id_punto)
 
+        # ── GET /indicadores ─────────────────────────────────────────────────
+        if http_method == "GET" and resource == "/indicadores":
+            return _indicadores(event)
+
         # ── GET /mediciones/resumen-diario ───────────────────────────────────
         if resource == "/mediciones/resumen-diario":
             return _resumen_diario(event)
@@ -710,7 +1023,7 @@ def lambda_handler(event: dict, context) -> dict:
             desde, hasta = qp.get("desde"), qp.get("hasta")
             con_rango = bool(desde or hasta)
             # Con rango el límite por defecto es el máximo (se avisa con `truncado`).
-            limite = _limite(qp.get("limit"), LIMITE_RECIENTES_MAX if con_rango else 20, LIMITE_RECIENTES_MAX)
+            limite = _limite(_limite_pedido(qp), LIMITE_RECIENTES_MAX if con_rango else 20, LIMITE_RECIENTES_MAX)
             if limite is None:
                 return _respuesta(400, ERROR_LIMITE)
             condicion = Key("tipo_registro").eq("medicion")
@@ -765,10 +1078,16 @@ def lambda_handler(event: dict, context) -> dict:
             desde, hasta = qp.get("desde"), qp.get("hasta")
             con_rango = bool(desde or hasta)
             # Con rango el límite por defecto es el máximo y se avisa si hay más.
-            limite = _limite(qp.get("limite"), LIMITE_PUNTO_MAX if con_rango else 50, LIMITE_PUNTO_MAX)
+            limite = _limite(_limite_pedido(qp), LIMITE_PUNTO_MAX if con_rango else 50, LIMITE_PUNTO_MAX)
             if limite is None:
                 return _respuesta(400, ERROR_LIMITE)
             creador = _usuario_actual(event)
+            # Defensa en profundidad: además del filtro por empresa de cada
+            # ítem, un punto de otra empresa se trata como inexistente.
+            if not creador or creador.get("rol") != "super_admin":
+                bloque = tabla_bloques.get_item(Key={"id_bloque": id_punto}).get("Item")
+                if bloque and bloque.get("empresa_id") != (creador or {}).get("empresa_id"):
+                    return _respuesta(404, {"error": "No se encontró el punto. Actualiza la lista e inténtalo de nuevo"})
             # ?id_medicion=X: la página de detalle pide UNA medición (con todos
             # sus campos) aunque sea antigua. Se filtra en DynamoDB y se pagina
             # hasta hallarla; el Limit de cada página sigue siendo el máximo.

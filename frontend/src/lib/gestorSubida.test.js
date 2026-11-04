@@ -7,6 +7,10 @@ import {
   FASE_MEDICION,
   MENSAJE_NO_CONFIRMADO,
   clasificarFallo,
+  alternarSeleccion,
+  seleccionarIds,
+  podarSeleccion,
+  quitarSeleccionadas,
   esReanudable,
   calcularProgresoSubida,
   ejecutarColaConcurrencia,
@@ -15,8 +19,11 @@ import {
   debeActualizarProgreso,
   clasificarArchivos,
   nombreDesdeArchivo,
+  normalizarEntrada,
   generarLoteId,
   sugerirNombreLote,
+  errorDetenido,
+  esAbortoPorDetener,
 } from './gestorSubida.js';
 
 const errorHttp = (status, fase, message = `HTTP ${status}`) =>
@@ -315,5 +322,156 @@ describe('gestorSubida: paging and refresh throttle', () => {
     assert.equal(debeInvalidar(1000, null), true);
     assert.equal(debeInvalidar(5000, 1000), false);
     assert.equal(debeInvalidar(11000, 1000), true);
+  });
+});
+
+describe('gestorSubida: multi-select helpers', () => {
+  it('toggles an id without mutating the previous selection', () => {
+    const a = new Set(['a']);
+    const b = alternarSeleccion(a, 'b');
+    assert.deepEqual([...b], ['a', 'b']);
+    assert.deepEqual([...a], ['a']);
+    assert.deepEqual([...alternarSeleccion(b, 'a')], ['b']);
+  });
+
+  it('adds a group of ids keeping the existing ones', () => {
+    assert.deepEqual([...seleccionarIds(new Set(['x']), ['a', 'b', 'x'])].sort(), ['a', 'b', 'x']);
+  });
+
+  it('prunes ids that are no longer in the queue', () => {
+    const items = [{ id: 'a' }, { id: 'c' }];
+    assert.deepEqual([...podarSeleccion(new Set(['a', 'b', 'c']), items)], ['a', 'c']);
+    assert.equal(podarSeleccion(new Set(), items).size, 0);
+  });
+
+  it('removes the selected rows and keeps the order of the rest', () => {
+    const items = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+    assert.deepEqual(quitarSeleccionadas(items, new Set(['b'])).map((x) => x.id), ['a', 'c']);
+    assert.equal(quitarSeleccionadas(items, new Set()), items);
+  });
+});
+
+describe('normalizarEntrada', () => {
+  const foto = (name) => ({ name });
+
+  it('un File suelto toma el nombre del archivo sin extensión', () => {
+    assert.deepEqual(normalizarEntrada(foto('Placa 12.jpg')), { file: foto('Placa 12.jpg'), nombre: 'Placa 12' });
+  });
+
+  it('{ file, nombre } conserva el nombre ya escrito, incluso vacío, y lo recorta', () => {
+    const f = foto('x.png');
+    assert.equal(normalizarEntrada({ file: f, nombre: 'Lado norte' }).nombre, 'Lado norte');
+    assert.equal(normalizarEntrada({ file: f, nombre: '' }).nombre, '');
+    assert.equal(normalizarEntrada({ file: f, nombre: 'a'.repeat(200) }).nombre.length, 80);
+    assert.equal(normalizarEntrada({ file: f, nombre: 'a' }).file, f);
+  });
+});
+
+describe('gestorSubida: Detener', () => {
+  const filas = (n) => Array.from({ length: n }, (_, i) => ({ id: i + 1 }));
+
+  it('stops dispatching new items once the stop is requested', async () => {
+    let parar = false;
+    const arrancadas = [];
+    const resultado = await ejecutarColaConcurrencia({
+      items: filas(6),
+      concurrencia: 2,
+      demoraBaseMs: 0,
+      detenerPedido: () => parar,
+      tarea: async (it) => { arrancadas.push(it.id); if (it.id === 2) parar = true; return { ok: it.id }; },
+    });
+    assert.ok(arrancadas.length < 6);
+    assert.equal(resultado.detenidoPorUsuario, true);
+    assert.equal(resultado.fallidas, 0);
+  });
+
+  it('marks an aborted transfer as detenida, never as error, and does not retry it', async () => {
+    const parches = [];
+    let llamadas = 0;
+    let parar = false;
+    const resultado = await ejecutarColaConcurrencia({
+      items: filas(1),
+      demoraBaseMs: 0,
+      detenerPedido: () => parar,
+      tarea: async () => { llamadas += 1; parar = true; throw errorDetenido(); },
+      onItemUpdate: (id, c) => parches.push(c),
+    });
+    assert.equal(llamadas, 1);
+    assert.equal(parches.at(-1).estado, 'detenida');
+    assert.equal(resultado.detenidas, 1);
+    assert.equal(resultado.fallidas, 0);
+  });
+
+  it('does not retry a pre-analysis network failure after a stop; it becomes detenida', async () => {
+    let parar = false;
+    let llamadas = 0;
+    const parches = [];
+    await ejecutarColaConcurrencia({
+      items: filas(1),
+      demoraBaseMs: 0,
+      detenerPedido: () => parar,
+      tarea: async () => { llamadas += 1; parar = true; throw errorHttp(503, FASE_PREVIA); },
+      onItemUpdate: (id, c) => parches.push(c),
+    });
+    assert.equal(llamadas, 1);
+    assert.equal(parches.at(-1).estado, 'detenida');
+  });
+
+  it('cuts the backoff wait short when the stop is requested', async () => {
+    let parar = false;
+    let llamadas = 0;
+    const parches = [];
+    setTimeout(() => { parar = true; }, 30);
+    const inicio = Date.now();
+    await ejecutarColaConcurrencia({
+      items: filas(1),
+      demoraBaseMs: 60000,
+      esperar: () => new Promise(() => {}), // never resolves on its own
+      detenerPedido: () => parar,
+      tarea: async () => { llamadas += 1; throw errorHttp(503, FASE_PREVIA); },
+      onItemUpdate: (id, c) => parches.push(c),
+    });
+    assert.ok(Date.now() - inicio < 2000);
+    assert.equal(llamadas, 1);
+    assert.equal(parches.at(-1).estado, 'detenida');
+  });
+
+  it('lets an item already analyzing finish and retry its analysis after a stop', async () => {
+    let llamadas = 0;
+    let parar = false;
+    const parches = [];
+    const resultado = await ejecutarColaConcurrencia({
+      items: filas(1),
+      demoraBaseMs: 0,
+      detenerPedido: () => parar,
+      tarea: async () => {
+        llamadas += 1;
+        parar = true;
+        if (llamadas === 1) throw errorHttp(502, FASE_MEDICION);
+        return { ok: true };
+      },
+      onItemUpdate: (id, c) => parches.push(c),
+    });
+    assert.equal(llamadas, 2);
+    assert.equal(resultado.completadas, 1);
+    assert.equal(parches.at(-1).estado, 'listo');
+  });
+
+  it('recognizes the abort caused by the stop only before the analysis', () => {
+    const cancelado = new Error('Subida cancelada.');
+    assert.equal(esAbortoPorDetener(cancelado, { detenerPedido: true, fase: FASE_PREVIA }), true);
+    assert.equal(esAbortoPorDetener(cancelado, { detenerPedido: false, fase: FASE_PREVIA }), false);
+    assert.equal(esAbortoPorDetener(cancelado, { detenerPedido: true, fase: FASE_MEDICION }), false);
+    assert.equal(esAbortoPorDetener(errorHttp(400, FASE_PREVIA), { detenerPedido: true, fase: FASE_PREVIA }), false);
+  });
+
+  it('counts stopped rows as resumable and reports the stopped state', () => {
+    const items = [{ estado: 'listo' }, { estado: 'detenida' }, { estado: 'cola' }];
+    assert.equal(esReanudable({ estado: 'detenida' }), true);
+    const p = calcularProgresoSubida(items, { running: false });
+    assert.equal(p.detenidas, 1);
+    assert.equal(p.reanudables, 2);
+    assert.equal(p.estadoGlobal, 'detenida');
+    assert.equal(calcularProgresoSubida(items, { running: true }).estadoGlobal, 'en_curso');
   });
 });

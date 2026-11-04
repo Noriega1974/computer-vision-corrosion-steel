@@ -3,13 +3,13 @@ import { Link, useLocation } from 'react-router-dom';
 import NivelIcon from '../components/NivelIcon';
 import { IconoReproducir } from '../components/Iconos';
 import { NIVELES, nivelColor } from '../lib/statusUtils';
-import { VENTANA_DIAS, UMBRAL_EMPEORO_PP } from '../lib/indicadoresSistema';
+import { formatoPct } from '../lib/textUtils';
+import { VENTANA_DIAS } from '../lib/indicadoresSistema';
 import {
   EJEMPLO_PCT_PLACA,
   EJEMPLO_PCT_FOTO,
   EJEMPLO_PCT_PLACA_EN_CUADRO,
   EJEMPLO_PCT_FONDO,
-  formatoPctGuia,
 } from '../lib/ejemploGuia';
 
 // Guía de la aplicación: qué es PixelRust, por qué existe, cómo se usa, cómo
@@ -50,6 +50,7 @@ const ROLES = [
       'Crear cuentas de cualquier nivel, incluido otro superadministrador.',
       'Crear, editar, desactivar y eliminar puntos de cualquier zona.',
       'Registrar, mover, renombrar y eliminar mediciones.',
+      'Usar Reintentar análisis en una medición (solo superadministradores).',
     ],
     noPuede: [
       'No tiene restricciones de alcance dentro de la aplicación.',
@@ -60,13 +61,14 @@ const ROLES = [
     puede: [
       'Ver los datos de su afiliación.',
       'Crear cuentas de técnico y de cliente, y colaboradores temporales.',
-      'Ver la lista de usuarios de su afiliación, editarlos, desactivarlos o eliminarlos.',
+      'Ver la lista de usuarios de su afiliación y editar, desactivar o eliminar a sus técnicos y clientes.',
       'Crear, editar, desactivar y eliminar puntos de su afiliación.',
       'Registrar, mover, renombrar y eliminar mediciones.',
     ],
     noPuede: [
-      'Crear administradores ni superadministradores.',
+      'Crear, editar ni eliminar a otros administradores o superadministradores.',
       'Crear o editar zonas.',
+      'Usar Reintentar análisis.',
       'Ver datos de otras afiliaciones.',
     ],
   },
@@ -362,7 +364,7 @@ export default function QuePixelRustPage() {
               paso: '1. Foto original',
               img: '/guia/paso1-original.jpg',
               alt: 'Fotografía original de una lámina galvanizada con óxido, enmarcada con cinta amarilla sobre una mesa de madera, en interiores',
-              detalle: `La cámara captura tanto la lámina galvanizada (${formatoPctGuia(EJEMPLO_PCT_PLACA_EN_CUADRO)} del cuadro) como el entorno que la rodea (${formatoPctGuia(EJEMPLO_PCT_FONDO)} de fondo).`,
+              detalle: `La cámara captura tanto la lámina galvanizada (${formatoPct(EJEMPLO_PCT_PLACA_EN_CUADRO)} del cuadro) como el entorno que la rodea (${formatoPct(EJEMPLO_PCT_FONDO)} de fondo).`,
             },
             {
               paso: '2. Placa detectada (base 100%)',
@@ -372,10 +374,10 @@ export default function QuePixelRustPage() {
                 'El primer modelo recorta la lámina (contorno verde) y descarta el fondo. Solo los píxeles dentro de este borde cuentan como el 100%.',
             },
             {
-              paso: `3. Corrosión sobre la placa (${formatoPctGuia(EJEMPLO_PCT_PLACA)})`,
+              paso: `3. Corrosión sobre la placa (${formatoPct(EJEMPLO_PCT_PLACA)})`,
               img: '/guia/paso3-corrosion.jpg',
               alt: 'Máscara de segmentación de corrosión en rojo sobre la placa delimitada en verde',
-              detalle: `La red U-Net marca píxel por píxel el óxido dentro de la placa (rojo): ${formatoPctGuia(EJEMPLO_PCT_PLACA)} de la lámina, según la estimación del modelo.`,
+              detalle: `La red U-Net marca píxel por píxel el óxido dentro de la placa (rojo): ${formatoPct(EJEMPLO_PCT_PLACA)} de la lámina, según la estimación del modelo.`,
             },
           ].map((item) => (
             <figure
@@ -440,7 +442,7 @@ export default function QuePixelRustPage() {
             >
               <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>{c.etiqueta}</div>
               <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', lineHeight: 1.2 }}>
-                {formatoPctGuia(c.valor)}
+                {formatoPct(c.valor)}
               </div>
               <div style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--text-secondary)', marginTop: 2 }}>{c.nota}</div>
             </div>
@@ -561,13 +563,13 @@ export default function QuePixelRustPage() {
         <h3 style={h3Style}>El dashboard</h3>
         <p style={parrafo}>
           El <Ui>Dashboard</Ui> resume el estado de tus puntos. Arriba muestra el bloque{' '}
-          <Ui>Estado general del sistema</Ui> con cuatro indicadores: <Ui>Mayor corrosión</Ui> (el
-          punto con el porcentaje más alto en su última medición), <Ui>Puntos que empeoraron</Ui>{' '}
-          (subieron al menos {UMBRAL_EMPEORO_PP} puntos porcentuales en los últimos {VENTANA_DIAS} días), <Ui>Puntos al día</Ui>{' '}
-          (porcentaje de puntos con una medición en los últimos {VENTANA_DIAS} días) y{' '}
-          <Ui>Mediciones en {VENTANA_DIAS} días</Ui> (fotos analizadas en ese período). Los tres primeros se
-          calculan con la última medición de cada punto, para que una tanda grande de fotos en un
-          mismo punto no los distorsione. Junto a los indicadores está la tarjeta{' '}
+          <Ui>Estado general del sistema</Ui> con cuatro indicadores: <Ui>Puntos por nivel</Ui> (cuántos puntos
+          hay en cada nivel y cuántos aún no tienen mediciones), <Ui>Punto más crítico</Ui> (el de mayor
+          porcentaje promedio en su último día medido), <Ui>Subieron de nivel</Ui> (puntos cuyo nivel de
+          su último día medido es mayor que el del día medido anterior, dentro de los últimos {VENTANA_DIAS} días) y{' '}
+          <Ui>Medidos en {VENTANA_DIAS} días</Ui> (cuántos puntos tienen una medición reciente y cuál es el más
+          atrasado). Todos se calculan con el último día medido de cada punto, para que una tanda grande
+          de fotos en un mismo punto no los distorsione. Junto a los indicadores está la tarjeta{' '}
           <Ui>Tendencia del área corroída</Ui>, que muestra la evolución del punto que elijas en el
           mapa. Debajo hay tres paneles: la lista desplegable de zonas y puntos, el{' '}
           <Ui>Mapa de ubicaciones</Ui>, con cada ubicación coloreada según el nivel de su última

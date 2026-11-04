@@ -1,3 +1,4 @@
+import { puedeGestionarMedicion } from '../lib/permisosMediciones';
 import ErrorEstado from '../components/ErrorEstado';
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
@@ -7,7 +8,7 @@ import { useBloques } from '../hooks/useBloques';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
-import { NIVELES, nivelColor, nivelBg, nivelLabel } from '../lib/statusUtils';
+import { NIVELES, nivelColor, nivelColorTexto, nivelBg, nivelLabel } from '../lib/statusUtils';
 import { formatFecha } from '../utils/dateFormat';
 import { apiDelete, apiPatch, apiPost } from '../lib/apiClient';
 import { useRefreshKey } from '../hooks/RefreshKeyContext';
@@ -141,7 +142,7 @@ const FICHA_PCT_LABEL_STYLE = {
 const META_LABEL_STYLE = { fontSize: 12, color: 'var(--text-muted)', marginBottom: 3, fontFamily: 'var(--font-ui)', fontWeight: 500 };
 const META_VALOR_STYLE = {
   fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 16, lineHeight: 1.25,
-  color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  color: 'var(--text-primary)', overflowWrap: 'anywhere', fontVariantNumeric: 'tabular-nums',
 };
 
 // Esqueleto de la pagina completa: misma rejilla 1.4fr / 1fr, imagen 4:3 y
@@ -304,7 +305,8 @@ export default function MedicionDetailPage() {
     user?.groups?.includes('super_admin') ||
     user?.groups?.includes('admin');
   // Eliminar también lo puede tecnico (renombrar sigue siendo de admins).
-  const puedeEliminar = isAdmin || user?.groups?.includes('tecnico');
+  // El técnico solo elimina las mediciones que él tomó.
+  const puedeEliminar = Boolean(medicion) && puedeGestionarMedicion(user?.groups, user?.sub, medicion);
   const esSuperAdmin = user?.groups?.includes('super_admin');
   // Zona: nombre de la afiliación dueña de la medición. Un no-super_admin
   // solo ve mediciones de su propia empresa (scopeado por el backend), así
@@ -513,6 +515,7 @@ export default function MedicionDetailPage() {
 
   const nivel = medicion.nivel_corrosion ?? 0;
   const color = nivelColor(nivel);
+  const colorTexto = nivelColorTexto(nivel);
   const bg = nivelBg(nivel);
   // Tiempo de análisis ≈ subida (medida en el navegador) + procesamiento del
   // servidor. Solo existe en mediciones nuevas.
@@ -682,18 +685,18 @@ export default function MedicionDetailPage() {
             gap: 10,
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, color }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: colorTexto }}>
                 <NivelIcon nivel={nivel} size={30} />
                 <span
                   className={nivel === 3 ? 'severa-pulse' : undefined}
-                  style={{ ...FICHA_VEREDICTO_STYLE, color }}
+                  style={{ ...FICHA_VEREDICTO_STYLE, color: colorTexto }}
                 >
                   {nivelLabel(nivel)}
                 </span>
                 <NivelInfo nivel={nivel} color={color} />
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ ...FICHA_PCT_STYLE, color }}>
+                <div style={{ ...FICHA_PCT_STYLE, color: colorTexto }}>
                   {formatoPct(medicion.area_corroida_pct)}
                 </div>
                 <div style={FICHA_PCT_LABEL_STYLE}>

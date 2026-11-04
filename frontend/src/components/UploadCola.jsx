@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { IconoAgregarImagen, IconoError, IconoEliminar, IconoFlechaAdelante, IconoFlechaAtras, IconoUbicacion } from './Iconos';
-import NivelIcon from './NivelIcon';
+import { IconoAgregarImagen, IconoCheck, IconoError, IconoEliminar, IconoFlechaAdelante, IconoFlechaAtras } from './Iconos';
 import { nivelColor, nivelLabel } from '../lib/statusUtils';
 import { formatoPct, etiquetaBase } from '../lib/textUtils';
-import { LOTE_MAX } from '../hooks/useUploadLote';
-import { paginar } from '../lib/gestorSubida';
+import { LOTE_MAX, paginar, alternarSeleccion, seleccionarIds, podarSeleccion } from '../lib/gestorSubida';
+import ConfirmDialog from './ConfirmDialog';
 import NotaPctAproximado from './NotaPctAproximado';
+import { Mosaico } from './Mosaico';
+import { estadoTesteraSubida } from '../lib/mosaico';
 
 const visuallyHidden = {
   position: 'absolute', width: 1, height: 1, overflow: 'hidden',
@@ -20,93 +21,147 @@ const btnSecondary = {
   ...btnBase, background: 'var(--bg-inset)', border: '1px solid var(--border)',
   color: 'var(--text-secondary)',
 };
+const chipBtn = {
+  display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 999,
+  background: 'var(--bg-inset)', border: '1px solid var(--border)', color: 'var(--text-secondary)',
+  fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)', cursor: 'pointer',
+};
 const btnPrimary = { ...btnBase, background: 'var(--accent-amber)', border: 'none', color: 'white' };
 
-// Elapsed seconds while the server analyzes one photo. The interval exists
-// only while this row is in the analyzing state.
-function SegundosAnalisis({ desde }) {
-  const [s, setS] = useState(0);
-  useEffect(() => {
-    const tick = () => setS(Math.max(0, Math.floor((Date.now() - desde) / 1000)));
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [desde]);
-  return <span style={numStyle}>{s} s</span>;
-}
-
-function EstadoFila({ it, ocupado, onReintentar }) {
-  if (it.estado === 'cola') return <span>{it.reintentando ? 'Reintentando en unos segundos' : 'En cola'}</span>;
-  if (it.estado === 'subiendo') {
-    return (
-      <span>
-        Subiendo <span style={numStyle}>{it.progreso} %</span>
-        {it.reintentando && ' · Reintentando'}
-      </span>
-    );
-  }
-  if (it.estado === 'analizando') {
-    return (
-      <span>
-        Analizando · <SegundosAnalisis desde={it.inicioAnalisis} />
-        {it.reintentando && ' · Reintentando'}
-      </span>
-    );
-  }
-  if (it.estado === 'listo') {
-    const r = it.resultado ?? {};
-    const nivel = r.nivel_corrosion;
-    const color = nivel == null ? 'var(--text-primary)' : nivelColor(nivel);
-    return (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color }}>
-        {nivel != null && <NivelIcon nivel={nivel} size={18} color={color} />}
-        <span>
-          Listo{nivel != null && <> · <strong>{nivelLabel(nivel)}</strong></>}
-          {r.area_corroida_pct != null && <> · <span style={numStyle}>{formatoPct(r.area_corroida_pct)}</span> {etiquetaBase(r)}</>}
-        </span>
-      </span>
-    );
-  }
-  return (
-    <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
-      <span style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 6, color: 'var(--accent-red)' }}>
-        <IconoError size={16} aria-hidden="true" style={{ flexShrink: 0, marginTop: 2 }} />
-        <span>Error: {it.error}</span>
-      </span>
-      <button type="button" disabled={ocupado} onClick={onReintentar}
-        style={{ ...btnSecondary, padding: '5px 12px', opacity: ocupado ? 0.6 : 1, cursor: ocupado ? 'not-allowed' : 'pointer' }}>
-        Reintentar
-      </button>
-    </span>
-  );
-}
-
-// Thumbnail with its own object URL: created on mount and revoked on unmount,
-// so only the rows on the visible page hold a preview in memory.
-function Miniatura({ file }) {
+// Preview with its own object URL: created on mount and revoked on unmount,
+// so only the tiles on the visible page hold a preview in memory.
+function Previa({ file }) {
   const [url, setUrl] = useState(null);
   useEffect(() => {
     const u = URL.createObjectURL(file);
     setUrl(u);
     return () => URL.revokeObjectURL(u);
   }, [file]);
-  const estilo = { width: 56, height: 56, objectFit: 'cover', borderRadius: 6, flexShrink: 0, background: 'var(--bg-card)' };
-  return url ? <img src={url} alt="" width={56} height={56} decoding="async" loading="lazy" style={estilo} /> : <div aria-hidden="true" style={estilo} />;
+  return url ? <img className="mosaico-tile__img" src={url} alt="" decoding="async" loading="lazy" /> : null;
+}
+
+// One square tile of the queue: preview, status overlay and its actions.
+function TesteraCola({ it, ocupado, iniciado, seleccionando, seleccionada, onAlternar, onQuitar, onReintentar }) {
+  const nombre = it.nombre || it.file.name;
+  const estado = it.estado;
+  const r = it.resultado ?? {};
+  const nivel = r.nivel_corrosion;
+  const color = nivel == null ? 'var(--accent-green)' : nivelColor(nivel);
+  const texto = estado === 'listo' && nivel != null
+    ? `Listo, ${nivelLabel(nivel)}${r.area_corroida_pct != null ? `, ${formatoPct(r.area_corroida_pct)}` : ''}`
+    : estado === 'error' ? `Error: ${it.error}` : estadoTesteraSubida(it);
+  return (
+    <div className={`mosaico-tile${seleccionada ? ' mosaico-tile--seleccionada' : ''}`} role="group" aria-label={`${nombre}: ${texto}`}>
+      <Previa file={it.file} />
+      {estado === 'listo' ? (
+        <>
+          <span className="mosaico-tile__punto" aria-hidden="true" style={{ background: color }} />
+          <span className="mosaico-tile__pie">
+            <span className="mosaico-tile__pct">
+              {r.area_corroida_pct != null ? formatoPct(r.area_corroida_pct) : 'Listo'}
+            </span>
+            <span className="mosaico-tile__nombre">{nivel != null ? nivelLabel(nivel) : nombre}</span>
+          </span>
+        </>
+      ) : estado === 'error' ? (
+        <div className="mosaico-tile__estado mosaico-tile__estado--error" title={it.error}>
+          <IconoError size={18} aria-hidden="true" />
+          <span className="mosaico-tile__error-msg">{it.error || 'Error'}</span>
+        </div>
+      ) : (
+        <>
+          <span className="mosaico-tile__pie">
+            <span className="mosaico-tile__pct">{estadoTesteraSubida(it)}</span>
+            <span className="mosaico-tile__nombre">{nombre}</span>
+          </span>
+          {estado === 'subiendo' && (
+            <span className="mosaico-tile__barra" aria-hidden="true"><span style={{ width: `${it.progreso ?? 0}%` }} /></span>
+          )}
+          {estado === 'analizando' && <span className="mosaico-tile__barra mosaico-tile__barra--indet" aria-hidden="true"><span /></span>}
+        </>
+      )}
+      {estado === 'error' && (
+        <button type="button" disabled={ocupado} onClick={onReintentar}
+          className="mosaico-tile__accion mosaico-tile__accion--reintentar"
+          style={{ opacity: ocupado ? 0.6 : 1, cursor: ocupado ? 'not-allowed' : 'pointer' }}>
+          Reintentar
+        </button>
+      )}
+      {!iniciado && seleccionando && (
+        <button type="button" role="checkbox" aria-checked={seleccionada} onClick={onAlternar}
+          aria-label={`Seleccionar ${nombre}`} className="mosaico-tile__selector">
+          <span className="mosaico-tile__casilla" aria-hidden="true">
+            {seleccionada && <IconoCheck size={13} />}
+          </span>
+        </button>
+      )}
+      {!iniciado && !seleccionando && (
+        <button type="button" onClick={onQuitar}
+          aria-label={`Quitar ${nombre} de la lista`}
+          className="mosaico-tile__accion mosaico-tile__accion--quitar">
+          <IconoEliminar size={13} aria-hidden="true" />
+        </button>
+      )}
+    </div>
+  );
 }
 
 // Queue for a batch upload (up to LOTE_MAX rows). Paged, FILAS_POR_PAGINA rows
 // at a time, so a 1000-photo batch never renders 1000 rows or previews at once.
 // The polite live region announces only per-row completion.
-export default function UploadCola({ lote, onQuitar, onReintentar, onAgregar, onVerGaleria, onSubirMas }) {
-  const { items, running, anuncio, iniciado, terminado, listos, errores } = lote;
+export default function UploadCola({ lote, onQuitar, onQuitarVarias, onReintentar, onAgregar, onVerGaleria, onSubirMas, agrupado = true }) {
+  const { items, running, anuncio, iniciado, terminado, listos, errores, progreso } = lote;
+  const detenidas = progreso?.detenidas ?? 0;
   const resumenRef = useRef(null);
   const inputRef = useRef(null);
   const listaRef = useRef(null);
   const [paginaPedida, setPaginaPedida] = useState(0);
   const { filas, pagina, paginas, desde } = paginar(items, paginaPedida);
+  const [seleccionando, setSeleccionando] = useState(false);
+  const [seleccion, setSeleccion] = useState(() => new Set());
+  const [confirmando, setConfirmando] = useState(false);
+  const modoSeleccion = seleccionando && !iniciado;
 
-  // Move focus to the summary when the batch ends so keyboard/AT users land on the outcome.
-  useEffect(() => { if (terminado) resumenRef.current?.focus(); }, [terminado]);
+  // Rows removed elsewhere (or the whole queue) must not stay selected.
+  useEffect(() => {
+    setSeleccion((prev) => {
+      const podada = podarSeleccion(prev, items);
+      return podada.size === prev.size ? prev : podada;
+    });
+    if (items.length === 0) setSeleccionando(false);
+  }, [items]);
+
+  const salirDeSeleccion = () => { setSeleccionando(false); setSeleccion(new Set()); setConfirmando(false); };
+  const quitarSeleccion = () => {
+    onQuitarVarias([...seleccion]);
+    salirDeSeleccion();
+    // The toolbar (and the button that opened the dialog) disappear: land on the grid.
+    requestAnimationFrame(() => listaRef.current?.focus());
+  };
+
+  // Once the batch starts the rows are fixed: close any selection UI left open.
+  useEffect(() => {
+    if (!iniciado) return;
+    setConfirmando(false);
+    setSeleccionando(false);
+    setSeleccion((prev) => (prev.size ? new Set() : prev));
+  }, [iniciado]);
+
+  // Rows removed can leave the requested page past the end: follow the clamped page.
+  useEffect(() => {
+    if (paginaPedida !== pagina) setPaginaPedida(pagina);
+  }, [paginaPedida, pagina]);
+
+  // Move focus to the summary only when the batch ENDS while this view is open
+  // (running -> finished), not when returning to a batch that already finished.
+  const vioCorrerRef = useRef(false);
+  useEffect(() => {
+    if (running) vioCorrerRef.current = true;
+    if (terminado && vioCorrerRef.current) {
+      vioCorrerRef.current = false;
+      resumenRef.current?.focus();
+    }
+  }, [running, terminado]);
 
   const irAPagina = (n) => {
     setPaginaPedida(n);
@@ -115,7 +170,8 @@ export default function UploadCola({ lote, onQuitar, onReintentar, onAgregar, on
 
   return (
     <div>
-      {terminado && (
+      {/* A stopped batch reports through the progress card (Reanudar pendientes / Descartar pendientes). */}
+      {terminado && detenidas === 0 && (
         <div style={{
           marginBottom: 'var(--space-3)', padding: '14px 16px', background: 'var(--bg-inset)',
           border: '1px solid var(--border)', borderRadius: 10,
@@ -127,7 +183,7 @@ export default function UploadCola({ lote, onQuitar, onReintentar, onAgregar, on
             {errores > 0 && <> · <span style={numStyle}>{errores}</span> con error</>}
           </h3>
           <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-3)', flexWrap: 'wrap' }}>
-            <button type="button" onClick={onSubirMas} style={btnSecondary}>Subir otro lote</button>
+            <button type="button" onClick={onSubirMas} style={btnSecondary}>{agrupado ? 'Subir otro lote' : 'Subir más imágenes'}</button>
             <button type="button" onClick={onVerGaleria} style={btnPrimary}>Ver en la galería</button>
           </div>
         </div>
@@ -138,57 +194,81 @@ export default function UploadCola({ lote, onQuitar, onReintentar, onAgregar, on
         marginBottom: 'var(--space-2)', fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)', color: 'var(--text-muted)',
       }}>
         <span>
-          <span style={numStyle}>{items.length}</span> {items.length === 1 ? 'imagen' : 'imágenes'} en el lote
+          <span style={numStyle}>{items.length.toLocaleString('es-CO')}</span> de{' '}
+          <span style={numStyle}>{LOTE_MAX.toLocaleString('es-CO')}</span> imágenes
+          {!iniciado && <> · más imágenes, más tiempo de análisis</>}
           {paginas > 1 && <> · mostrando <span style={numStyle}>{desde + 1}</span>-<span style={numStyle}>{desde + filas.length}</span></>}
         </span>
+        {!iniciado && items.length > 0 && (
+          <button type="button" aria-pressed={modoSeleccion}
+            onClick={() => (modoSeleccion ? salirDeSeleccion() : setSeleccionando(true))}
+            style={{ ...btnSecondary, padding: '4px 10px', fontSize: 'var(--text-xs)' }}>
+            {modoSeleccion ? 'Listo' : 'Seleccionar'}
+          </button>
+        )}
       </div>
 
-      <ul
+      {modoSeleccion && (
+        <div role="toolbar" aria-label="Acciones sobre las imágenes seleccionadas" style={{
+          display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 'var(--space-2)',
+          fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)',
+        }}>
+          <button type="button" style={chipBtn} onClick={() => setSeleccion(seleccionarIds(seleccion, filas.map((f) => f.id)))}>
+            Esta página
+          </button>
+          <button type="button" style={chipBtn} onClick={() => setSeleccion(new Set(items.map((f) => f.id)))}>
+            Todas ({items.length})
+          </button>
+          <button type="button" style={chipBtn} disabled={seleccion.size === 0} onClick={() => setSeleccion(new Set())}>
+            Ninguna
+          </button>
+          <button type="button" disabled={seleccion.size === 0 || running}
+            onClick={() => (seleccion.size > 1 ? setConfirmando(true) : quitarSeleccion())}
+            style={{
+              ...chipBtn, marginLeft: 'auto', background: 'var(--accent-red)', borderColor: 'var(--accent-red)', color: 'white',
+              opacity: seleccion.size === 0 ? 0.5 : 1, cursor: seleccion.size === 0 ? 'not-allowed' : 'pointer',
+            }}>
+            <IconoEliminar size={13} aria-hidden="true" /> Quitar seleccionadas ({seleccion.size})
+          </button>
+          <span aria-live="polite" role="status" style={visuallyHidden}>{seleccion.size} seleccionadas</span>
+        </div>
+      )}
+
+      {confirmando && !iniciado && (
+        <ConfirmDialog
+          title={`Quitar ${seleccion.size} imágenes`}
+          message="Se quitarán de la lista y no se analizarán. Las fotos originales no se borran de tu dispositivo."
+          confirmLabel="Quitar"
+          tone="danger"
+          onConfirm={quitarSeleccion}
+          onCancel={() => setConfirmando(false)}
+        />
+      )}
+
+      <Mosaico
         ref={listaRef}
         tabIndex={-1}
-        aria-label={paginas > 1 ? `Imágenes del lote, página ${pagina + 1} de ${paginas}` : 'Imágenes del lote'}
-        style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', outline: 'none' }}
+        altoMax={420}
+        label={paginas > 1 ? `Imágenes, página ${pagina + 1} de ${paginas}` : 'Imágenes'}
+        style={{ outline: 'none' }}
       >
         {filas.map((it) => (
-          <li key={it.id} style={{
-            display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-start', flexWrap: 'wrap',
-            padding: 10, background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 8,
-          }}>
-            <Miniatura file={it.file} />
-            <div style={{ flex: '1 1 200px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', padding: '3px 9px',
-                  background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 6,
-                  fontFamily: 'var(--font-data)', fontWeight: 600, fontSize: 'var(--text-xs)',
-                  color: 'var(--text-primary)', overflowWrap: 'anywhere',
-                }}>
-                  {it.nombre || it.file.name}
-                </span>
-              </div>
-              {it.gps && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--text-2xs)', color: 'var(--accent-green)' }}>
-                  <IconoUbicacion size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
-                  GPS detectado
-                </span>
-              )}
-              <div style={{ fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-                <EstadoFila it={it} ocupado={running} onReintentar={() => onReintentar(it.id)} />
-              </div>
-            </div>
-            {!iniciado && (
-              <button type="button" onClick={() => onQuitar(it.id)}
-                aria-label={`Quitar ${it.nombre || it.file.name} de la lista`}
-                style={{ ...btnSecondary, padding: 8, display: 'inline-flex', flexShrink: 0 }}>
-                <IconoEliminar size={16} aria-hidden="true" />
-              </button>
-            )}
-          </li>
+          <TesteraCola
+            key={it.id}
+            it={it}
+            ocupado={running}
+            iniciado={iniciado}
+            seleccionando={modoSeleccion}
+            seleccionada={seleccion.has(it.id)}
+            onAlternar={() => setSeleccion((prev) => alternarSeleccion(prev, it.id))}
+            onQuitar={() => onQuitar(it.id)}
+            onReintentar={() => onReintentar(it.id)}
+          />
         ))}
-      </ul>
+      </Mosaico>
 
       {paginas > 1 && (
-        <nav aria-label="Páginas del lote" style={{
+        <nav aria-label="Páginas de imágenes" style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
           marginTop: 'var(--space-3)', fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)', color: 'var(--text-muted)',
         }}>

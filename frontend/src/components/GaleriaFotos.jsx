@@ -4,15 +4,17 @@ import { useLocation } from 'react-router-dom';
 import { IconoCasillaMarcada, IconoEliminar, IconoMoverACarpeta, IconoSinResultados, IconoVolver } from './Iconos';
 import MedicionCard from './MedicionCard';
 import BarraSeleccion from './BarraSeleccion';
+import { puedeGestionarMedicion, puedeGestionarLote } from '../lib/permisosMediciones';
 import { EliminarLoteDialog, MoverLoteDialog } from './LoteDialogs';
 import { useAuth } from '../auth/AuthContext';
 import { useAccionesLote } from '../hooks/useAccionesLote';
 import { NIVELES, nivelColor, nivelLabel } from '../lib/statusUtils';
 import NivelInfo from './NivelInfo';
 import DatePicker from './DatePicker';
-import { inicioDiaLocal, finDiaLocal, hoyLocalISO, fechaUltimaMedicionISO } from '../lib/fechas';
+import { enRangoDiasColombia, hoyColombiaISO, fechaUltimaMedicionISO } from '../lib/fechas';
 import { agruparPorLote, contarOcultasPorFiltro, formatearConteoMediciones, medicionesDeLote } from '../lib/galeriaCarpetas';
 import TarjetaLote, { FichaDetalleLote } from './TarjetaLote';
+import MenuMasAcciones from './MenuMasAcciones';
 
 const ORDENES = [
   { key: 'recientes', label: 'Más recientes' },
@@ -64,6 +66,8 @@ export default function GaleriaFotos({
   const location = useLocation();
   const { user } = useAuth();
   const puedeGestionar = ROLES_GESTION.some(r => user?.groups?.includes(r));
+  // El técnico solo mueve y elimina lo que él tomó (regla del backend): las demás fotos no se pueden marcar.
+  const gestionable = (m) => Boolean(idPuntoDe(m)) && puedeGestionarMedicion(user?.groups, user?.sub, m);
   const { eliminar, mover, procesando } = useAccionesLote();
   const [seleccionando, setSeleccionando] = useState(false);
   const [marcadas, setMarcadas] = useState(() => new Set());
@@ -101,15 +105,8 @@ export default function GaleriaFotos({
   const medicionesPorNivel = mediciones.filter(
     m => nivelFilter === 'all' || (m.nivel_corrosion ?? 0) === Number(nivelFilter),
   );
-  const limiteInicio = fechaInicio ? inicioDiaLocal(fechaInicio) : null;
-  const limiteFin = fechaFin ? finDiaLocal(fechaFin) : null;
   const filtradas = medicionesPorNivel
-    .filter(m => {
-      const ts = new Date(m.timestamp);
-      if (limiteInicio && ts < limiteInicio) return false;
-      if (limiteFin && ts > limiteFin) return false;
-      return true;
-    })
+    .filter(m => enRangoDiasColombia(m.timestamp, fechaInicio, fechaFin))
     .sort(COMPARADORES[orden]);
 
   const agrupado = puntoActual ? agruparPorLote(filtradas) : { lotes: [], sueltas: filtradas };
@@ -138,7 +135,7 @@ export default function GaleriaFotos({
   // nunca las fotos escondidas dentro de una carpeta de lote que no está abierta.
   // Con una acción de lote, el universo es el lote entero aunque los filtros oculten parte.
   const universo = seleccionLoteCompleto && loteAbierto ? loteCompleto : visibles;
-  const elegibles = universo.filter(m => idPuntoDe(m));
+  const elegibles = universo.filter(gestionable);
   const elegidas = elegibles.filter(m => marcadas.has(m.id_medicion));
   const ocultasPorFiltro = seleccionLoteCompleto && loteAbierto
     ? contarOcultasPorFiltro(elegidas, visibles, marcadas, idPuntoDe)
@@ -148,7 +145,7 @@ export default function GaleriaFotos({
     setSeleccionando(false); setSeleccionLoteCompleto(false); setMarcadas(new Set()); setDialogo(null);
   };
   const accionDeLote = (dialogoInicial) => {
-    const idsLote = new Set(loteCompleto.filter(m => idPuntoDe(m)).map(m => m.id_medicion));
+    const idsLote = new Set(loteCompleto.filter(gestionable).map(m => m.id_medicion));
     setSeleccionLoteCompleto(true);
     setSeleccionando(true);
     setMarcadas(idsLote);
@@ -273,7 +270,7 @@ export default function GaleriaFotos({
               setFechaInicio(ini);
               setFechaFin(fin);
             }}
-            maxISO={hoyLocalISO()}
+            maxISO={hoyColombiaISO()}
             inspecciones={medicionesPorNivel}
             mesInicial={fechaUltimaMedicionISO(mediciones)}
             ctaLabel="Filtrar fotos"
@@ -335,8 +332,9 @@ export default function GaleriaFotos({
               lote={loteAbierto}
               onVolver={() => { setLoteAbiertoId(null); salirDeSeleccion(); }}
               textoVolver="← Todos los lotes del punto"
-              acciones={puedeGestionar ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              compacta
+              acciones={puedeGestionar && puedeGestionarLote(user?.groups, user?.sub, loteCompleto) ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <button
                     type="button"
                     onClick={() => accionDeLote(null)}
@@ -344,47 +342,23 @@ export default function GaleriaFotos({
                     title={tituloAccionLote}
                     style={{
                       opacity: accionesLoteBloqueadas ? 0.5 : 1,
-                      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+                      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 9px',
                       background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 7,
                       cursor: accionesLoteBloqueadas ? 'not-allowed' : 'pointer', color: 'var(--text-primary)',
-                      fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
+                      fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-2xs)',
                     }}
                   >
-                    <IconoCasillaMarcada size={14} aria-hidden="true" />
+                    <IconoCasillaMarcada size={13} aria-hidden="true" />
                     Seleccionar lote completo
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => accionDeLote('mover')}
+                  <MenuMasAcciones
                     disabled={accionesLoteBloqueadas}
                     title={tituloAccionLote}
-                    style={{
-                      opacity: accionesLoteBloqueadas ? 0.5 : 1,
-                      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
-                      background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 7,
-                      cursor: accionesLoteBloqueadas ? 'not-allowed' : 'pointer', color: 'var(--text-secondary)',
-                      fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
-                    }}
-                  >
-                    <IconoMoverACarpeta size={14} aria-hidden="true" />
-                    Mover lote
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => accionDeLote('eliminar')}
-                    disabled={accionesLoteBloqueadas}
-                    title={tituloAccionLote}
-                    style={{
-                      opacity: accionesLoteBloqueadas ? 0.5 : 1,
-                      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
-                      background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.3)', borderRadius: 7,
-                      cursor: accionesLoteBloqueadas ? 'not-allowed' : 'pointer', color: 'var(--accent-red)',
-                      fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
-                    }}
-                  >
-                    <IconoEliminar size={14} aria-hidden="true" />
-                    Eliminar lote
-                  </button>
+                    items={[
+                      { key: 'mover', label: 'Mover lote', Icono: IconoMoverACarpeta, onClick: () => accionDeLote('mover') },
+                      { key: 'eliminar', label: 'Eliminar lote', Icono: IconoEliminar, peligro: true, onClick: () => accionDeLote('eliminar') },
+                    ]}
+                  />
                 </div>
               ) : null}
             />
@@ -454,7 +428,7 @@ export default function GaleriaFotos({
                   contexto={contexto?.(m)}
                   to={m.bloque_id ? `/galeria/${m.id_medicion}?punto=${encodeURIComponent(m.bloque_id)}` : `/galeria/${m.id_medicion}`}
                   state={{ filters: { nivelFilter, fechaInicio, fechaFin, orden, loteAbiertoId }, volver: volverA }}
-                  seleccion={seleccionando && idPuntoDe(m) ? {
+                  seleccion={seleccionando && gestionable(m) ? {
                     marcada: marcadas.has(m.id_medicion),
                     onToggle: () => alternar(m.id_medicion),
                   } : undefined}

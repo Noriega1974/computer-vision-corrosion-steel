@@ -1,11 +1,14 @@
+import { leerModoOscuro, CLAVE_MODO_OSCURO } from '../lib/tema';
 import React, { useState, useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import Sidebar from '../components/Sidebar';
 import PageHeader from '../components/PageHeader';
+import LimiteErrores from '../components/LimiteErrores';
 
 export default function AppLayout() {
   const { logout } = useAuth();
+  const { pathname } = useLocation();
 
   // Estado del sidebar — persiste en localStorage
   const [collapsed, setCollapsed] = useState(
@@ -13,9 +16,7 @@ export default function AppLayout() {
   );
 
   // Modo oscuro — persiste en localStorage
-  const [darkMode, setDarkMode] = useState(
-    () => localStorage.getItem('corria-darkmode') === 'true'
-  );
+  const [darkMode, setDarkMode] = useState(leerModoOscuro);
 
   // Estado del sidebar en móvil (overlay)
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -32,9 +33,15 @@ export default function AppLayout() {
   // Aplicar tema al documento raíz
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
-    localStorage.setItem('corria-darkmode', darkMode);
-    window.dispatchEvent(new CustomEvent('corria-darkmode', { detail: darkMode }));
   }, [darkMode]);
+
+  // Only an explicit toggle saves the choice; mounting never writes the key.
+  const alternarOscuro = () => {
+    const siguiente = !darkMode;
+    try { localStorage.setItem(CLAVE_MODO_OSCURO, String(siguiente)); } catch { /* storage blocked */ }
+    setDarkMode(siguiente);
+    window.dispatchEvent(new CustomEvent('corria-darkmode', { detail: siguiente }));
+  };
 
   // El selector "Modo de visualización" en Configuración cambia el tema
   // desde ahí -- se escucha el mismo evento que se dispara arriba.
@@ -104,7 +111,7 @@ export default function AppLayout() {
           onMenuToggle={handleSidebarToggle}
           isMobile={isMobile}
           darkMode={darkMode}
-          onToggleDark={() => setDarkMode(d => !d)}
+          onToggleDark={alternarOscuro}
         />
 
         <main style={{
@@ -112,7 +119,9 @@ export default function AppLayout() {
           overflow: 'auto',
           background: 'var(--bg-page)',
         }}>
-          <Outlet />
+          <LimiteErrores pathname={pathname}>
+            <Outlet />
+          </LimiteErrores>
         </main>
       </div>
     </div>

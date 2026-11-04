@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { IconoFlechaAbajo, IconoFlechaArriba, IconoReloj, IconoSubir } from '../components/Iconos';
 
@@ -78,14 +78,45 @@ export default function DashboardPage() {
 
   // "Ver punto en dashboard" (MedicionDetailPage) navega a /dashboard?punto=X
   // -- nadie leía ese parámetro. Selecciona el punto apenas carga la lista.
+  // Applied once: a later refetch must not undo what the user picked since.
   const [searchParams] = useSearchParams();
+  // Remembers which ?punto= value was already applied, so a refetch never undoes the
+  // user's later pick, but a new ?punto= value (or a point that loads later) still applies.
+  const puntoUrlAplicadoRef = useRef(null);
+  const seleccionPorUrlRef = useRef(null);
   useEffect(() => {
     const idPunto = searchParams.get('punto');
-    if (!idPunto || puntos.length === 0) return;
+    if (!idPunto || idPunto === puntoUrlAplicadoRef.current || puntos.length === 0) return;
+    // The user already picked a point by hand: the link must not override that choice.
+    if (selectedPunto && selectedPunto.id_bloque !== seleccionPorUrlRef.current) {
+      puntoUrlAplicadoRef.current = idPunto;
+      return;
+    }
     const match = puntos.find(p => p.id_bloque === idPunto);
-    if (match) setSelectedPunto(match);
-  }, [searchParams, puntos]);
+    if (!match) return;
+    puntoUrlAplicadoRef.current = idPunto;
+    seleccionPorUrlRef.current = match.id_bloque;
+    setSelectedPunto(match);
+  }, [searchParams, puntos, selectedPunto]);
 
+
+  // On narrow screens the detail sits far below the list and the map: bring it into
+  // view when the user picks a point (not on the first render, not for a deselect).
+  const detalleRef = useRef(null);
+  const idSeleccionadoPrevio = useRef(null);
+  const idSeleccionado = selectedPunto?.id_bloque ?? null;
+  useEffect(() => {
+    const previo = idSeleccionadoPrevio.current;
+    idSeleccionadoPrevio.current = idSeleccionado;
+    if (!idSeleccionado || idSeleccionado === previo) return;
+    // A selection that came from the URL is not a click: do not move the page.
+    if (seleccionPorUrlRef.current === idSeleccionado) { seleccionPorUrlRef.current = null; return; }
+    seleccionPorUrlRef.current = null;
+    if (typeof window.matchMedia !== 'function') return;
+    if (!window.matchMedia('(max-width: 1024px)').matches) return;
+    const reducir = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    detalleRef.current?.scrollIntoView({ behavior: reducir ? 'auto' : 'smooth', block: 'start' });
+  }, [idSeleccionado]);
 
   return (
 
@@ -115,59 +146,29 @@ export default function DashboardPage() {
             KPI SECTION
             ======================================================== */}
 
-        <section
-          className="dashboard-section section-kpi"
-          style={{
-            padding: '12px 18px 16px',
-          }}
-        >
-
-          {/* Header en una sola línea: título y el botón a la derecha. Compacto para dejarles el alto a las dos tarjetas sin
-              empujar el mapa hacia abajo. */}
-
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 'var(--space-3)',
-              marginBottom: 'var(--space-2)',
-            }}
-          >
-
-            <div
-              className="dashboard-section-title"
-            >
+        <section className="dashboard-kpi" aria-labelledby="titulo-indicadores">
+          {/* Título de la sección y acción alineados; las dos tarjetas de abajo son el único nivel de superficie. */}
+          <div className="dashboard-kpi__cabecera">
+            <h2 id="titulo-indicadores" className="dashboard-section-title">
               Indicadores globales
-            </div>
-
-
-            {/* Nueva medición */}
+            </h2>
 
             {puedeSubir && (
-            <Link
-              to="/upload"
-              className="dashboard-action"
-              style={{ padding: '6px 14px', flexShrink: 0 }}
-            >
-
-              <IconoSubir size={14} />
-
-              Nueva medición
-
-            </Link>
+              <Link
+                to="/upload"
+                className="dashboard-action"
+                style={{ padding: '6px 14px', flexShrink: 0 }}
+              >
+                <IconoSubir size={14} />
+                Nueva medición
+              </Link>
             )}
-
           </div>
-
-
-          {/* KPI cards */}
 
           <div className="indicadores-split">
-            <KPIBar />
+            <KPIBar empresaId={esSuperAdmin && selectedZona?.id_empresa && selectedZona.id_empresa !== 'propia' ? selectedZona.id_empresa : null} />
             <TendenciaPunto punto={selectedPunto} />
           </div>
-
         </section>
 
 
@@ -182,9 +183,9 @@ export default function DashboardPage() {
           className="main-grid"
           style={{
             display: 'grid',
-            gridTemplateColumns: 'minmax(250px, 0.85fr) minmax(0, 2.1fr) minmax(320px, 1.05fr)',
+            gridTemplateColumns: 'minmax(220px, 0.8fr) minmax(0, 1.8fr) minmax(320px, 1.15fr)',
             gap: 18,
-            height: 'clamp(480px, 56vh, 720px)',
+            height: 'clamp(540px, 66vh, 820px)',
           }}
         >
           {/* ======================================================
@@ -285,7 +286,8 @@ export default function DashboardPage() {
               DETALLE DE UBICACIÓN
               ====================================================== */}
           <section
-            className="dashboard-section section-detail"
+            ref={detalleRef}
+            className={`dashboard-section section-detail${selectedPunto ? '' : ' section-detail--vacio'}`}
             style={{
               padding: '16px',
               display: 'flex',

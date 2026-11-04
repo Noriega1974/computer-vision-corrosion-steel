@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { aniosDesde, urlResumenDiario, combinarResumenes, textoImagenesYLotes } from './resumenDiario.js';
+import { aniosDesde, urlResumenDiario, combinarResumenes, textoMedicionesConLotes, textoMedicionesDia } from './resumenDiario.js';
 
 describe('resumenDiario', () => {
   it('lists years from 2026 up to the current one, never a future year', () => {
@@ -28,11 +28,21 @@ describe('resumenDiario', () => {
     assert.equal(r.truncado, true);
     assert.deepEqual(combinarResumenes([]).totales, { imagenes: 0, lotes: 0, imagenes_en_lotes: 0 });
   });
+});
 
-  it('writes the image and batch summary', () => {
-    assert.equal(textoImagenesYLotes(1, { count: 0, imagenes: 0 }), '1 imagen · 0 lotes con 0 imágenes');
-    assert.equal(textoImagenesYLotes(30, { count: 1, imagenes: 12 }), '30 imágenes · 1 lote con 12 imágenes');
-    assert.equal(textoImagenesYLotes(30, { count: 2, imagenes: 1 }), '30 imágenes · 2 lotes con 1 imagen');
-    assert.equal(textoImagenesYLotes(2, undefined), '2 imágenes · 0 lotes con 0 imágenes');
+describe('resumenDiario vocabulary (mediciones y lotes)', () => {
+  it('writes "X mediciones con Y lotes" with singular and plural', () => {
+    assert.equal(textoMedicionesConLotes(12, 3), '12 mediciones con 3 lotes');
+    assert.equal(textoMedicionesConLotes(1, 1), '1 medición con 1 lote');
+    assert.equal(textoMedicionesConLotes(5, 0), '5 mediciones');
+    assert.equal(textoMedicionesConLotes(1, 0), '1 medición');
+    assert.equal(textoMedicionesConLotes(undefined, undefined), '0 mediciones');
+  });
+
+  it('writes the day subtitle "N mediciones · x lotes"', () => {
+    assert.equal(textoMedicionesDia(10, { count: 2, imagenes: 8 }), '10 mediciones · 2 lotes');
+    assert.equal(textoMedicionesDia(1, { count: 1, imagenes: 1 }), '1 medición · 1 lote');
+    assert.equal(textoMedicionesDia(4, { count: 0, imagenes: 0 }), '4 mediciones');
+    assert.equal(textoMedicionesDia(4), '4 mediciones');
   });
 });

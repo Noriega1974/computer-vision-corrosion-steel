@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { baseArea, etiquetaBase, formatoPct } from './textUtils.js';
+import { baseArea, etiquetaBase, formatoPct, formatoMB, plural } from './textUtils.js';
 
 test('medicion antigua sin area_base se lee como foto', () => {
   const m = { area_corroida_pct: 3.2 };
@@ -41,4 +41,16 @@ test('la variante en mayusculas de UploadPage conserva la base', () => {
 test('formatoPct usa coma decimal y tolera nulos', () => {
   assert.equal(formatoPct(1.5), '1,5%');
   assert.equal(formatoPct(null), '0,0%');
+});
+
+test('plural escribe singular solo con 1', () => {
+  assert.equal(plural(1, 'medición', 'mediciones'), '1 medición');
+  assert.equal(plural(0, 'lote', 'lotes'), '0 lotes');
+  assert.equal(plural(12, 'lote', 'lotes'), '12 lotes');
+});
+
+test('formatoMB usa coma decimal y tolera nulos', () => {
+  assert.equal(formatoMB(1536 * 1024), '1,5 MB');
+  assert.equal(formatoMB(60 * 1024 * 1024), '60,0 MB');
+  assert.equal(formatoMB(null), '0,0 MB');
 });

@@ -11,6 +11,8 @@ import {
   IconoSinResultados,
 } from './Iconos';
 import NivelIcon from './NivelIcon';
+import { Mosaico, TesteraFoto, TesteraLote } from './Mosaico';
+import { miniaturaDe } from '../lib/mosaico';
 import NivelInfo from './NivelInfo';
 import DatePicker from './DatePicker';
 import Skeleton, { SkeletonLinea } from './Skeleton';
@@ -20,10 +22,10 @@ import { useMedicionesRango } from '../hooks/useMedicionesRango';
 import { useBloques } from '../hooks/useBloques';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useAuth } from '../auth/AuthContext';
-import { NIVELES, nivelColor, nivelLabel, nivelBg } from '../lib/statusUtils';
+import { NIVELES, nivelColor, nivelColorTexto, nivelLabel, nivelBg } from '../lib/statusUtils';
 import { formatoPct, etiquetaBase } from '../lib/textUtils';
-import { hoyLocalISO, fechaUltimaMedicionISO } from '../lib/fechas';
-import { formatFecha } from '../utils/dateFormat';
+import { hoyColombiaISO, fechaUltimaMedicionISO, anioColombia } from '../lib/fechas';
+import { horaCorta } from '../utils/dateFormat';
 import { tiempoRelativo } from '../lib/tiempoRelativo';
 import {
   filtrarMedicionesLineaTiempo,
@@ -74,7 +76,7 @@ function NivelBadge({ nivel }) {
       borderRadius: 999,
       background: bg,
       border: `1px solid ${color}55`,
-      color,
+      color: nivelColorTexto(niv),
       fontFamily: 'var(--font-ui)',
       fontWeight: 700,
       fontSize: 'var(--text-2xs)',
@@ -86,302 +88,70 @@ function NivelBadge({ nivel }) {
   );
 }
 
-function TarjetaMedicionIndividual({ medicion, esSuperAdmin, nombreEmpresa }) {
-  const nivel = medicion.nivel_corrosion ?? 0;
-  const color = nivelColor(nivel);
-  const idBloque = medicion.bloque_id || medicion.id_punto;
-  const destino = idBloque
-    ? `/galeria/${medicion.id_medicion}?punto=${encodeURIComponent(idBloque)}`
-    : `/galeria/${medicion.id_medicion}`;
-  const autor = autorDeMedicion(medicion);
-  const puntoNombre = medicion.bloque_nombre || 'Sin punto asignado';
-  const thumb = medicion.url_thumbnail || medicion.url_imagen;
-
+// Eventos de un día como cuadrícula de casillas cuadradas: una foto suelta es una
+// miniatura; un lote es una casilla con su portada que, al abrirla, muestra sus fotos
+// en una fila completa de la misma cuadrícula.
+function EventosDia({ eventos, etiquetaDia, nombreEmpresa = null }) {
+  const [abiertos, setAbiertos] = useState(() => new Set());
+  const alternar = (id) => setAbiertos((prev) => {
+    const sig = new Set(prev);
+    if (sig.has(id)) sig.delete(id); else sig.add(id);
+    return sig;
+  });
+  const subtituloDe = (m) => [horaCorta(m.timestamp), m.bloque_nombre].filter(Boolean).join(' · ');
+  // Zona de la foto: solo la ve el super_admin (ve varias).
+  const empresaDe = (id) => (nombreEmpresa && id ? nombreEmpresa(id) : null);
+  const autorDe = (m) => {
+    const autor = autorDeMedicion(m);
+    return autor ? `Por ${autor}` : '';
+  };
   return (
-    <Link
-      to={destino}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12,
-        padding: '10px 14px',
-        background: 'var(--bg-card)',
-        border: '1px solid var(--border)',
-        borderRadius: 10,
-        textDecoration: 'none',
-        color: 'inherit',
-        flexWrap: 'wrap',
-        transition: 'border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out)',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: '1 1 260px' }}>
-        {thumb ? (
-          <img
-            src={thumb}
-            alt=""
-            width={48}
-            height={48}
-            loading="lazy"
-            style={{
-              width: 48,
-              height: 48,
-              objectFit: 'cover',
-              borderRadius: 8,
-              border: '1px solid var(--border)',
-              flexShrink: 0,
-            }}
-          />
-        ) : (
-          <div style={{
-            width: 48,
-            height: 48,
-            borderRadius: 8,
-            background: `${color}15`,
-            border: `1px solid ${color}35`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color,
-            flexShrink: 0,
-          }}>
-            <IconoCamara size={18} aria-hidden="true" />
-          </div>
-        )}
-
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{
-              fontFamily: 'var(--font-ui)',
-              fontWeight: 700,
-              fontSize: 'var(--text-sm)',
-              color: 'var(--text-primary)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}>
-              {medicion.nombre || puntoNombre}
-            </span>
-            {medicion.nombre && (
-              <span style={{
-                fontSize: 'var(--text-2xs)',
-                color: 'var(--text-muted)',
-                fontFamily: 'var(--font-ui)',
-              }}>
-                · {puntoNombre}
-              </span>
-            )}
-            {esSuperAdmin && medicion.empresa_id && (
-              <span style={{
-                padding: '1px 7px',
-                borderRadius: 999,
-                background: 'var(--bg-inset)',
-                border: '1px solid var(--border)',
-                fontSize: 'var(--text-3xs)',
-                fontFamily: 'var(--font-data)',
-                color: 'var(--text-secondary)',
-                fontWeight: 600,
-              }}>
-                {nombreEmpresa(medicion.empresa_id)}
-              </span>
-            )}
-          </div>
-
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            flexWrap: 'wrap',
-            marginTop: 4,
-            fontSize: 'var(--text-2xs)',
-            color: 'var(--text-muted)',
-            fontFamily: 'var(--font-ui)',
-          }}>
-            <span>{formatFecha(medicion.timestamp, { conHora: true })}</span>
-            <span>·</span>
-            <span>{tiempoRelativo(medicion.timestamp, { vacio: 'Sin fecha', formatFecha })}</span>
-            {autor && (
-              <>
-                <span>·</span>
-                <span>Por {autor}</span>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{
-            fontFamily: 'var(--font-ui)',
-            fontVariantNumeric: 'tabular-nums',
-            fontWeight: 800,
-            fontSize: 'var(--text-sm)',
-            color: 'var(--text-primary)',
-          }}>
-            {formatoPct(medicion.area_corroida_pct)}
-          </div>
-          <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', fontFamily: 'var(--font-ui)' }}>
-            {etiquetaBase(medicion)}
-          </div>
-        </div>
-        <NivelBadge nivel={nivel} />
-      </div>
-    </Link>
-  );
-}
-
-function TarjetaEventoLote({ evento, esSuperAdmin, nombreEmpresa }) {
-  const [expandido, setExpandido] = useState(false);
-  const color = nivelColor(evento.peorNivel ?? 0);
-
-  return (
-    <div style={{
-      background: 'var(--bg-card)',
-      border: '1px solid var(--border)',
-      borderRadius: 10,
-      overflow: 'hidden',
-    }}>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12,
-        padding: '12px 14px',
-        flexWrap: 'wrap',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: '1 1 260px' }}>
-          <div style={{
-            width: 48,
-            height: 48,
-            borderRadius: 8,
-            background: 'var(--bg-inset)',
-            border: '1px solid var(--border-strong)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--accent-amber)',
-            flexShrink: 0,
-          }}>
-            <IconoMoverACarpeta size={20} aria-hidden="true" />
-          </div>
-
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{
-                fontFamily: 'var(--font-ui)',
-                fontWeight: 700,
-                fontSize: 'var(--text-sm)',
-                color: 'var(--text-primary)',
-              }}>
-                Lote: {evento.loteNombre} · {evento.totalFotos} {evento.totalFotos === 1 ? 'foto' : 'fotos'}
-              </span>
-              <span style={{
-                fontSize: 'var(--text-2xs)',
-                color: 'var(--text-muted)',
-                fontFamily: 'var(--font-ui)',
-              }}>
-                · {evento.puntoNombre}
-              </span>
-              {esSuperAdmin && evento.empresaId && (
-                <span style={{
-                  padding: '1px 7px',
-                  borderRadius: 999,
-                  background: 'var(--bg-inset)',
-                  border: '1px solid var(--border)',
-                  fontSize: 'var(--text-3xs)',
-                  fontFamily: 'var(--font-data)',
-                  color: 'var(--text-secondary)',
-                  fontWeight: 600,
-                }}>
-                  {nombreEmpresa(evento.empresaId)}
-                </span>
-              )}
-            </div>
-
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              flexWrap: 'wrap',
-              marginTop: 4,
-              fontSize: 'var(--text-2xs)',
-              color: 'var(--text-muted)',
-              fontFamily: 'var(--font-ui)',
-            }}>
-              <span>{formatFecha(evento.timestamp, { conHora: true })}</span>
-              <span>·</span>
-              <span>Promedio {formatoPct(evento.promedioPct)}</span>
-              {evento.autor && (
-                <>
-                  <span>·</span>
-                  <span>Por {evento.autor}</span>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{
-              fontFamily: 'var(--font-ui)',
-              fontVariantNumeric: 'tabular-nums',
-              fontWeight: 800,
-              fontSize: 'var(--text-sm)',
-              color,
-            }}>
-              Máx. {formatoPct(evento.peorPct)}
-            </div>
-            <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', fontFamily: 'var(--font-ui)' }}>
-              Peor lectura del lote
-            </div>
-          </div>
-          <NivelBadge nivel={evento.peorNivel} />
-          <button
-            type="button"
-            onClick={() => setExpandido((v) => !v)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-              padding: '5px 10px',
-              background: 'var(--bg-inset)',
-              border: '1px solid var(--border)',
-              borderRadius: 7,
-              color: 'var(--text-secondary)',
-              fontFamily: 'var(--font-ui)',
-              fontWeight: 600,
-              fontSize: 'var(--text-2xs)',
-              cursor: 'pointer',
-            }}
-          >
-            <span>{expandido ? 'Ocultar fotos' : `Ver las ${evento.totalFotos} fotos`}</span>
-            {expandido ? <IconoFlechaArriba size={14} /> : <IconoFlechaAbajo size={14} />}
-          </button>
-        </div>
-      </div>
-
-      {expandido && (
-        <div style={{
-          padding: '10px 14px 12px',
-          background: 'var(--bg-inset)',
-          borderTop: '1px solid var(--border)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 8,
-        }}>
-          {evento.mediciones.map((m) => (
-            <TarjetaMedicionIndividual
-              key={m.id_medicion}
-              medicion={m}
-              esSuperAdmin={esSuperAdmin}
-              nombreEmpresa={nombreEmpresa}
+    <>
+      {eventos.map((ev) => {
+        if (ev.tipo !== 'lote') {
+          return (
+            <TesteraFoto
+              key={`med-${ev.id}`}
+              medicion={ev.medicion}
+              subtitulo={subtituloDe(ev.medicion)}
+              etiquetaDia={etiquetaDia}
+              empresa={empresaDe(ev.medicion.empresa_id)}
+              detalle={autorDe(ev.medicion)}
             />
-          ))}
-        </div>
-      )}
-    </div>
+          );
+        }
+        const abierto = abiertos.has(ev.id);
+        const portada = ev.mediciones.map(miniaturaDe).find(Boolean) ?? null;
+        return (
+          <React.Fragment key={`lote-${ev.id}`}>
+            <TesteraLote
+              nombre={ev.loteNombre}
+              total={ev.totalFotos}
+              peorNivel={ev.peorNivel}
+              peorPct={ev.peorPct}
+              preview={portada}
+              abierto={abierto}
+              onClick={() => alternar(ev.id)}
+              etiquetaDia={etiquetaDia}
+              empresa={empresaDe(ev.empresaId)}
+            />
+            {abierto && (
+              <div className="mosaico-expandido">
+                <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)', marginBottom: 6 }}>
+                  Lote: {ev.loteNombre} · {ev.puntoNombre} · promedio {formatoPct(ev.promedioPct)}
+                  {ev.autor ? ` · Por ${ev.autor}` : ''}
+                </div>
+                <Mosaico ancho sinTope label={`Fotos del lote ${ev.loteNombre}`}>
+                  {ev.mediciones.map((m) => (
+                    <TesteraFoto key={m.id_medicion} medicion={m} subtitulo={subtituloDe(m)} detalle={autorDe(m)} />
+                  ))}
+                </Mosaico>
+              </div>
+            )}
+          </React.Fragment>
+        );
+      })}
+    </>
   );
 }
 
@@ -498,9 +268,12 @@ export function BarraAnualLineaTiempo({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-secondary)' }}>
+            Vista:
+          </span>
           <div
             role="group"
-            aria-label="Modo de color en días con múltiples niveles"
+            aria-label="Vista de la barra anual: color en días con varios niveles"
             style={{
               display: 'inline-flex',
               padding: 2,
@@ -736,7 +509,7 @@ export default function LineaTiempoMediciones() {
   const [busqueda, setBusqueda] = useState('');
   const [limiteEventos, setLimiteEventos] = useState(EVENTOS_POR_PAGINA);
   const [anioBarra, setAnioBarra] = useState(() =>
-    Math.max(ANIO_MINIMO_LINEA_TIEMPO, new Date().getFullYear()),
+    Math.max(ANIO_MINIMO_LINEA_TIEMPO, anioColombia()),
   );
 
   const nombreEmpresa = (id) => empresas.find((e) => e.id_empresa === id)?.nombre || 'Zona';
@@ -942,7 +715,7 @@ export default function LineaTiempoMediciones() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginLeft: 'auto' }}>
-          <div style={{ position: 'relative', minWidth: 190 }}>
+          <div style={{ position: 'relative', minWidth: 'min(260px, 100%)' }}>
             <IconoBuscar
               size={13}
               aria-hidden="true"
@@ -958,7 +731,7 @@ export default function LineaTiempoMediciones() {
             <input
               type="search"
               aria-label="Buscar en línea de tiempo"
-              placeholder="Buscar lote, foto o autor…"
+              placeholder="Buscar lote, foto o autor"
               value={busqueda}
               onChange={(e) => {
                 setBusqueda(e.target.value);
@@ -1005,7 +778,7 @@ export default function LineaTiempoMediciones() {
               setFechaFin(fin);
               setLimiteEventos(EVENTOS_POR_PAGINA);
             }}
-            maxISO={hoyLocalISO()}
+            maxISO={hoyColombiaISO()}
             inspecciones={medicionesRecientes}
             mesInicial={fechaUltimaMedicionISO(medicionesRecientes)}
             ctaLabel="Filtrar línea de tiempo"
@@ -1089,64 +862,18 @@ export default function LineaTiempoMediciones() {
           </div>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {diasPaginados.map((dia) => (
-            <div key={dia.fechaISO} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{
-                position: 'sticky',
-                top: 0,
-                zIndex: 1,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '6px 10px',
-                background: 'var(--bg-inset)',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-              }}>
-                <span style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  fontFamily: 'var(--font-ui)',
-                  fontWeight: 700,
-                  fontSize: 'var(--text-xs)',
-                  color: 'var(--text-primary)',
-                }}>
-                  <IconoReloj size={14} color="var(--accent-amber)" />
-                  {dia.etiquetaDia}
-                </span>
-                <span style={{
-                  fontFamily: 'var(--font-data)',
-                  fontSize: 'var(--text-2xs)',
-                  color: 'var(--text-muted)',
-                  fontVariantNumeric: 'tabular-nums',
-                }}>
-                  {dia.totalEventos} {dia.totalEventos === 1 ? 'evento' : 'eventos'} · {dia.totalFotos} {dia.totalFotos === 1 ? 'foto' : 'fotos'}
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {dia.eventos.map((ev) =>
-                  ev.tipo === 'lote' ? (
-                    <TarjetaEventoLote
-                      key={`lote-${ev.id}`}
-                      evento={ev}
-                      esSuperAdmin={esSuperAdmin}
-                      nombreEmpresa={nombreEmpresa}
-                    />
-                  ) : (
-                    <TarjetaMedicionIndividual
-                      key={`med-${ev.id}`}
-                      medicion={ev.medicion}
-                      esSuperAdmin={esSuperAdmin}
-                      nombreEmpresa={nombreEmpresa}
-                    />
-                  ),
-                )}
-              </div>
-            </div>
-          ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* One continuous grid for every day: tiles flow without empty rows; each tile carries its day. */}
+          <Mosaico ancho altoMax={520} label="Actividad por día">
+            {diasPaginados.map((dia) => (
+              <EventosDia
+                key={dia.fechaISO}
+                eventos={dia.eventos}
+                etiquetaDia={dia.etiquetaDia}
+                nombreEmpresa={esSuperAdmin ? nombreEmpresa : null}
+              />
+            ))}
+          </Mosaico>
 
           {totalEventos > limiteEventos && (
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: 4 }}>

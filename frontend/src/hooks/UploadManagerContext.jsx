@@ -3,7 +3,9 @@ import exifr from 'exifr';
 import { subirUnaMedicion, MAX_FOTO_MB } from './useUploadMedicion';
 import { useRefreshKey } from './RefreshKeyContext';
 import { useAuth } from '../auth/AuthContext';
+import { formatoMB } from '../lib/textUtils';
 import {
+  quitarSeleccionadas,
   FASE_MEDICION,
   FASE_PREVIA,
   LOTE_MAX,
@@ -12,12 +14,14 @@ import {
   debeActualizarProgreso,
   ejecutarColaConcurrencia,
   esReanudable,
-  nombreDesdeArchivo,
+  esAbortoPorDetener,
+  errorDetenido,
+  normalizarEntrada,
 } from '../lib/gestorSubida';
 
 // Background batch upload. Lives above the routes (see App.jsx), so it owns
 // the File objects and keeps uploading while the user navigates the app.
-// Row states: 'cola' | 'subiendo' | 'analizando' | 'listo' | 'error'.
+// Row states: 'cola' | 'subiendo' | 'analizando' | 'listo' | 'error' | 'detenida'.
 // Preview URLs are not created here: UploadCola makes them only for visible rows.
 
 let contadorId = 0;
@@ -30,8 +34,8 @@ function construirBody(sesion, it, gps) {
   return {
     fuente: 'movil',
     bloque_id: sesion.bloqueId,
-    lote_id: sesion.loteId,
-    lote_nombre: sesion.loteNombre,
+    ...(sesion.loteId && { lote_id: sesion.loteId }),
+    ...(sesion.loteNombre && { lote_nombre: sesion.loteNombre }),
     timestamp_medicion: sesion.timestampMedicion,
     ...(it.nombre?.trim() && { nombre: it.nombre.trim() }),
     ...(sesion.notas && { notas: sesion.notas }),
@@ -57,6 +61,7 @@ function useGestorSubida() {
   const [sesion, setSesion] = useState(null);
   const [anuncio, setAnuncio] = useState('');
   const [avisoCerrado, setAvisoCerrado] = useState(false);
+  const [deteniendo, setDeteniendo] = useState(false);
 
   const itemsRef = useRef(items);
   itemsRef.current = items;
@@ -68,6 +73,8 @@ function useGestorSubida() {
   // see `cancelado()` and stop. `abortRef` aborts the S3 transfers in flight.
   const genRef = useRef(0);
   const abortRef = useRef(null);
+  // User-requested stop of the current run ("Detener"): reset when a run starts.
+  const paradaRef = useRef(false);
   const ultimoProgresoRef = useRef(new Map());  // item id -> last published tick (ms)
 
   const patch = useCallback((id, cambios) => {
@@ -82,15 +89,16 @@ function useGestorSubida() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [running]);
 
-  // Adds already-validated files, up to LOTE_MAX in total. Returns how many were dropped by the cap.
+  // Adds already-validated files (or { file, nombre } to keep a typed name), up to
+  // LOTE_MAX in total. Returns how many were dropped by the cap.
   const agregar = useCallback((files) => {
     const lista = Array.from(files ?? []);
     const hueco = Math.max(0, LOTE_MAX - itemsRef.current.length);
     const tomados = lista.slice(0, hueco);
-    const nuevos = tomados.map((file) => ({
+    const nuevos = tomados.map(normalizarEntrada).map(({ file, nombre }) => ({
       id: ++contadorId,
       file,
-      nombre: nombreDesdeArchivo(file),
+      nombre,
       gps: undefined,  // read from EXIF right before uploading the photo
       estado: 'cola',
       progreso: 0,
@@ -109,6 +117,13 @@ function useGestorSubida() {
     setItems((prev) => prev.filter((x) => x.id !== id));
   }, []);
 
+  // Bulk removal of the selected rows (same rule: only before the batch starts).
+  const quitarVarias = useCallback((ids) => {
+    if (sesionRef.current) return;
+    const quitar = new Set(ids);
+    setItems((prev) => quitarSeleccionadas(prev, quitar));
+  }, []);
+
   // Logout (or switching account): abort the pool, drop the queue and the session so the
   // next user never sees or continues someone else's batch. Clearing the rows unmounts
   // the thumbnails, which revoke their object URLs.
@@ -117,11 +132,13 @@ function useGestorSubida() {
     abortRef.current?.abort();
     abortRef.current = null;
     runningRef.current = false;
+    paradaRef.current = false;
     sesionRef.current = null;
     ultimoProgresoRef.current.clear();
     setItems([]);
     setSesion(null);
     setRunning(false);
+    setDeteniendo(false);
     setAnuncio('');
     setAvisoCerrado(false);
   }, []);
@@ -151,8 +168,7 @@ function useGestorSubida() {
     let fase = FASE_PREVIA;
     try {
       if (it.file.size > MAX_FOTO_MB * 1024 * 1024) {
-        const mb = (it.file.size / (1024 * 1024)).toFixed(1).replace('.', ',');
-        throw new Error(`La foto pesa ${mb} MB; el máximo es ${MAX_FOTO_MB} MB.`);
+        throw new Error(`La foto pesa ${formatoMB(it.file.size)}; el máximo es ${MAX_FOTO_MB} MB.`);
       }
       // `reintentando` is reset here: it is set by the pool between attempts.
       parchar(it.id, { estado: 'subiendo', progreso: 0, error: null, incierto: false, reintentando: false });
@@ -163,6 +179,7 @@ function useGestorSubida() {
         parchar(it.id, { gps });
       }
       if (cancelado()) throw new Error('Subida cancelada.');
+      if (paradaRef.current) throw errorDetenido();
       const body = construirBody(sesionRef.current, actual, gps);
       return await subirUnaMedicion(
         it.file,
@@ -190,6 +207,8 @@ function useGestorSubida() {
     } catch (err) {
       const e = err instanceof Error ? err : new Error(String(err ?? ''));
       e.fase = fase;
+      // "Detener" aborted the S3 transfer before the analysis: nothing was stored.
+      if (esAbortoPorDetener(e, { detenerPedido: paradaRef.current, fase })) throw errorDetenido();
       // The server rejected the stored key (expired/consumed): the next attempt uploads again.
       if (e.status === 400) parchar(it.id, { imagenKey: null });
       throw e;
@@ -203,6 +222,8 @@ function useGestorSubida() {
     const filas = ids.map((id) => itemsRef.current.find((x) => x.id === id)).filter(Boolean);
     if (filas.length === 0) return;
     runningRef.current = true;
+    paradaRef.current = false;
+    setDeteniendo(false);
     setRunning(true);
     setAvisoCerrado(false);
     const gen = genRef.current;
@@ -215,6 +236,7 @@ function useGestorSubida() {
         items: filas,
         tarea,
         cancelado,
+        detenerPedido: () => paradaRef.current,
         onItemUpdate: (id, cambios) => {
           patch(id, cambios);
           if (cambios.estado === 'listo' || cambios.estado === 'error') anunciar(id, cambios.estado === 'listo');
@@ -233,7 +255,15 @@ function useGestorSubida() {
     } finally {
       // After a logout the state was already reset (and may belong to a new run).
       if (!cancelado()) {
+        // Rows never dispatched because of the stop are 'detenida', not waiting.
+        if (paradaRef.current) {
+          const idsFilas = new Set(filas.map((f) => f.id));
+          setItems((prev) => prev.map((it) => (idsFilas.has(it.id) && it.estado === 'cola'
+            ? { ...it, estado: 'detenida', reintentando: false } : it)));
+        }
+        paradaRef.current = false;
         runningRef.current = false;
+        setDeteniendo(false);
         setRunning(false);
         ultimoProgresoRef.current.clear();
       }
@@ -261,6 +291,16 @@ function useGestorSubida() {
     [correr],
   );
 
+  // "Detener": no new photo starts; S3 transfers in flight are aborted (nothing is stored
+  // yet); photos already in the analysis step finish normally. The run ends by itself and
+  // leaves the unprocessed rows as 'detenida', resumable with `reanudar` (same lote session).
+  const detener = useCallback(() => {
+    if (!runningRef.current || paradaRef.current) return;
+    paradaRef.current = true;
+    setDeteniendo(true);
+    abortRef.current?.abort();
+  }, []);
+
   const cerrarAviso = useCallback(() => setAvisoCerrado(true), []);
 
   const progreso = useMemo(() => calcularProgresoSubida(items, { running }), [items, running]);
@@ -268,10 +308,10 @@ function useGestorSubida() {
   const terminado = iniciado && !running;
 
   return {
-    items, running, sesion, anuncio, avisoCerrado, progreso, iniciado, terminado,
+    items, running, deteniendo, sesion, anuncio, avisoCerrado, progreso, iniciado, terminado,
     listos: progreso.completadas,
     errores: progreso.fallidas,
-    agregar, quitar, limpiar, iniciar, reintentar, reanudar, cerrarAviso,
+    agregar, quitar, quitarVarias, limpiar, iniciar, reintentar, reanudar, detener, cerrarAviso,
   };
 }
 

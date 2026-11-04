@@ -25,3 +25,13 @@ export function baseArea(m) {
 export function etiquetaBase(m) {
   return baseArea(m) === 'placa' ? 'sobre la placa' : 'sobre la foto';
 }
+
+// "1 imagen" / "3 imágenes": cantidad con su sustantivo en singular o plural.
+export function plural(n, uno, varios) {
+  return `${n} ${n === 1 ? uno : varios}`;
+}
+
+// Tamaño en MB con coma decimal: 1536000 -> "1,5 MB".
+export function formatoMB(bytes) {
+  return `${(Number(bytes ?? 0) / (1024 * 1024)).toFixed(1).replace('.', ',')} MB`;
+}

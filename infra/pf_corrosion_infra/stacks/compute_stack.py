@@ -261,6 +261,7 @@ class CorriaComputeStack(Stack):
                 "TABLA_MEDICIONES": puntos_mediciones_table.table_name,
                 "TABLA_USUARIOS": usuarios_table.table_name,
                 "TABLA_BLOQUES": bloques_table.table_name,
+                "TABLA_EMPRESAS": empresas_table.table_name,
                 "BUCKET_NAME": images_bucket.bucket_name,
             },
         )
@@ -271,6 +272,8 @@ class CorriaComputeStack(Stack):
         bloques_table.grant_read_data(self.api_mediciones_fn)
         # RBAC multi-empresa: solo lee `usuarios` (resolver caller) — nunca escribe.
         usuarios_table.grant_read_data(self.api_mediciones_fn)
+        # Solo lee `empresas` para rechazar a quien pertenece a una afiliación desactivada.
+        empresas_table.grant_read_data(self.api_mediciones_fn)
         # Mínimo privilegio: lee (presigned GET, y origen de las copias al
         # mover) y borra objetos (DELETE y movimientos). Escribir (PutObject)
         # solo bajo `empresas/*`: el destino de las copias de un movimiento.
@@ -321,6 +324,7 @@ class CorriaComputeStack(Stack):
                 "TABLA_MEDICIONES": puntos_mediciones_table.table_name,
                 "TABLA_USUARIOS": usuarios_table.table_name,
                 "TABLA_BLOQUES": bloques_table.table_name,
+                "TABLA_EMPRESAS": empresas_table.table_name,
                 "BUCKET_NAME": images_bucket.bucket_name,
                 # Model selection: the ONNX is downloaded from the models
                 # bucket at cold start (nothing is packaged in the zip).
@@ -348,6 +352,8 @@ class CorriaComputeStack(Stack):
         images_bucket.grant_read_write(self.inference_fn, "empresas/*")
         images_bucket.grant_read_write(self.inference_fn, "uploads/*")
         usuarios_table.grant_read_data(self.inference_fn)
+        # Solo lee `empresas` para rechazar a quien pertenece a una afiliación desactivada.
+        empresas_table.grant_read_data(self.inference_fn)
         # Solo lee: validar el bloque_id opcional al crear un punto y
         # congelar bloque_nombre en la medición — nunca escribe bloques.
         bloques_table.grant_read_data(self.inference_fn)

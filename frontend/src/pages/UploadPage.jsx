@@ -5,23 +5,25 @@ import { IconoAgregarImagen, IconoCamara, IconoCheck, IconoEnfocar, IconoUbicaci
 import exifr from 'exifr';
 import { useBloques } from '../hooks/useBloques';
 import { useUploadMedicion, MAX_FOTO_MB } from '../hooks/useUploadMedicion';
-import { useUploadLote, clasificarArchivos, generarLoteId, sugerirNombreLote, LOTE_MAX, NOMBRE_MAX } from '../hooks/useUploadLote';
+import { useUploadManager } from '../hooks/UploadManagerContext';
+import { clasificarArchivos, generarLoteId, sugerirNombreLote, LOTE_MAX, NOMBRE_MAX } from '../lib/gestorSubida';
 import UploadCola from '../components/UploadCola';
 import BarraProgresoSubida from '../components/BarraProgresoSubida';
-import { nivelColor, nivelBg, nivelLabel } from '../lib/statusUtils';
+import { nivelColor, nivelColorTexto, nivelBg, nivelLabel } from '../lib/statusUtils';
 import SearchableSelect from '../components/SearchableSelect';
 import NivelIcon from '../components/NivelIcon';
 import NivelInfo from '../components/NivelInfo';
 import NotaPctAproximado from '../components/NotaPctAproximado';
 import DatePicker from '../components/DatePicker';
-import { formatoPct, etiquetaBase } from '../lib/textUtils';
-import { hoyLocalISO, esFechaISOValida, esFechaFutura } from '../lib/fechas';
+import { formatoPct, formatoMB, etiquetaBase } from '../lib/textUtils';
+import { hoyColombiaISO, esFechaISOValida, esFechaFutura } from '../lib/fechas';
 
 // ─── Componente: resultado del análisis ─────────────────────────────────────
 
 function ResultadoAnalisis({ result, onReset, onDashboard }) {
   const nivel = result.nivel_corrosion ?? 0;
   const color = nivelColor(nivel);
+  const colorTexto = nivelColorTexto(nivel);
   const bloque = result.bloque_info ?? {};
   const areaPct = result.area_corroida_pct ?? 0;
 
@@ -53,13 +55,13 @@ function ResultadoAnalisis({ result, onReset, onDashboard }) {
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'var(--space-2)' }}>
             <NivelIcon nivel={nivel} size={44} color={color} />
           </div>
-          <div style={{ fontFamily: 'var(--font-ui)', fontSize: 20, color, letterSpacing: '-0.01em' }}>
+          <div style={{ fontFamily: 'var(--font-ui)', fontSize: 20, color: colorTexto, letterSpacing: '-0.01em' }}>
             Tipo de corrosión: <span style={{ fontWeight: 800, fontSize: 28 }}>{nivelLabel(nivel)}</span>{' '}
             <NivelInfo nivel={nivel} color={color} />
           </div>
           {/* Fuente de interfaz con cifras tabulares: la monoespaciada dejaba
               un hueco visible alrededor de la coma decimal. */}
-          <div style={{ fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 52, color, letterSpacing: '-0.02em', lineHeight: 1.1, marginTop: 10 }}>
+          <div style={{ fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 52, color: colorTexto, letterSpacing: '-0.02em', lineHeight: 1.1, marginTop: 10 }}>
             {formatoPct(areaPct)}
           </div>
           <NotaPctAproximado align="center" style={{ marginTop: 6 }} />
@@ -132,19 +134,28 @@ export default function UploadPage() {
   const [exifGps, setExifGps] = useState(null);       // {latitude, longitude}
   const [dragOver, setDragOver] = useState(false);
 
-  // Multi-photo mode (2+ files or explicit batch selection): queue handled by useUploadLote.
-  const lote = useUploadLote();
-  const [modoSubida, setModoSubida] = useState(() => (lote.iniciado || lote.items.length > 0 ? 'lote' : 'individual'));
-  const modoLote = modoSubida === 'lote';
-  const [avisoArchivos, setAvisoArchivos] = useState(null);  // {rechazados: string[], excedidos: number}
+  // Cola de varias fotos (gestor de subida en segundo plano). `modo` es la elección de
+  // arriba: 'individual' guarda cada foto como medición propia; 'lote' las agrupa bajo un
+  // nombre. Cambiar de modo conserva las fotos y solo cambia cómo se guardarán.
+  const lote = useUploadManager();
+  const [modo, setModo] = useState('individual');
   const [nombreLote, setNombreLote] = useState('');
-  const [loteIdActivo, setLoteIdActivo] = useState(null);
+  // La cola se muestra mientras tenga fotos; una sola foto individual usa el flujo de una foto.
+  const modoLote = lote.iniciado || lote.items.length > 0;
+  // Una sesión ya iniciada manda: modo, nombre y botones salen de la sesión del gestor (que
+  // sobrevive al salir de esta página), no del estado local, que al volver arranca de cero.
+  const agrupar = lote.iniciado ? Boolean(lote.sesion?.loteId) : modo === 'lote';
+  // Cola (varias fotos o carga por lotes) frente al flujo de una sola foto.
+  const usaCola = modoLote || agrupar;
+  const modoActivo = agrupar ? 'lote' : 'individual';
+  const cambioDeModoBloqueado = lote.iniciado || uploading;
+  const [avisoArchivos, setAvisoArchivos] = useState(null);  // {rechazados: string[], excedidos: number}
 
   // Detalles opcionales
   const [nombre, setNombre] = useState('');           // nombre de la foto (para buscarla luego)
   const [notas, setNotas] = useState('');
   const [esMedicionPasada, setEsMedicionPasada] = useState(false);
-  const [fechaMedicion, setFechaMedicion] = useState(() => hoyLocalISO());
+  const [fechaMedicion, setFechaMedicion] = useState(() => hoyColombiaISO());
   const fechaInvalida = esMedicionPasada && (!esFechaISOValida(fechaMedicion) || esFechaFutura(fechaMedicion));
 
   // El combobox de puntos trabaja con strings (mismo componente que usan
@@ -191,14 +202,29 @@ export default function UploadPage() {
     let excedidos = 0;
     if (modoLote) {
       excedidos = lote.agregar(validos);
-    } else if (validos.length === 1) {
+    } else if (validos.length === 1 && modo === 'individual') {
       procesarImagen(validos[0]);
-    } else if (validos.length >= 2) {
-      setModoSubida('lote');
+    } else if (validos.length >= 1) {
       excedidos = lote.agregar(validos);
     }
     setAvisoArchivos(rechazados.length || excedidos ? { rechazados, excedidos } : null);
-  }, [modoLote, lote, procesarImagen]);
+  }, [modoLote, modo, lote, procesarImagen]);
+
+  const limpiarFotoUnica = useCallback(() => {
+    setImagen(null); setNombre(''); setPreview(null); setExifGps(null);
+  }, []);
+
+  // Cambiar de modo conserva las fotos. Una foto suelta pasa a la cola al agrupar; la cola
+  // no se colapsa sola al flujo de una foto: se queda hasta que el usuario la vacíe.
+  const cambiarModo = useCallback((nuevo) => {
+    if (cambioDeModoBloqueado || nuevo === modo) return;
+    // La foto suelta pasa a la cola con el nombre que ya escribió el usuario.
+    if (nuevo === 'lote' && imagen) {
+      lote.agregar([{ file: imagen, nombre }]);
+      limpiarFotoUnica();
+    }
+    setModo(nuevo);
+  }, [cambioDeModoBloqueado, modo, imagen, nombre, lote, limpiarFotoUnica]);
 
   // Drag & drop
   const handleDrop = useCallback(e => {
@@ -220,25 +246,11 @@ export default function UploadPage() {
   const reiniciarLote = useCallback(() => {
     lote.limpiar();
     setNombreLote('');
-    setLoteIdActivo(null);
     setAvisoArchivos(null);
     setErrorLocal(null);
   }, [lote]);
 
-  const faltaAlgo = (modoLote ? (!bloqueSeleccionado || lote.items.length === 0) : (!imagen || !bloqueSeleccionado)) || fechaInvalida;
-
-  // Body of one /medicion request in batch mode: shared fields plus the row's
-  // own name and EXIF GPS, and the batch folder identity (lote_id + lote_nombre).
-  const construirBodyLote = (it, idLote = loteIdActivo, nombreLoteFinal = (nombreLote.trim() || sugerirNombreLote(esMedicionPasada ? fechaMedicion : hoyLocalISO()))) => ({
-    fuente: 'movil',
-    bloque_id: bloqueSeleccionado.id_bloque,
-    ...(idLote && { lote_id: idLote }),
-    ...(nombreLoteFinal && { lote_nombre: nombreLoteFinal }),
-    ...(it.nombre?.trim() && { nombre: it.nombre.trim() }),
-    ...(notas && { notas }),
-    ...(it.gps && { latitud_real: it.gps.latitude, longitud_real: it.gps.longitude }),
-    ...(esMedicionPasada && { timestamp_medicion: fechaMedicion }),
-  });
+  const faltaAlgo = (usaCola ? (!bloqueSeleccionado || lote.items.length === 0) : (!imagen || !bloqueSeleccionado)) || fechaInvalida;
 
   const irAGaleria = () => navigate(
     bloqueSeleccionado?.empresa_id && bloqueSeleccionado?.id_bloque
@@ -264,16 +276,14 @@ export default function UploadPage() {
         return;
       }
     }
-    if (modoLote) {
+    if (usaCola) {
       if (!bloqueSeleccionado || lote.running || lote.items.length === 0) return;
       setErrorLocal(null);
-      const loteId = loteIdActivo || generarLoteId();
-      // With the default date (upload day) the local day is captured ONCE here and sent
+      const loteId = agrupar ? generarLoteId() : null;
+      // With the default date (upload day) the Colombia day is captured ONCE here and sent
       // for every photo: a batch that crosses midnight must not split across two days.
-      const fechaLote = esMedicionPasada ? fechaMedicion : hoyLocalISO();
-      const nombreLoteFinal = nombreLote.trim() || sugerirNombreLote(fechaLote);
-      setLoteIdActivo(loteId);
-      if (!nombreLote.trim()) setNombreLote(nombreLoteFinal);
+      const fechaLote = esMedicionPasada ? fechaMedicion : hoyColombiaISO();
+      const nombreLoteFinal = agrupar ? (nombreLote.trim() || sugerirNombreLote(fechaLote)) : null;
       lote.iniciar({
         loteId,
         loteNombre: nombreLoteFinal,
@@ -291,8 +301,7 @@ export default function UploadPage() {
     // El tiempo de análisis cuenta desde este clic, antes de subir la foto.
     const inicio = performance.now();
     if (imagen.size > MAX_FOTO_MB * 1024 * 1024) {
-      const mb = (imagen.size / (1024 * 1024)).toFixed(1).replace('.', ',');
-      setErrorLocal(`La foto pesa ${mb} MB; el máximo es ${MAX_FOTO_MB} MB.`);
+      setErrorLocal(`La foto pesa ${formatoMB(imagen.size)}; el máximo es ${MAX_FOTO_MB} MB.`);
       return;
     }
     setErrorLocal(null);
@@ -328,7 +337,7 @@ export default function UploadPage() {
             setPreview(null);
             setExifGps(null);
             setEsMedicionPasada(false);
-            setFechaMedicion(hoyLocalISO());
+            setFechaMedicion(hoyColombiaISO());
           }}
           onDashboard={irAGaleria}
         />
@@ -353,206 +362,111 @@ export default function UploadPage() {
               Nueva medición
             </h2>
             <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: '2px 0 0', fontFamily: 'var(--font-ui)' }}>
-              Sube una foto y el modelo de IA detectará el nivel de corrosión
+              Sube fotos y la IA estima la corrosión
             </p>
           </div>
         </div>
 
         <form onSubmit={handleSubmit}>
 
-          {/* Selector de modo: Muestras individuales vs Carga por lotes */}
-          <div
-            role="radiogroup"
-            aria-label="Tipo de carga"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-              gap: 'var(--space-2-5)',
-              marginBottom: 'var(--space-4)',
-            }}
-          >
-            <button
-              type="button"
-              role="radio"
-              aria-checked={!modoLote}
-              disabled={uploading || lote.running || lote.iniciado}
-              onClick={() => {
-                if (modoLote && !lote.running && !lote.iniciado) {
-                  setModoSubida('individual');
-                  setErrorLocal(null);
-                }
-              }}
-              style={{
-                padding: '12px 14px',
-                textAlign: 'left',
-                borderRadius: 9,
-                border: `1px solid ${!modoLote ? 'var(--accent-amber)' : 'var(--border)'}`,
-                background: !modoLote ? 'color-mix(in srgb, var(--accent-amber) 12%, var(--bg-card))' : 'var(--bg-inset)',
-                cursor: uploading || lote.running || lote.iniciado ? 'default' : 'pointer',
-                fontFamily: 'var(--font-ui)',
-                opacity: (uploading || lote.running || lote.iniciado) && modoLote ? 0.6 : 1,
-                transition: 'border-color var(--dur-fast), background-color var(--dur-fast)',
-              }}
-            >
-              <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
-                Muestras individuales
-              </div>
-              <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-secondary)', marginTop: 2 }}>
-                Una sola imagen con nombre propio
-              </div>
-            </button>
-
-            <button
-              type="button"
-              role="radio"
-              aria-checked={modoLote}
-              disabled={uploading || lote.running}
-              onClick={() => {
-                if (!modoLote && !uploading) {
-                  setModoSubida('lote');
-                  setErrorLocal(null);
-                }
-              }}
-              style={{
-                padding: '12px 14px',
-                textAlign: 'left',
-                borderRadius: 9,
-                border: `1px solid ${modoLote ? 'var(--accent-amber)' : 'var(--border)'}`,
-                background: modoLote ? 'color-mix(in srgb, var(--accent-amber) 12%, var(--bg-card))' : 'var(--bg-inset)',
-                cursor: uploading || lote.running ? 'default' : 'pointer',
-                fontFamily: 'var(--font-ui)',
-                opacity: (uploading || lote.running) && !modoLote ? 0.6 : 1,
-                transition: 'border-color var(--dur-fast), background-color var(--dur-fast)',
-              }}
-            >
-              <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
-                Carga por lotes de imágenes
-              </div>
-              <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-secondary)', marginTop: 2 }}>
-                Hasta 1.000 imágenes agrupadas bajo un nombre de lote
-              </div>
-            </button>
-          </div>
-
           {/* ─── SECCIÓN 1: Imagen ─── */}
-          <Section title={modoLote ? '1. Imágenes' : '1. Imagen'} accent="var(--accent-amber)">
-            <div
+          <Section title={!modoLote && preview ? '1. Foto' : '1. Imágenes'} accent="var(--accent-amber)">
+            <p
               role="note"
               style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: 10,
-                padding: '11px 14px',
-                marginBottom: 'var(--space-3)',
-                background: 'var(--bg-inset)',
-                border: '1px solid var(--border)',
-                borderRadius: 9,
-                fontFamily: 'var(--font-ui)',
+                display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '2px 8px',
+                margin: '0 0 var(--space-3)', fontFamily: 'var(--font-ui)',
+                fontSize: 'var(--text-2xs)', color: 'var(--text-secondary)', lineHeight: 1.4,
               }}
             >
-              <IconoEnfocar size={18} color="var(--accent-amber)" style={{ marginTop: 1 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.35 }}>
-                  El porcentaje se calcula sobre la placa
-                </div>
-                <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.45 }}>
-                  Que se vea completa · De frente · Con buena luz y sin reflejos · Enfocada.{' '}
-                  <Link
-                    to="/que-es-pixelrust#como-se-calcula"
-                    style={{ color: 'var(--accent-amber)', fontWeight: 600, textUnderlineOffset: 3 }}
-                  >
-                    Ver cómo se calcula →
-                  </Link>
-                </div>
+              <IconoEnfocar size={15} color="var(--accent-amber)" aria-hidden="true" style={{ flexShrink: 0 }} />
+              <span>Placa completa, de frente, con buena luz y enfocada.</span>
+              <Link
+                to="/que-es-pixelrust#como-se-calcula"
+                style={{ color: 'var(--accent-amber)', fontWeight: 600, textUnderlineOffset: 3, whiteSpace: 'nowrap' }}
+              >
+                ¿Cómo se calcula?
+              </Link>
+            </p>
+
+            <div style={{ marginBottom: 'var(--space-3)' }}>
+              <div
+                role="group"
+                aria-label="Tipo de carga"
+                style={{
+                  display: 'inline-flex', padding: 3, gap: 2, borderRadius: 9, maxWidth: '100%',
+                  background: 'var(--bg-inset)', border: '1px solid var(--border)',
+                  opacity: cambioDeModoBloqueado ? 0.6 : 1,
+                }}
+              >
+                {[
+                  { valor: 'individual', titulo: 'Muestras individuales' },
+                  { valor: 'lote', titulo: 'Carga por lotes' },
+                ].map((op) => {
+                  const activo = modoActivo === op.valor;
+                  return (
+                    <button
+                      key={op.valor}
+                      type="button"
+                      aria-pressed={activo}
+                      disabled={cambioDeModoBloqueado}
+                      onClick={() => cambiarModo(op.valor)}
+                      style={{
+                        padding: '6px 14px', borderRadius: 7, border: 'none',
+                        cursor: cambioDeModoBloqueado ? 'not-allowed' : 'pointer',
+                        background: activo ? 'var(--accent-amber)' : 'transparent',
+                        color: activo ? 'white' : 'var(--text-secondary)',
+                        fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
+                        transition: 'background-color var(--dur-fast), color var(--dur-fast)',
+                      }}
+                    >
+                      {op.titulo}
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{ marginTop: 6, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
+                {agrupar ? 'Se agrupan bajo un nombre en la galería.' : 'Cada imagen se guarda como una medición independiente.'}
               </div>
             </div>
 
-            {modoLote && !lote.iniciado && (
-              <>
-                <div style={{ marginBottom: 'var(--space-3)' }}>
-                  <label htmlFor="upload-nombre-lote" style={labelStyle}>
-                    Nombre del lote (opcional)
-                  </label>
-                  <input
-                    id="upload-nombre-lote"
-                    name="nombre-lote"
-                    type="text"
-                    value={nombreLote}
-                    onChange={(e) => setNombreLote(e.target.value)}
-                    maxLength={NOMBRE_MAX}
-                    autoComplete="off"
-                    placeholder={`Ej. Inspección mensual torre norte (por defecto: ${sugerirNombreLote(esMedicionPasada ? fechaMedicion : hoyLocalISO())})`}
-                    style={inputStyle}
-                  />
-                  <div style={{ marginTop: 4, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>
-                    Las imágenes del lote se agruparán bajo este nombre en la galería y en la línea de tiempo.
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    marginBottom: 'var(--space-3)',
-                    padding: '9px 12px',
-                    background: 'var(--bg-inset)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 8,
-                    fontSize: 'var(--text-xs)',
-                    color: 'var(--text-secondary)',
-                    fontFamily: 'var(--font-ui)',
-                  }}
-                >
-                  Máximo 1.000 imágenes por lote. Ten en cuenta que entre más imágenes incluyas, más tiempo tomará el análisis.
-                </div>
-              </>
+            {lote.iniciado && lote.sesion?.loteNombre && (
+              <div style={{ marginBottom: 'var(--space-3)', fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
+                Lote: <strong style={{ color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>{lote.sesion.loteNombre}</strong>
+              </div>
             )}
 
-            {modoLote && lote.items.length === 0 ? (
-              <div
-                role="button"
-                tabIndex={0}
-                aria-label={`Seleccionar imágenes del lote: JPG o PNG, máximo ${MAX_FOTO_MB} MB cada una, hasta ${LOTE_MAX} por lote`}
-                onDrop={handleDrop}
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                style={{
-                  border: `2px dashed ${dragOver ? 'var(--accent-amber)' : 'var(--border)'}`,
-                  borderRadius: 10, padding: '36px 20px', textAlign: 'center',
-                  background: dragOver ? 'var(--bg-card-hover)' : 'var(--bg-inset)',
-                  cursor: 'pointer', transition: 'border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out)',
-                }}
-                onClick={() => document.getElementById('file-input-lote').click()}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    document.getElementById('file-input-lote').click();
-                  }
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'center', color: 'var(--text-muted)', marginBottom: 'var(--space-2-5)' }}>
-                  <IconoAgregarImagen size={36} aria-hidden="true" />
-                </div>
-                <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 'var(--space-1)' }}>
-                  Arrastra las imágenes del lote aquí o haz clic para seleccionar
-                </div>
-                <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>
-                  JPG o PNG · Máximo 50 MB cada una · Hasta {LOTE_MAX} imágenes por lote
-                </div>
+            {!lote.iniciado && agrupar && (
+              <div style={{ marginBottom: 'var(--space-3)' }}>
+                <label htmlFor="upload-nombre-lote" style={labelStyle}>
+                  Nombre del lote
+                </label>
                 <input
-                  id="file-input-lote" name="imagenes-lote" type="file" multiple
-                  accept="image/jpeg,image/png" tabIndex={-1}
-                  onChange={handleFileInput} style={{ display: 'none' }}
+                  id="upload-nombre-lote"
+                  name="nombre-lote"
+                  type="text"
+                  value={nombreLote}
+                  onChange={(e) => setNombreLote(e.target.value)}
+                  maxLength={NOMBRE_MAX}
+                  autoComplete="off"
+                  placeholder={sugerirNombreLote(esMedicionPasada ? fechaMedicion : hoyColombiaISO())}
+                  style={inputStyle}
                 />
               </div>
-            ) : modoLote ? (
+            )}
+
+            {modoLote ? (
               <>
-                {lote.iniciado && <BarraProgresoSubida style={{ marginBottom: 'var(--space-3)' }} />}
+                {lote.iniciado && <BarraProgresoSubida onDescartar={reiniciarLote} style={{ marginBottom: 'var(--space-3)' }} />}
                 <UploadCola
                   lote={lote}
                   onQuitar={quitarDeLote}
+                  onQuitarVarias={lote.quitarVarias}
                   onReintentar={(id) => lote.reintentar(id)}
                   onAgregar={procesarArchivos}
                   onVerGaleria={irAGaleria}
                   onSubirMas={reiniciarLote}
+                  agrupado={agrupar}
                 />
               </>
             ) : !preview ? (
@@ -585,9 +499,9 @@ export default function UploadPage() {
                   <IconoAgregarImagen size={36} aria-hidden="true" />
                 </div>
                 <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 'var(--space-1)' }}>
-                  Arrastra una o varias imágenes aquí o haz clic para seleccionar
+                  Arrastra imágenes o haz clic para elegir
                 </div>
-                <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>JPG o PNG · Máximo 50 MB cada una · Hasta {LOTE_MAX} por tanda</div>
+                <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>JPG o PNG · hasta {MAX_FOTO_MB} MB · hasta {LOTE_MAX.toLocaleString('es-CO')} por carga</div>
                 <input
                   id="file-input" name="imagen" type="file" multiple
                   accept="image/jpeg,image/png" tabIndex={-1}
@@ -601,22 +515,21 @@ export default function UploadPage() {
                   borderRadius: 8, border: '1px solid var(--border)', marginBottom: 'var(--space-2-5)',
                 }} />
                 <div style={{ marginBottom: 'var(--space-2-5)' }}>
-                  <label htmlFor="upload-nombre" style={labelStyle}>Nombre de la foto (opcional)</label>
+                  <label htmlFor="upload-nombre" style={labelStyle}>Nombre (opcional)</label>
+                  <span id="upload-nombre-ayuda" style={{ display: 'none' }}>Sirve para encontrar la foto en la galería</span>
                   <input
                     id="upload-nombre" name="nombre-foto" type="text"
                     value={nombre} onChange={e => setNombre(e.target.value)}
                     maxLength={NOMBRE_MAX} autoComplete="off"
                     placeholder="Ej.: Placa 12, lado norte"
+                    aria-describedby="upload-nombre-ayuda"
                     style={inputStyle}
                   />
-                  <div style={{ marginTop: 4, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>
-                    Con este nombre podrás encontrar la foto en la galería.
-                  </div>
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
                   <button
                     type="button"
-                    onClick={() => { setImagen(null); setNombre(''); setPreview(null); setExifGps(null); }}
+                    onClick={limpiarFotoUnica}
                     style={{ ...btnSecondaryStyle, flex: 'none', padding: '8px 16px', fontSize: 'var(--text-xs)' }}
                   >
                     Cambiar imagen
@@ -628,7 +541,7 @@ export default function UploadPage() {
                       fontSize: 'var(--text-2xs)', color: 'var(--accent-green)', display: 'flex', alignItems: 'center', gap: 6,
                     }}>
                       <IconoUbicacion size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
-                      <span>GPS detectado en la foto: {exifGps.latitude.toFixed(5)}, {exifGps.longitude.toFixed(5)}</span>
+                      <span>GPS detectado en la foto</span>
                     </div>
                   )}
                 </div>
@@ -639,12 +552,12 @@ export default function UploadPage() {
                 <div>
                   {avisoArchivos.rechazados.length > 0 && (
                     <div>
-                      No se subirán estos archivos porque no son JPG ni PNG: {avisoArchivos.rechazados.join(', ')}.
+                      Se omitieron por no ser JPG ni PNG: {avisoArchivos.rechazados.join(', ')}.
                     </div>
                   )}
                   {avisoArchivos.excedidos > 0 && (
                     <div>
-                      El máximo es {LOTE_MAX} imágenes por tanda; se omitieron {avisoArchivos.excedidos}.
+                      Máximo {LOTE_MAX.toLocaleString('es-CO')} imágenes; se omitieron {avisoArchivos.excedidos}.
                     </div>
                   )}
                 </div>
@@ -656,8 +569,8 @@ export default function UploadPage() {
           <fieldset disabled={lote.iniciado} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
 
           {/* ─── SECCIÓN 2: Punto de medición ─── */}
-          <Section title="2. Punto de medición" accent="var(--accent-blue)">
-            <label htmlFor="upload-buscar-punto" style={labelStyle}>Buscar punto</label>
+          <Section title="2. Punto" accent="var(--accent-blue)">
+            <label htmlFor="upload-buscar-punto" style={labelStyle}>Punto de medición</label>
             <SearchableSelect
               id="upload-buscar-punto"
               options={bloqueOpciones}
@@ -669,31 +582,32 @@ export default function UploadPage() {
             />
             {bloqueSeleccionado && (
               <div role="status" style={{
-                marginTop: 'var(--space-2-5)', padding: '10px 14px',
+                marginTop: 'var(--space-2-5)', padding: '6px 12px',
                 background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.3)',
                 borderRadius: 7, fontSize: 'var(--text-xs)', color: 'var(--accent-green)',
                 display: 'flex', alignItems: 'center', gap: 6,
               }}>
                 <IconoCheck size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
-                <span>Punto seleccionado: <strong>{bloqueSeleccionado.nombre}</strong>{bloqueSeleccionado.ciudad ? ` · ${bloqueSeleccionado.ciudad}` : ''}</span>
+                <span><strong>{bloqueSeleccionado.nombre}</strong>{bloqueSeleccionado.ciudad ? ` · ${bloqueSeleccionado.ciudad}` : ''}</span>
               </div>
             )}
             {bloques.length === 0 && (
               <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--text-2xs)', color: 'var(--text-muted)' }}>
-                No hay puntos registrados aún. Crea uno primero desde la sección "Puntos".
+                Aún no hay puntos. Crea uno en la sección Puntos.
               </div>
             )}
           </Section>
 
           {/* ─── SECCIÓN 3: Fecha de la medición ─── */}
-          <Section title="3. Fecha de la medición" accent="var(--accent-blue)">
-            <p style={{ margin: '0 0 14px', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)' }}>
-              ¿Es una medición tomada en el pasado?
-            </p>
-            <div style={{ display: 'flex', gap: 'var(--space-2-5)', marginBottom: esMedicionPasada ? 16 : 0 }}>
+          <Section title="3. Fecha" accent="var(--accent-blue)">
+            <div
+              role="group"
+              aria-label="Fecha de la medición"
+              style={{ display: 'inline-flex', padding: 3, gap: 2, borderRadius: 9, background: 'var(--bg-inset)', border: '1px solid var(--border)', marginBottom: esMedicionPasada ? 12 : 0 }}
+            >
               {[
-                { val: false, label: 'No' },
-                { val: true,  label: 'Sí' },
+                { val: false, label: 'Hoy' },
+                { val: true,  label: 'Otra fecha' },
               ].map(({ val, label }) => (
                 <button
                   key={String(val)}
@@ -701,12 +615,11 @@ export default function UploadPage() {
                   onClick={() => setEsMedicionPasada(val)}
                   aria-pressed={esMedicionPasada === val}
                   style={{
-                    flex: 1, padding: '10px 8px', borderRadius: 8,
-                    border: `${esMedicionPasada === val ? 2 : 1}px solid ${esMedicionPasada === val ? 'var(--accent-amber)' : 'var(--border)'}`,
-                    background: esMedicionPasada === val ? 'color-mix(in srgb, var(--accent-amber) 16%, var(--bg-card-solid))' : 'var(--bg-inset)',
-                    color: esMedicionPasada === val ? 'var(--accent-amber)' : 'var(--text-muted)',
-                    fontFamily: 'var(--font-ui)', fontWeight: esMedicionPasada === val ? 700 : 600, fontSize: 'var(--text-sm)', cursor: 'pointer',
-                    transition: 'color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out)',
+                    padding: '6px 14px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                    background: esMedicionPasada === val ? 'var(--accent-amber)' : 'transparent',
+                    color: esMedicionPasada === val ? 'white' : 'var(--text-secondary)',
+                    fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
+                    transition: 'color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out)',
                   }}
                 >
                   {label}
@@ -715,65 +628,44 @@ export default function UploadPage() {
             </div>
             {esMedicionPasada && (
               <div>
-                <label htmlFor="upload-fecha" style={labelStyle}>Fecha de la medición</label>
+                <label htmlFor="upload-fecha" style={labelStyle}>Fecha</label>
                 <DatePicker
                   id="upload-fecha"
                   mode="single"
                   allowModeSwitch={false}
                   value={fechaMedicion}
                   onChange={setFechaMedicion}
-                  maxISO={hoyLocalISO()}
+                  maxISO={hoyColombiaISO()}
                   clearLabel="Restablecer a hoy"
                   futureTitle="No puedes elegir una fecha futura"
                   align="left"
                 />
                 {fechaInvalida && (
                   <div role="alert" style={{ marginTop: 6, fontSize: 'var(--text-xs)', color: 'var(--accent-red)', fontFamily: 'var(--font-ui)' }}>
-                    La fecha de la medición no puede ser futura ni inválida. Elige la fecha de hoy o una anterior.
+                    Elige hoy o una fecha anterior.
                   </div>
                 )}
               </div>
             )}
-            {modoLote && (
-              <div
-                style={{
-                  marginTop: 12,
-                  padding: '8px 12px',
-                  background: 'var(--bg-inset)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 7,
-                  fontSize: 'var(--text-xs)',
-                  color: 'var(--text-secondary)',
-                  fontFamily: 'var(--font-ui)',
-                }}
-              >
-                Todo el lote recibirá la fecha elegida (la de subida o la fecha pasada que selecciones).
+            {usaCola && (agrupar || lote.items.length > 1) && (
+              <div style={{ marginTop: 8, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
+                {agrupar ? 'Todo el lote usa esta fecha.' : 'Todas las fotos usan esta fecha.'}
               </div>
             )}
           </Section>
 
           {/* ─── SECCIÓN 4: Detalles opcionales ─── */}
-          <Section title="4. Detalles (opcional)" accent="var(--accent-green)">
+          <Section title="4. Notas (opcional)" accent="var(--accent-green)">
             <div>
-              <label htmlFor="upload-notas" style={labelStyle}>Notas</label>
+              <label htmlFor="upload-notas" style={labelStyle}>Observaciones</label>
               <textarea
                 id="upload-notas" name="notas"
                 value={notas} onChange={e => setNotas(e.target.value)}
-                placeholder="Observaciones adicionales sobre esta medición…"
-                rows={3}
+                placeholder="Ej.: lluvia reciente, zona soldada"
+                rows={2}
                 style={{ ...inputStyle, resize: 'vertical' }}
               />
             </div>
-            {!modoLote && exifGps && (
-              <div style={{
-                marginTop: 'var(--space-2-5)', padding: '10px 12px', fontSize: 'var(--text-2xs)',
-                background: 'var(--bg-inset)', borderRadius: 7, border: '1px solid var(--border)',
-                color: 'var(--text-muted)',
-              }}>
-                Las coordenadas exactas de la foto (GPS: {exifGps.latitude.toFixed(5)}, {exifGps.longitude.toFixed(5)})
-                se enviarán automáticamente como referencia.
-              </div>
-            )}
           </Section>
           </fieldset>
 
@@ -785,7 +677,7 @@ export default function UploadPage() {
           )}
 
           {/* Botón submit (in batch mode it disappears once the batch starts) */}
-          {!(modoLote && lote.iniciado) && (<>
+          {!lote.iniciado && (<>
           <button
             type="submit"
             disabled={faltaAlgo || uploading}
@@ -808,7 +700,7 @@ export default function UploadPage() {
             ) : (
               <>
                 <IconoCamara size={18} aria-hidden="true" />
-                {modoLote ? `Analizar ${lote.items.length} imágenes` : 'Analizar imagen'}
+                {usaCola ? `Analizar ${lote.items.length.toLocaleString('es-CO')} ${lote.items.length === 1 ? 'imagen' : 'imágenes'}` : 'Analizar imagen'}
               </>
             )}
           </button>
@@ -816,10 +708,10 @@ export default function UploadPage() {
           {faltaAlgo && !uploading && (
             <p id="upload-falta" style={{ margin: 'var(--space-2) 0 0', fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
               {fechaInvalida
-                ? 'Falta: elegir una fecha de medición válida (hoy o anterior)'
-                : modoLote
-                  ? (!bloqueSeleccionado && lote.items.length === 0 ? 'Falta: seleccionar imágenes y el punto' : !bloqueSeleccionado ? 'Falta: elegir el punto' : 'Falta: seleccionar al menos una imagen')
-                  : (!imagen && !bloqueSeleccionado ? 'Falta: la foto y el punto' : !imagen ? 'Falta: la foto' : 'Falta: el punto')}
+                ? 'Falta: una fecha válida (hoy o anterior)'
+                : usaCola
+                  ? (!bloqueSeleccionado && lote.items.length === 0 ? 'Falta: imágenes y punto' : !bloqueSeleccionado ? 'Falta: elegir el punto de medición' : 'Falta: al menos una imagen')
+                  : (!imagen && !bloqueSeleccionado ? 'Falta: foto y punto' : !imagen ? 'Falta: la foto' : 'Falta: el punto')}
             </p>
           )}
           </>)}

@@ -2,6 +2,8 @@
 // The server answers one year per call; consumers that need several years
 // (a location's history) call it once per year and merge here.
 
+import { plural } from './textUtils.js';
+
 export const ANIO_INICIO_DATOS = 2026;
 
 // [2026 .. anioActual]; never a future year.
@@ -35,11 +37,18 @@ export function combinarResumenes(respuestas = []) {
   return { dias, totales, truncado };
 }
 
-const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
+// "X mediciones con Y lotes" (header of a location). Without batches: "X mediciones".
+export function textoMedicionesConLotes(mediciones, lotes) {
+  const n = Number(mediciones) || 0;
+  const l = Number(lotes) || 0;
+  const base = plural(n, 'medición', 'mediciones');
+  return l > 0 ? `${base} con ${plural(l, 'lote', 'lotes')}` : base;
+}
 
-// "N imágenes · x lotes con y imágenes" (same wording as formatearConteoMediciones).
-export function textoImagenesYLotes(total, lotes) {
-  const count = Number(lotes?.count) || 0;
-  const imagenes = Number(lotes?.imagenes) || 0;
-  return `${plural(total, 'imagen', 'imágenes')} · ${plural(count, 'lote', 'lotes')} con ${plural(imagenes, 'imagen', 'imágenes')}`;
+// "N mediciones · x lotes" (box of one day). Without batches: "N mediciones".
+export function textoMedicionesDia(total, lotes) {
+  const n = Number(total) || 0;
+  const l = Number(lotes?.count) || 0;
+  const base = plural(n, 'medición', 'mediciones');
+  return l > 0 ? `${base} · ${plural(l, 'lote', 'lotes')}` : base;
 }

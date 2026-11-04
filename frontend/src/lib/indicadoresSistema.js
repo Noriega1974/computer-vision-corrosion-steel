@@ -1,61 +1,100 @@
-// System-wide KPIs for the dashboard, computed from a list of mediciones.
-// Counted per point (latest measurement) so a large batch of photos does not
-// distort them: one bad photo only matters while it is a point's latest.
+// Helpers puros para las tarjetas de "Estado general del sistema". Los
+// números los calcula el servidor (GET /indicadores); aquí solo se convierten
+// en texto y proporciones para pintarlos.
 
-const DIA_MS = 24 * 60 * 60 * 1000;
+import { nivelLabel } from './statusUtils.js';
+import { formatearFechaAmigable } from './fechas.js';
+
 export const VENTANA_DIAS = 30;
-// Model noise between two photos of the same plate is a few points; below this
-// rise a point is not reported as worse.
-export const UMBRAL_EMPEORO_PP = 2;
 
-const tiempo = (m) => new Date(m?.timestamp).getTime() || 0;
-const pct = (m) => (Number.isFinite(m?.area_corroida_pct) ? m.area_corroida_pct : null);
+// De severo a sin corrosión, para leer primero lo urgente.
+const ORDEN_LEYENDA = [3, 2, 1, 0];
+const NOMBRE_NIVEL = [
+  { uno: 'sin corrosión', varios: 'sin corrosión' },
+  { uno: 'leve', varios: 'leves' },
+  { uno: 'moderado', varios: 'moderados' },
+  { uno: 'severo', varios: 'severos' },
+];
 
-// Map<bloque_id, mediciones sorted newest first>; mediciones without a point are ignored.
-function historialPorPunto(mediciones) {
-  const porPunto = new Map();
-  for (const m of mediciones) {
-    if (!m?.bloque_id) continue;
-    if (!porPunto.has(m.bloque_id)) porPunto.set(m.bloque_id, []);
-    porPunto.get(m.bloque_id).push(m);
-  }
-  for (const lista of porPunto.values()) lista.sort((a, b) => tiempo(b) - tiempo(a));
-  return porPunto;
+const entero = (n) => (Number.isFinite(Number(n)) && Number(n) > 0 ? Math.floor(Number(n)) : 0);
+
+// [{ nivel, cantidad, texto: "2 severos" }] solo de los niveles con puntos.
+export function leyendaNiveles(porNivel = []) {
+  return ORDEN_LEYENDA
+    .map((nivel) => ({ nivel, cantidad: entero(porNivel[nivel]) }))
+    .filter((s) => s.cantidad > 0)
+    .map((s) => ({
+      ...s,
+      texto: `${s.cantidad} ${s.cantidad === 1 ? NOMBRE_NIVEL[s.nivel].uno : NOMBRE_NIVEL[s.nivel].varios}`,
+    }));
 }
 
-export function calcularIndicadores(mediciones = [], ahora = Date.now()) {
-  const desde = ahora - VENTANA_DIAS * DIA_MS;
-  const porPunto = historialPorPunto(mediciones);
+// Segmentos de la barra apilada (mismo orden que la leyenda) con su ancho en %.
+export function segmentosBarra(porNivel = []) {
+  const segmentos = leyendaNiveles(porNivel);
+  const total = segmentos.reduce((suma, s) => suma + s.cantidad, 0);
+  return segmentos.map((s) => ({ ...s, ancho: total ? (s.cantidad / total) * 100 : 0 }));
+}
 
-  let mayor = null;
-  let puntosEmpeoraron = 0;
-  let puntosAlDia = 0;
+// "2 severos · 1 moderado · 3 leves · 2 sin corrosión" (para lectores de pantalla y tooltip).
+export function resumenNiveles(porNivel = []) {
+  return leyendaNiveles(porNivel).map((s) => s.texto).join(' · ');
+}
 
-  for (const [, lista] of porPunto) {
-    const [ultima] = lista;
-    const pctUltima = pct(ultima);
-    const reciente = tiempo(ultima) >= desde;
+// "N sin mediciones" / "1 sin mediciones" -> texto, o '' si no hay.
+export function textoSinMediciones(n) {
+  const c = entero(n);
+  return c ? `${c} sin ${c === 1 ? 'medición' : 'mediciones'}` : '';
+}
 
-    if (reciente) puntosAlDia++;
-    if (pctUltima !== null && (!mayor || pctUltima > mayor.pct)) {
-      mayor = { pct: pctUltima, punto: ultima.bloque_nombre ?? null, nivel: ultima.nivel_corrosion ?? null };
-    }
-    // "Worse in the last 30 days": the baseline must be inside the window too,
-    // otherwise a rise measured against an old photo would be mislabeled.
-    const anterior = lista.slice(1).find(x => tiempo(x) >= desde && pct(x) !== null);
-    const pctAnterior = anterior ? pct(anterior) : null;
-    if (reciente && pctUltima !== null && pctAnterior !== null
-        && pctUltima - pctAnterior >= UMBRAL_EMPEORO_PP) {
-      puntosEmpeoraron++;
-    }
-  }
+// 36.55 -> "36,6 % promedio"; sin dato -> ''.
+export function textoPromedio(pct) {
+  const n = Number(pct);
+  if (pct === null || pct === undefined || !Number.isFinite(n)) return '';
+  return `${n.toFixed(1).replace('.', ',')} % promedio`;
+}
 
-  const totalPuntos = porPunto.size;
-  return {
-    totalPuntos,
-    mayorCorrosion: mayor,
-    puntosEmpeoraron,
-    pctPuntosAlDia: totalPuntos ? Math.round((puntosAlDia / totalPuntos) * 100) : null,
-    mediciones30Dias: mediciones.filter(m => tiempo(m) >= desde).length,
-  };
+// "5 de 8 puntos"; no total (missing, invalid or 0) -> "Sin datos", never "0 de 0 puntos".
+export function textoCobertura(cobertura) {
+  if (!(Number(cobertura?.total_puntos) > 0)) return 'Sin datos';
+  const con = entero(cobertura?.con_medicion_30d);
+  const total = entero(cobertura?.total_puntos);
+  return `${con} de ${total} ${total === 1 ? 'punto' : 'puntos'}`;
+}
+
+// "Más atrasado: Bloque A, hace 45 días" | "..., sin mediciones" | ''.
+export function textoAtrasado(masAtrasado) {
+  if (!masAtrasado?.nombre) return '';
+  const { nombre, dias } = masAtrasado;
+  if (dias === null || dias === undefined) return `Más atrasado: ${nombre}, sin mediciones`;
+  if (dias <= 0) return `Más atrasado: ${nombre}, medido hoy`;
+  return `Más atrasado: ${nombre}, hace ${dias} ${dias === 1 ? 'día' : 'días'}`;
+}
+
+// "N mediciones en 30 días"
+export function textoMediciones30d(n) {
+  const c = entero(n);
+  return `${c} ${c === 1 ? 'medición' : 'mediciones'} en ${VENTANA_DIAS} días`;
+}
+
+// "Bloque A: Leve → Severa (3 nov)"
+export function textoSubio(p, opciones) {
+  const fecha = p?.fecha ? formatearFechaAmigable(p.fecha, { incluirDiaSemana: false, ...opciones }) : '';
+  return `${p?.nombre ?? 'Punto sin nombre'}: ${nivelLabel(p?.de)} → ${nivelLabel(p?.a)}${fecha ? ` (${fecha})` : ''}`;
+}
+
+// "3 nov" para la fecha de la última medición.
+export function fechaCorta(iso, opciones) {
+  return iso ? formatearFechaAmigable(iso, { incluirDiaSemana: false, ...opciones }) : '';
+}
+
+// Sin puntos en el alcance no hay nada que resumir.
+export function sinPuntos(datos) {
+  return !datos || !(datos.total_puntos > 0);
+}
+
+// El servidor marca `parcial` (o `mediciones_30d_truncado`) cuando un tope de
+// paginación cortó el cálculo: las cifras pueden estar incompletas.
+export function esParcial(datos) {
+  return Boolean(datos && (datos.parcial || datos.mediciones_30d_truncado));
 }

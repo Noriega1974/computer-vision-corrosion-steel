@@ -5,7 +5,8 @@ import { IconoCasilla, IconoCasillaMarcada, IconoError } from './Iconos';
 import NivelIcon from './NivelIcon';
 import { nivelColor, nivelLabel } from '../lib/statusUtils';
 import { formatFecha } from '../utils/dateFormat';
-import { formatoPct, etiquetaBase } from '../lib/textUtils';
+import { etiquetaBase } from '../lib/textUtils';
+import { textoPctMedicion } from '../lib/mosaico';
 import { tiempoRelativo } from '../lib/tiempoRelativo';
 
 // ─── Card de galería (patrón Flashcard) ──────────────────────────────────────
@@ -122,7 +123,7 @@ export default function MedicionCard({ medicion, to, state, contexto, seleccion 
             color: 'var(--text-primary)', lineHeight: 1.05, letterSpacing: '-0.02em', whiteSpace: 'nowrap',
           }}>
             <span className="sr-only-pw">Área corroída </span>
-            {formatoPct(medicion.area_corroida_pct)}
+            {textoPctMedicion(medicion)}
           </div>
           <div style={{
             fontFamily: 'var(--font-ui)', fontWeight: 500, fontSize: 11, color: 'var(--text-muted)',
