@@ -337,12 +337,29 @@ def _logo_quitar(empresa: dict) -> dict:
     return _respuesta(200, _con_logo_url(tabla_empresas.get_item(Key={"id_empresa": id_empresa}).get("Item", {})))
 
 def _fuera_de_alcance(creador: dict, usuario_objetivo: dict) -> bool:
-    """True si `creador` (no super_admin) intenta operar sobre un usuario de
-    otra empresa. super_admin no tiene restricción de alcance — puede ver y
-    editar usuarios de cualquier empresa."""
-    if creador.get("rol") == "super_admin":
+    """True si `creador` NO puede operar (editar, cambiar rol, deshabilitar,
+    reactivar o eliminar) sobre `usuario_objetivo`.
+    - super_admin: sin restricción.
+    - admin: solo usuarios de SU afiliación con rol estrictamente menor
+      (tecnico o cliente). Un admin sin afiliación no gestiona a nadie (sin
+      esto `None == None` lo dejaba tocar a cualquiera sin empresa), y nunca
+      toca a otros admin ni a un super_admin.
+    - cualquier otro rol: nadie."""
+    rol = creador.get("rol")
+    if rol == "super_admin":
         return False
-    return usuario_objetivo.get("empresa_id") != creador.get("empresa_id")
+    if rol != "admin":
+        return True
+    empresa_id = creador.get("empresa_id")
+    if not empresa_id or usuario_objetivo.get("empresa_id") != empresa_id:
+        return True
+    return usuario_objetivo.get("rol") not in CREATABLE_ROLES["admin"]
+
+
+MENSAJE_FUERA_DE_ALCANCE = (
+    "Solo puedes {accion} técnicos y clientes de tu afiliación. "
+    "Pide ayuda a un superadministrador"
+)
 
 def _tiene_historial(cognito_sub: str) -> bool:
     """True si el usuario (identificado por su cognito_sub, que es el valor
@@ -797,7 +814,7 @@ def lambda_handler(event: dict, context) -> dict:
             if not usuario:
                 return _respuesta(404, {"error": "No se encontró el usuario. Actualiza la lista e inténtalo de nuevo"})
             if _fuera_de_alcance(creador, usuario):
-                return _respuesta(403, {"error": "No tienes permiso para modificar usuarios de otra afiliación"})
+                return _respuesta(403, {"error": MENSAJE_FUERA_DE_ALCANCE.format(accion="modificar")})
 
             if body.get("reactivar") is True:
                 email_objetivo = usuario.get("email")
@@ -902,7 +919,7 @@ def lambda_handler(event: dict, context) -> dict:
             if not usuario:
                 return _respuesta(404, {"error": "No se encontró el usuario. Actualiza la lista e inténtalo de nuevo"})
             if _fuera_de_alcance(creador, usuario):
-                return _respuesta(403, {"error": "No tienes permiso para eliminar usuarios de otra afiliación"})
+                return _respuesta(403, {"error": MENSAJE_FUERA_DE_ALCANCE.format(accion="eliminar")})
             if usuario.get("email") == email_propio:
                 return _respuesta(400, {"error": "No puedes eliminar tu propia cuenta. Pide a otro administrador que lo haga"})
             query_params = event.get("queryStringParameters") or {}
@@ -949,7 +966,7 @@ def lambda_handler(event: dict, context) -> dict:
             if not usuario:
                 return _respuesta(404, {"error": "No se encontró el usuario. Actualiza la lista e inténtalo de nuevo"})
             if _fuera_de_alcance(creador, usuario):
-                return _respuesta(403, {"error": "No tienes permiso para deshabilitar usuarios de otra afiliación"})
+                return _respuesta(403, {"error": MENSAJE_FUERA_DE_ALCANCE.format(accion="deshabilitar")})
             email_objetivo = usuario.get("email")
             cognito.admin_disable_user(UserPoolId=USER_POOL_ID, Username=email_objetivo)
             ahora = datetime.now(timezone.utc).isoformat()
