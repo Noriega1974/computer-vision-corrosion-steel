@@ -1,167 +1,127 @@
-import React from 'react';
-import { useMediciones, LIMITE_DASHBOARD } from '../hooks/useMediciones';
-import { SkeletonLinea } from './Skeleton';
-import { calcularIndicadores, VENTANA_DIAS } from '../lib/indicadoresSistema';
-import { formatoPct } from '../lib/textUtils';
+import React, { useState, useId } from 'react';
+import { useIndicadores } from '../hooks/useIndicadores';
+import Skeleton, { SkeletonLinea } from './Skeleton';
+import { COLORES_NIVEL, nivelColorTexto } from '../lib/statusUtils';
+import {
+  VENTANA_DIAS,
+  segmentosBarra,
+  resumenNiveles,
+  textoSinMediciones,
+  textoPromedio,
+  textoCobertura,
+  textoAtrasado,
+  textoMediciones30d,
+  textoSubio,
+  fechaCorta,
+  sinPuntos,
+} from '../lib/indicadoresSistema';
 
-const COLOR_NIVEL = ['var(--accent-green)', 'var(--accent-amber)', 'var(--accent-orange)', 'var(--accent-red)'];
+const estiloValor = {
+  fontFamily: 'var(--font-data)',
+  fontSize: 'var(--text-xl)',
+  fontWeight: 600,
+  lineHeight: 1,
+  letterSpacing: '-0.035em',
+};
+const estiloEtiqueta = {
+  marginTop: 'var(--space-1)',
+  fontSize: 'var(--text-xs)',
+  color: 'var(--text-primary)',
+  fontFamily: 'var(--font-ui)',
+  fontWeight: 500,
+  lineHeight: 1.3,
+};
+const estiloSub = {
+  marginTop: 2,
+  fontSize: 'var(--text-2xs)',
+  color: 'var(--text-faint)',
+  fontFamily: 'var(--font-ui)',
+  lineHeight: 1.35,
+  overflowWrap: 'anywhere',
+};
 
-
-// ================================================================
-// KPI (compacto)
-// ================================================================
-
-// El circulo con el glifo (⬡ ◎ ▲ ✓ ~ !) se quito a proposito: no aportaba
-// informacion que el numero y su etiqueta no dieran ya, y ademas parpadeaba de
-// forma infinita en las tarjetas criticas. La severidad se lee por el color del
-// numero, sin movimiento permanente en pantalla.
-// Cada KPI es una celda de la fila de la mitad izquierda (2x2 en telefonos);
-// las lineas finas entre celdas las pone .kpi-celda en index.css.
-function KPICard({
-  label,
-  value,
-  sub,
-  color,
-  loading,
-}) {
+// Cada tarjeta responde una pregunta; las lineas finas entre celdas las pone
+// .kpi-celda en index.css. `valor` y `etiqueta` son la pareja numero + pregunta.
+function Tarjeta({ etiqueta, valor, color, cargando, children }) {
   return (
-    <div className="kpi-celda" aria-busy={loading || undefined}>
-      <div
-        style={{
-          fontFamily: 'var(--font-data)',
-          fontSize: 'var(--text-xl)',
-          fontWeight: 600,
-          color,
-          lineHeight: 1,
-          letterSpacing: '-0.035em',
-        }}
-      >
-        {loading ? <SkeletonLinea width="3ch" /> : value}
+    <div className="kpi-celda" aria-busy={cargando || undefined}>
+      <div style={{ ...estiloValor, color: color ?? 'var(--text-primary)' }}>
+        {cargando ? <SkeletonLinea width="4ch" /> : valor}
       </div>
-      <div
-        style={{
-          marginTop: 'var(--space-1)',
-          fontSize: 'var(--text-xs)',
-          color: 'var(--text-primary)',
-          fontFamily: 'var(--font-ui)',
-          fontWeight: 500,
-          lineHeight: 1.3,
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          marginTop: 2,
-          fontSize: 'var(--text-2xs)',
-          color: 'var(--text-faint)',
-          fontFamily: 'var(--font-ui)',
-          lineHeight: 1.35,
-        }}
-      >
-        {sub}
-      </div>
+      <div style={estiloEtiqueta}>{etiqueta}</div>
+      {cargando ? <div style={estiloSub}><SkeletonLinea width="80%" /></div> : children}
     </div>
   );
 }
 
+// Barra apilada con los 4 colores de nivel. El texto accesible es la leyenda.
+function BarraNiveles({ porNivel }) {
+  const segmentos = segmentosBarra(porNivel);
+  const texto = resumenNiveles(porNivel);
+  if (!segmentos.length) return null;
+  return (
+    <div
+      role="img"
+      aria-label={texto}
+      title={texto}
+      style={{
+        display: 'flex', height: 8, marginTop: 'var(--space-2)', borderRadius: 999,
+        overflow: 'hidden', background: 'var(--border)', gap: 1,
+      }}
+    >
+      {segmentos.map((s) => (
+        <span key={s.nivel} style={{ width: `${s.ancho}%`, background: COLORES_NIVEL[s.nivel], minWidth: 3 }} />
+      ))}
+    </div>
+  );
+}
 
-// ================================================================
-// KPI BAR
-// ================================================================
+function ListaSubieron({ puntos, cantidad, id }) {
+  const restantes = cantidad - puntos.length;
+  return (
+    <ul
+      id={id}
+      style={{
+        margin: 'var(--space-1) 0 0', padding: 0, listStyle: 'none',
+        fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-ui)',
+        color: 'var(--text-muted)', lineHeight: 1.45,
+      }}
+    >
+      {puntos.map((p) => <li key={p.id_punto}>{textoSubio(p)}</li>)}
+      {restantes > 0 && <li>y {restantes} más</li>}
+    </ul>
+  );
+}
 
-export default function KPIBar() {
+export default function KPIBar({ empresaId = null }) {
+  const { datos, loading, error, refetch } = useIndicadores(empresaId);
+  const [verSubieron, setVerSubieron] = useState(false);
+  const idLista = useId();
 
-  const {
-    mediciones,
-    loading,
-    error,
-    refetch,
-  } = useMediciones(LIMITE_DASHBOARD, { resumen: true });
+  // Con datos en cache, una recarga fallida los conserva; solo un fallo sin
+  // datos es un estado de error (nunca mostrar 0 como si fuera real).
+  const sinDatos = Boolean(error) && !datos;
+  const cargando = loading && !datos;
+  const vacio = !cargando && !sinDatos && sinPuntos(datos);
 
-  // With cached data a failed refresh keeps showing it; only an empty failure
-  // is an error state (never show 0 as if it were real data).
-  const sinDatos = Boolean(error) && mediciones.length === 0;
-
-
-  // ==============================================================
-  // DATA
-  // ==============================================================
-
-  const {
-    totalPuntos,
-    mayorCorrosion,
-    puntosEmpeoraron,
-    pctPuntosAlDia,
-    mediciones30Dias,
-  } = calcularIndicadores(mediciones);
-
-  // Until the backend returns these totals, they are computed from the latest
-  // LIMITE_DASHBOARD mediciones; say so instead of passing off a partial count.
-  const alcanzoLimite = mediciones.length >= LIMITE_DASHBOARD;
-
-
-  // ==============================================================
-  // KPI CONFIG
-  // ==============================================================
-
-  const kpis = [
-    {
-      label: 'Mayor corrosión',
-      value: mayorCorrosion ? formatoPct(mayorCorrosion.pct) : 'Sin datos',
-      sub: mayorCorrosion
-        ? (mayorCorrosion.punto ?? 'Punto sin nombre')
-        : 'sin mediciones con %',
-      color: COLOR_NIVEL[mayorCorrosion?.nivel] ?? 'var(--text-primary)',
-    },
-    {
-      label: 'Puntos que empeoraron',
-      value: puntosEmpeoraron,
-      sub: `subieron en los últimos ${VENTANA_DIAS} días`,
-      color: puntosEmpeoraron > 0 ? 'var(--accent-orange)' : 'var(--accent-green)',
-    },
-    {
-      label: 'Puntos al día',
-      value: pctPuntosAlDia === null ? 'Sin datos' : `${pctPuntosAlDia}%`,
-      sub: `de ${totalPuntos} medidos en ${VENTANA_DIAS} días`,
-      color: 'var(--text-primary)',
-    },
-    {
-      label: `Mediciones en ${VENTANA_DIAS} días`,
-      value: alcanzoLimite ? `${mediciones30Dias}+` : mediciones30Dias,
-      sub: alcanzoLimite ? `de las ${LIMITE_DASHBOARD} más recientes` : 'fotos analizadas',
-      color: 'var(--text-primary)',
-    },
-  ];
-
-  const kpisMostrados = sinDatos
-    ? kpis.map(k => ({ ...k, value: 'Sin datos', sub: 'No se pudo cargar', color: 'var(--text-faint)' }))
-    : kpis;
-
-
-  // ==============================================================
-  // RENDER
-  // ==============================================================
+  const subieron = datos?.subieron_nivel;
+  const critico = datos?.mas_critico;
+  const atrasado = textoAtrasado(datos?.cobertura?.mas_atrasado);
+  const sinMed = textoSinMediciones(datos?.sin_mediciones);
 
   return (
     <div className="card ind-card">
       <div className="ind-card-label">Estado general del sistema</div>
-      <div className="kpi-grid">
-        {kpisMostrados.map((kpi, i) => (
-          <KPICard key={i} {...kpi} loading={loading} />
-        ))}
-      </div>
 
-      {sinDatos && (
+      {sinDatos ? (
         <div
           role="alert"
           style={{
-            display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
-            marginTop: 'var(--space-2)',
+            display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-3)',
             fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)', color: 'var(--text-muted)',
           }}
         >
-          <span>No se pudieron cargar las mediciones. Revisa tu conexión.</span>
+          <span>No se pudieron cargar los indicadores. Revisa tu conexión.</span>
           <button
             type="button" onClick={refetch}
             style={{
@@ -174,6 +134,79 @@ export default function KPIBar() {
             Reintentar
           </button>
         </div>
+      ) : vacio ? (
+        <p style={{ margin: 0, fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+          Aún no hay puntos para resumir. Cuando crees un punto y subas fotos, aquí verás su estado.
+        </p>
+      ) : (
+        <>
+          <div className="kpi-grid">
+            <Tarjeta
+              etiqueta="Puntos por nivel"
+              valor={datos?.total_puntos}
+              cargando={cargando}
+            >
+              <BarraNiveles porNivel={datos?.por_nivel} />
+              <div style={estiloSub}>{resumenNiveles(datos?.por_nivel) || 'Ningún punto medido'}</div>
+              {sinMed && <div style={{ ...estiloSub, color: 'var(--text-muted)' }}>{sinMed}</div>}
+            </Tarjeta>
+
+            <Tarjeta
+              etiqueta="Punto más crítico"
+              valor={critico
+                ? <span style={{ fontSize: 'var(--text-lg)', letterSpacing: '-0.02em', overflowWrap: 'anywhere' }}>{critico.nombre}</span>
+                : 'Sin datos'}
+              color={critico ? undefined : 'var(--text-faint)'}
+              cargando={cargando}
+            >
+              {critico ? (
+                <div style={estiloSub}>
+                  <span style={{ color: nivelColorTexto(critico.nivel), fontWeight: 600 }}>
+                    {textoPromedio(critico.promedio_pct)}
+                  </span>
+                  {` · ${fechaCorta(critico.fecha)}`}
+                </div>
+              ) : (
+                <div style={estiloSub}>sin mediciones con %</div>
+              )}
+            </Tarjeta>
+
+            <Tarjeta
+              etiqueta="Subieron de nivel"
+              valor={subieron?.cantidad ?? 0}
+              color={subieron?.cantidad > 0 ? 'var(--accent-red)' : 'var(--accent-green)'}
+              cargando={cargando}
+            >
+              <div style={estiloSub}>en {VENTANA_DIAS} días</div>
+              {subieron?.cantidad > 0 && (
+                <>
+                  <button
+                    type="button"
+                    className="kpi-enlace"
+                    aria-expanded={verSubieron}
+                    aria-controls={idLista}
+                    onClick={() => setVerSubieron((v) => !v)}
+                  >
+                    {verSubieron ? 'Ocultar puntos' : 'Ver puntos'}
+                  </button>
+                  {verSubieron && <ListaSubieron id={idLista} puntos={subieron.puntos} cantidad={subieron.cantidad} />}
+                </>
+              )}
+            </Tarjeta>
+
+            <Tarjeta
+              etiqueta={`Medidos en ${VENTANA_DIAS} días`}
+              valor={textoCobertura(datos?.cobertura)}
+              cargando={cargando}
+            >
+              {atrasado && <div style={estiloSub}>{atrasado}</div>}
+            </Tarjeta>
+          </div>
+
+          <div style={{ ...estiloSub, marginTop: 'var(--space-2)' }} aria-busy={cargando || undefined}>
+            {cargando ? <Skeleton width="30%" height={10} /> : textoMediciones30d(datos?.mediciones_30d)}
+          </div>
+        </>
       )}
     </div>
   );

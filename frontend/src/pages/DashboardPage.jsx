@@ -164,7 +164,7 @@ export default function DashboardPage() {
           {/* KPI cards */}
 
           <div className="indicadores-split">
-            <KPIBar />
+            <KPIBar empresaId={esSuperAdmin && selectedZona?.id_empresa && selectedZona.id_empresa !== 'propia' ? selectedZona.id_empresa : null} />
             <TendenciaPunto punto={selectedPunto} />
           </div>
 

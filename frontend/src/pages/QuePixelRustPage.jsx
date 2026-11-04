@@ -4,7 +4,7 @@ import NivelIcon from '../components/NivelIcon';
 import { IconoReproducir } from '../components/Iconos';
 import { NIVELES, nivelColor } from '../lib/statusUtils';
 import { formatoPct } from '../lib/textUtils';
-import { VENTANA_DIAS, UMBRAL_EMPEORO_PP } from '../lib/indicadoresSistema';
+import { VENTANA_DIAS } from '../lib/indicadoresSistema';
 import {
   EJEMPLO_PCT_PLACA,
   EJEMPLO_PCT_FOTO,
@@ -563,13 +563,13 @@ export default function QuePixelRustPage() {
         <h3 style={h3Style}>El dashboard</h3>
         <p style={parrafo}>
           El <Ui>Dashboard</Ui> resume el estado de tus puntos. Arriba muestra el bloque{' '}
-          <Ui>Estado general del sistema</Ui> con cuatro indicadores: <Ui>Mayor corrosión</Ui> (el
-          punto con el porcentaje más alto en su última medición), <Ui>Puntos que empeoraron</Ui>{' '}
-          (subieron al menos {UMBRAL_EMPEORO_PP} puntos porcentuales en los últimos {VENTANA_DIAS} días), <Ui>Puntos al día</Ui>{' '}
-          (porcentaje de puntos con una medición en los últimos {VENTANA_DIAS} días) y{' '}
-          <Ui>Mediciones en {VENTANA_DIAS} días</Ui> (fotos analizadas en ese período). Los tres primeros se
-          calculan con la última medición de cada punto, para que una tanda grande de fotos en un
-          mismo punto no los distorsione. Junto a los indicadores está la tarjeta{' '}
+          <Ui>Estado general del sistema</Ui> con cuatro indicadores: <Ui>Puntos por nivel</Ui> (cuántos puntos
+          hay en cada nivel y cuántos aún no tienen mediciones), <Ui>Punto más crítico</Ui> (el de mayor
+          porcentaje promedio en su último día medido), <Ui>Subieron de nivel</Ui> (puntos cuyo nivel de
+          su último día medido es mayor que el del día medido anterior, dentro de los últimos {VENTANA_DIAS} días) y{' '}
+          <Ui>Medidos en {VENTANA_DIAS} días</Ui> (cuántos puntos tienen una medición reciente y cuál es el más
+          atrasado). Todos se calculan con el último día medido de cada punto, para que una tanda grande
+          de fotos en un mismo punto no los distorsione. Junto a los indicadores está la tarjeta{' '}
           <Ui>Tendencia del área corroída</Ui>, que muestra la evolución del punto que elijas en el
           mapa. Debajo hay tres paneles: la lista desplegable de zonas y puntos, el{' '}
           <Ui>Mapa de ubicaciones</Ui>, con cada ubicación coloreada según el nivel de su última

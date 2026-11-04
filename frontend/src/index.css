@@ -2525,3 +2525,23 @@ select option {
   .subida-barra__relleno { transition: none; }
   .subida-barra__relleno--activo::after, .subida-barra__relleno--rayas, .subida-punto--activo { animation: none; }
 }
+
+/* "Ver puntos" de la tarjeta "Subieron de nivel": enlace-boton discreto con zona tactil comoda. */
+.kpi-enlace {
+  margin-top: 2px;
+  padding: 4px 0;
+  min-height: 28px;
+  background: none;
+  border: none;
+  color: var(--accent-blue);
+  font-family: var(--font-ui);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.kpi-enlace:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
