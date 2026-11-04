@@ -1,3 +1,4 @@
+import { leerModoOscuro } from '../lib/tema';
 import { AvisoEnLinea } from '../components/Aviso';
 import React, { useState, useEffect, useRef } from 'react';
 import { updatePassword } from 'aws-amplify/auth';
@@ -409,9 +410,7 @@ export default function ConfiguracionPage() {
   // Modo oscuro: el estado real vive en AppLayout (aplica el atributo al
   // documento). Acá solo se refleja vía localStorage + evento, mismo patrón
   // que el color/foto de avatar.
-  const [darkMode, setDarkModeLocal] = useState(
-    () => localStorage.getItem('corria-darkmode') === 'true'
-  );
+  const [darkMode, setDarkModeLocal] = useState(leerModoOscuro);
   const [dateFormat, setDateFormatLocal] = useState(() => getDateFormat());
 
   useEffect(() => {

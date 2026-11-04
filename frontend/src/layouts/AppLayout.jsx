@@ -1,3 +1,4 @@
+import { leerModoOscuro } from '../lib/tema';
 import React, { useState, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
@@ -15,9 +16,7 @@ export default function AppLayout() {
   );
 
   // Modo oscuro — persiste en localStorage
-  const [darkMode, setDarkMode] = useState(
-    () => localStorage.getItem('corria-darkmode') === 'true'
-  );
+  const [darkMode, setDarkMode] = useState(leerModoOscuro);
 
   // Estado del sidebar en móvil (overlay)
   const [mobileOpen, setMobileOpen] = useState(false);

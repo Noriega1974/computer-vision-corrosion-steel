@@ -142,7 +142,7 @@ const FICHA_PCT_LABEL_STYLE = {
 const META_LABEL_STYLE = { fontSize: 12, color: 'var(--text-muted)', marginBottom: 3, fontFamily: 'var(--font-ui)', fontWeight: 500 };
 const META_VALOR_STYLE = {
   fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 16, lineHeight: 1.25,
-  color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  color: 'var(--text-primary)', overflowWrap: 'anywhere', fontVariantNumeric: 'tabular-nums',
 };
 
 // Esqueleto de la pagina completa: misma rejilla 1.4fr / 1fr, imagen 4:3 y

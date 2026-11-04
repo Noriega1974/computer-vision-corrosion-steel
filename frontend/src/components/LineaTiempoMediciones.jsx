@@ -268,9 +268,12 @@ export function BarraAnualLineaTiempo({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span id="vista-barra-anual" style={{ fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-secondary)' }}>
+            Vista:
+          </span>
           <div
             role="group"
-            aria-label="Modo de color en días con múltiples niveles"
+            aria-label="Vista de la barra anual: color en días con varios niveles"
             style={{
               display: 'inline-flex',
               padding: 2,
@@ -712,7 +715,7 @@ export default function LineaTiempoMediciones() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginLeft: 'auto' }}>
-          <div style={{ position: 'relative', minWidth: 190 }}>
+          <div style={{ position: 'relative', minWidth: 'min(260px, 100%)' }}>
             <IconoBuscar
               size={13}
               aria-hidden="true"
@@ -728,7 +731,7 @@ export default function LineaTiempoMediciones() {
             <input
               type="search"
               aria-label="Buscar en línea de tiempo"
-              placeholder="Buscar lote, foto o autor…"
+              placeholder="Buscar lote, foto o autor"
               value={busqueda}
               onChange={(e) => {
                 setBusqueda(e.target.value);
