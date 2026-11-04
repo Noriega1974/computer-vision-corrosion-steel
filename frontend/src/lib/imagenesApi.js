@@ -1,4 +1,5 @@
 import { apiPost, apiPut, apiDelete, apiSubirS3 } from './apiClient';
+import { formatoMB } from './textUtils';
 
 // Logo de empresa y foto de portada de un punto: solo imágenes, máx. 5 MB
 // (el mismo tope que valida el backend en la política del POST prefirmado).
@@ -11,8 +12,7 @@ export function validarImagen(file) {
     return 'Usa una imagen JPEG, PNG o WebP.';
   }
   if (file.size > IMAGEN_MAX_BYTES) {
-    const mb = (file.size / (1024 * 1024)).toFixed(1).replace('.', ',');
-    return `La imagen pesa ${mb} MB y el máximo es 5 MB. Elige una más liviana.`;
+    return `La imagen pesa ${formatoMB(file.size)} y el máximo es 5 MB. Elige una más liviana.`;
   }
   return null;
 }

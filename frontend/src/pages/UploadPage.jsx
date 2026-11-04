@@ -8,13 +8,13 @@ import { useUploadMedicion, MAX_FOTO_MB } from '../hooks/useUploadMedicion';
 import { useUploadLote, clasificarArchivos, generarLoteId, sugerirNombreLote, LOTE_MAX, NOMBRE_MAX } from '../hooks/useUploadLote';
 import UploadCola from '../components/UploadCola';
 import BarraProgresoSubida from '../components/BarraProgresoSubida';
-import { nivelColor, nivelBg, nivelLabel } from '../lib/statusUtils';
+import { nivelColor, nivelColorTexto, nivelBg, nivelLabel } from '../lib/statusUtils';
 import SearchableSelect from '../components/SearchableSelect';
 import NivelIcon from '../components/NivelIcon';
 import NivelInfo from '../components/NivelInfo';
 import NotaPctAproximado from '../components/NotaPctAproximado';
 import DatePicker from '../components/DatePicker';
-import { formatoPct, etiquetaBase } from '../lib/textUtils';
+import { formatoPct, formatoMB, etiquetaBase } from '../lib/textUtils';
 import { hoyColombiaISO, esFechaISOValida, esFechaFutura } from '../lib/fechas';
 
 // ─── Componente: resultado del análisis ─────────────────────────────────────
@@ -22,6 +22,7 @@ import { hoyColombiaISO, esFechaISOValida, esFechaFutura } from '../lib/fechas';
 function ResultadoAnalisis({ result, onReset, onDashboard }) {
   const nivel = result.nivel_corrosion ?? 0;
   const color = nivelColor(nivel);
+  const colorTexto = nivelColorTexto(nivel);
   const bloque = result.bloque_info ?? {};
   const areaPct = result.area_corroida_pct ?? 0;
 
@@ -53,13 +54,13 @@ function ResultadoAnalisis({ result, onReset, onDashboard }) {
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'var(--space-2)' }}>
             <NivelIcon nivel={nivel} size={44} color={color} />
           </div>
-          <div style={{ fontFamily: 'var(--font-ui)', fontSize: 20, color, letterSpacing: '-0.01em' }}>
+          <div style={{ fontFamily: 'var(--font-ui)', fontSize: 20, color: colorTexto, letterSpacing: '-0.01em' }}>
             Tipo de corrosión: <span style={{ fontWeight: 800, fontSize: 28 }}>{nivelLabel(nivel)}</span>{' '}
             <NivelInfo nivel={nivel} color={color} />
           </div>
           {/* Fuente de interfaz con cifras tabulares: la monoespaciada dejaba
               un hueco visible alrededor de la coma decimal. */}
-          <div style={{ fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 52, color, letterSpacing: '-0.02em', lineHeight: 1.1, marginTop: 10 }}>
+          <div style={{ fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 52, color: colorTexto, letterSpacing: '-0.02em', lineHeight: 1.1, marginTop: 10 }}>
             {formatoPct(areaPct)}
           </div>
           <NotaPctAproximado align="center" style={{ marginTop: 6 }} />
@@ -320,8 +321,7 @@ export default function UploadPage() {
     // El tiempo de análisis cuenta desde este clic, antes de subir la foto.
     const inicio = performance.now();
     if (imagen.size > MAX_FOTO_MB * 1024 * 1024) {
-      const mb = (imagen.size / (1024 * 1024)).toFixed(1).replace('.', ',');
-      setErrorLocal(`La foto pesa ${mb} MB; el máximo es ${MAX_FOTO_MB} MB.`);
+      setErrorLocal(`La foto pesa ${formatoMB(imagen.size)}; el máximo es ${MAX_FOTO_MB} MB.`);
       return;
     }
     setErrorLocal(null);

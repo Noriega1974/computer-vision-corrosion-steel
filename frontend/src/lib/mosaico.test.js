@@ -1,8 +1,16 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { destinoMedicion, miniaturaDe, etiquetaTestera, etiquetaTesteraLote, nombreCorto, estadoTesteraSubida } from './mosaico.js';
+import { destinoMedicion, miniaturaDe, etiquetaTestera, etiquetaTesteraLote, nombreCorto, estadoTesteraSubida, textoPctMedicion } from './mosaico.js';
 
 describe('mosaico', () => {
+  it('textoPctMedicion nunca muestra 0,0% cuando falta el dato', () => {
+    assert.equal(textoPctMedicion({ area_corroida_pct: 12.34 }), '12,3%');
+    assert.equal(textoPctMedicion({ area_corroida_pct: 0, nivel_corrosion: 0 }), '0,0%');
+    assert.equal(textoPctMedicion({ nivel_corrosion: 2 }), 'Moderada');
+    assert.equal(textoPctMedicion({ area_corroida_pct: null }), 'Sin dato');
+    assert.equal(textoPctMedicion(null), 'Sin dato');
+  });
+
   it('builds the photo route with the point when known', () => {
     assert.equal(destinoMedicion({ id_medicion: 'a b', bloque_id: 'B1' }), '/galeria/a%20b?punto=B1');
     assert.equal(destinoMedicion({ id_medicion: 'x' }, 'P9'), '/galeria/x?punto=P9');
@@ -24,8 +32,8 @@ describe('mosaico', () => {
   });
 
   it('labels batch tiles with count and worst level', () => {
-    assert.match(etiquetaTesteraLote('Tubería', 1, 2), /^Lote Tubería, 1 imagen, peor nivel /);
-    assert.match(etiquetaTesteraLote('', 10, 0), /^Lote sin nombre, 10 imágenes/);
+    assert.match(etiquetaTesteraLote('Tubería', 1, 2), /^Lote Tubería, 1 medición, peor nivel /);
+    assert.match(etiquetaTesteraLote('', 10, 0), /^Lote sin nombre, 10 mediciones/);
   });
 
   it('names tiles and queue states', () => {

@@ -3,13 +3,13 @@ import { Link, useLocation } from 'react-router-dom';
 import NivelIcon from '../components/NivelIcon';
 import { IconoReproducir } from '../components/Iconos';
 import { NIVELES, nivelColor } from '../lib/statusUtils';
+import { formatoPct } from '../lib/textUtils';
 import { VENTANA_DIAS, UMBRAL_EMPEORO_PP } from '../lib/indicadoresSistema';
 import {
   EJEMPLO_PCT_PLACA,
   EJEMPLO_PCT_FOTO,
   EJEMPLO_PCT_PLACA_EN_CUADRO,
   EJEMPLO_PCT_FONDO,
-  formatoPctGuia,
 } from '../lib/ejemploGuia';
 
 // Guía de la aplicación: qué es PixelRust, por qué existe, cómo se usa, cómo
@@ -362,7 +362,7 @@ export default function QuePixelRustPage() {
               paso: '1. Foto original',
               img: '/guia/paso1-original.jpg',
               alt: 'Fotografía original de una lámina galvanizada con óxido, enmarcada con cinta amarilla sobre una mesa de madera, en interiores',
-              detalle: `La cámara captura tanto la lámina galvanizada (${formatoPctGuia(EJEMPLO_PCT_PLACA_EN_CUADRO)} del cuadro) como el entorno que la rodea (${formatoPctGuia(EJEMPLO_PCT_FONDO)} de fondo).`,
+              detalle: `La cámara captura tanto la lámina galvanizada (${formatoPct(EJEMPLO_PCT_PLACA_EN_CUADRO)} del cuadro) como el entorno que la rodea (${formatoPct(EJEMPLO_PCT_FONDO)} de fondo).`,
             },
             {
               paso: '2. Placa detectada (base 100%)',
@@ -372,10 +372,10 @@ export default function QuePixelRustPage() {
                 'El primer modelo recorta la lámina (contorno verde) y descarta el fondo. Solo los píxeles dentro de este borde cuentan como el 100%.',
             },
             {
-              paso: `3. Corrosión sobre la placa (${formatoPctGuia(EJEMPLO_PCT_PLACA)})`,
+              paso: `3. Corrosión sobre la placa (${formatoPct(EJEMPLO_PCT_PLACA)})`,
               img: '/guia/paso3-corrosion.jpg',
               alt: 'Máscara de segmentación de corrosión en rojo sobre la placa delimitada en verde',
-              detalle: `La red U-Net marca píxel por píxel el óxido dentro de la placa (rojo): ${formatoPctGuia(EJEMPLO_PCT_PLACA)} de la lámina, según la estimación del modelo.`,
+              detalle: `La red U-Net marca píxel por píxel el óxido dentro de la placa (rojo): ${formatoPct(EJEMPLO_PCT_PLACA)} de la lámina, según la estimación del modelo.`,
             },
           ].map((item) => (
             <figure
@@ -440,7 +440,7 @@ export default function QuePixelRustPage() {
             >
               <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>{c.etiqueta}</div>
               <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', lineHeight: 1.2 }}>
-                {formatoPctGuia(c.valor)}
+                {formatoPct(c.valor)}
               </div>
               <div style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--text-secondary)', marginTop: 2 }}>{c.nota}</div>
             </div>

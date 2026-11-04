@@ -7,7 +7,7 @@ import { useBloques } from '../hooks/useBloques';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
 import { useAuth } from '../auth/AuthContext';
-import { NIVELES, nivelColor, nivelBg, nivelLabel } from '../lib/statusUtils';
+import { NIVELES, nivelColor, nivelColorTexto, nivelBg, nivelLabel } from '../lib/statusUtils';
 import { formatFecha } from '../utils/dateFormat';
 import { apiDelete, apiPatch, apiPost } from '../lib/apiClient';
 import { useRefreshKey } from '../hooks/RefreshKeyContext';
@@ -513,6 +513,7 @@ export default function MedicionDetailPage() {
 
   const nivel = medicion.nivel_corrosion ?? 0;
   const color = nivelColor(nivel);
+  const colorTexto = nivelColorTexto(nivel);
   const bg = nivelBg(nivel);
   // Tiempo de análisis ≈ subida (medida en el navegador) + procesamiento del
   // servidor. Solo existe en mediciones nuevas.
@@ -682,18 +683,18 @@ export default function MedicionDetailPage() {
             gap: 10,
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, color }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: colorTexto }}>
                 <NivelIcon nivel={nivel} size={30} />
                 <span
                   className={nivel === 3 ? 'severa-pulse' : undefined}
-                  style={{ ...FICHA_VEREDICTO_STYLE, color }}
+                  style={{ ...FICHA_VEREDICTO_STYLE, color: colorTexto }}
                 >
                   {nivelLabel(nivel)}
                 </span>
                 <NivelInfo nivel={nivel} color={color} />
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ ...FICHA_PCT_STYLE, color }}>
+                <div style={{ ...FICHA_PCT_STYLE, color: colorTexto }}>
                   {formatoPct(medicion.area_corroida_pct)}
                 </div>
                 <div style={FICHA_PCT_LABEL_STYLE}>

@@ -22,7 +22,7 @@ import { useMedicionesRango } from '../hooks/useMedicionesRango';
 import { useBloques } from '../hooks/useBloques';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useAuth } from '../auth/AuthContext';
-import { NIVELES, nivelColor, nivelLabel, nivelBg } from '../lib/statusUtils';
+import { NIVELES, nivelColor, nivelColorTexto, nivelLabel, nivelBg } from '../lib/statusUtils';
 import { formatoPct, etiquetaBase } from '../lib/textUtils';
 import { hoyColombiaISO, fechaUltimaMedicionISO, anioColombia } from '../lib/fechas';
 import { formatFecha } from '../utils/dateFormat';
@@ -76,7 +76,7 @@ function NivelBadge({ nivel }) {
       borderRadius: 999,
       background: bg,
       border: `1px solid ${color}55`,
-      color,
+      color: nivelColorTexto(niv),
       fontFamily: 'var(--font-ui)',
       fontWeight: 700,
       fontSize: 'var(--text-2xs)',

@@ -1,17 +1,15 @@
 // Filtrado y agrupación cronológica de mediciones para la línea de tiempo del panel.
 
 import { diaColombiaISO, enRangoDiasColombia, hoyColombiaISO, desplazarDiasISO, formatearFechaAmigable, esFechaISOValida } from './fechas.js';
-import { NIVELES, nivelLabel } from './statusUtils.js';
-import { normalizar } from './textUtils.js';
+import { NIVELES, COLORES_NIVEL, COLOR_NIVEL_DESCONOCIDO, nivelLabel } from './statusUtils.js';
+import { normalizar, plural } from './textUtils.js';
 
 export const ANIO_MINIMO_LINEA_TIEMPO = 2026;
 export const COLOR_DIA_SIN_FOTOS = '#94a3b8';
 
-// Paleta propia de la barra anual (la del resto de la app usa naranjas casi
-// iguales para leve y moderada, y en una franja de 3 px no se distinguen):
-// verde / ámbar claro / naranja intenso / rojo.
-export const COLORES_BARRA_ANUAL = ['#16a34a', '#fbbf24', '#ea580c', '#dc2626'];
-export const colorNivelBarra = (nivel) => COLORES_BARRA_ANUAL[nivel] ?? '#64748b';
+// La barra anual usa la misma paleta que el resto de la app (statusUtils).
+export const COLORES_BARRA_ANUAL = COLORES_NIVEL;
+export const colorNivelBarra = (nivel) => COLORES_NIVEL[nivel] ?? COLOR_NIVEL_DESCONOCIDO;
 
 // Parte mínima de la altura de un día que ocupa cada nivel presente, para que una
 // foto severa entre cientos no desaparezca.
@@ -421,7 +419,7 @@ function construirBarraDesdeConteos(conteosPorDia, anioNum) {
         gradienteSegmentos,
         gradienteSuave,
         peorNivel,
-        resumenTexto: `${etiquetaCorta} · ${totalFotos} ${totalFotos === 1 ? 'imagen' : 'imágenes'}: ${desglose}`,
+        resumenTexto: `${etiquetaCorta} · ${plural(totalFotos, 'medición', 'mediciones')}: ${desglose}`,
       });
     }
 

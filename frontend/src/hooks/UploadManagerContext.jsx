@@ -3,6 +3,7 @@ import exifr from 'exifr';
 import { subirUnaMedicion, MAX_FOTO_MB } from './useUploadMedicion';
 import { useRefreshKey } from './RefreshKeyContext';
 import { useAuth } from '../auth/AuthContext';
+import { formatoMB } from '../lib/textUtils';
 import {
   quitarSeleccionadas,
   FASE_MEDICION,
@@ -159,8 +160,7 @@ function useGestorSubida() {
     let fase = FASE_PREVIA;
     try {
       if (it.file.size > MAX_FOTO_MB * 1024 * 1024) {
-        const mb = (it.file.size / (1024 * 1024)).toFixed(1).replace('.', ',');
-        throw new Error(`La foto pesa ${mb} MB; el máximo es ${MAX_FOTO_MB} MB.`);
+        throw new Error(`La foto pesa ${formatoMB(it.file.size)}; el máximo es ${MAX_FOTO_MB} MB.`);
       }
       // `reintentando` is reset here: it is set by the pool between attempts.
       parchar(it.id, { estado: 'subiendo', progreso: 0, error: null, incierto: false, reintentando: false });

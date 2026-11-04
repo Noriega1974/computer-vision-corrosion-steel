@@ -105,6 +105,13 @@
   --accent-amber: #C1460B;
   --accent-amber-dim: #904521;
 
+  /* Texto de cada nivel de corrosión (ver nivelColorTexto en statusUtils.js):
+     >= 4,5:1 sobre blanco (verde 5,0, ámbar 5,0, naranja 5,2, rojo 6,5). */
+  --nivel-0-texto: #15803d;
+  --nivel-1-texto: #b45309;
+  --nivel-2-texto: #c2410c;
+  --nivel-3-texto: #b91c1c;
+
   --accent-blue: #A84A38;
   --accent-cyan: #F7B681;
 
@@ -349,6 +356,12 @@
   /* 2026-08-17: paleta "PixelRust". */
   --accent-amber: #F0570E;
   --accent-amber-dim: #D64A17;
+
+  /* Tema oscuro: el relleno de cada nivel ya contrasta (>= 4,5:1 sobre #18222F). */
+  --nivel-0-texto: #4ade80;
+  --nivel-1-texto: #fbbf24;
+  --nivel-2-texto: #fb923c;
+  --nivel-3-texto: #f87171;
 
   --accent-blue: #F0917A;
   --accent-cyan: #F7B681;

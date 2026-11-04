@@ -142,11 +142,11 @@ describe('galeriaCarpetas', () => {
     assert.deepEqual(puntos.map(p => p.id), ['B1']);
   });
 
-  it('resumenConteoMediciones y formatearConteoMediciones producen "x imágenes · x lotes con x imágenes"', () => {
-    assert.equal(formatearConteoMediciones([]), '0 imágenes · 0 lotes con 0 imágenes');
+  it('resumenConteoMediciones y formatearConteoMediciones producen "x mediciones · x lotes"', () => {
+    assert.equal(formatearConteoMediciones([]), '0 mediciones · 0 lotes');
     assert.equal(
       formatearConteoMediciones([{ id_medicion: 'm1' }]),
-      '1 imagen · 0 lotes con 0 imágenes',
+      '1 medición · 0 lotes',
     );
     const mixtas = [
       { id_medicion: '1', lote_id: 'L1' },
@@ -161,10 +161,10 @@ describe('galeriaCarpetas', () => {
       totalLotes: 2,
       imagenesEnLotes: 4,
     });
-    assert.equal(formatearConteoMediciones(mixtas), '5 imágenes · 2 lotes con 4 imágenes');
+    assert.equal(formatearConteoMediciones(mixtas), '5 mediciones · 2 lotes');
     assert.equal(
       formatearConteoMediciones([{ id_medicion: '1', lote_id: 'L1' }]),
-      '1 imagen · 1 lote con 1 imagen',
+      '1 medición · 1 lote',
     );
   });
 
@@ -211,11 +211,11 @@ describe('galeriaCarpetas', () => {
 
   it('etiquetaConteoBloque usa el total del servidor y solo cuenta lotes si la ventana está completa', () => {
     const meds = [{ lote_id: 'L1' }, { lote_id: 'L1' }, {}];
-    assert.equal(etiquetaConteoBloque(3, meds, true), '3 imágenes · 1 lote con 2 imágenes');
+    assert.equal(etiquetaConteoBloque(3, meds, true), '3 mediciones · 1 lote');
     // ventana recortada: el total del servidor manda y no se inventan lotes
-    assert.equal(etiquetaConteoBloque(2500, meds, false), '2500 imágenes');
-    assert.equal(etiquetaConteoBloque(1, [], false), '1 imagen');
-    assert.equal(etiquetaConteoBloque(0, [], true), '0 imágenes · 0 lotes con 0 imágenes');
-    assert.equal(etiquetaConteoBloque(undefined, meds, false), '3 imágenes');
+    assert.equal(etiquetaConteoBloque(2500, meds, false), '2500 mediciones');
+    assert.equal(etiquetaConteoBloque(1, [], false), '1 medición');
+    assert.equal(etiquetaConteoBloque(0, [], true), '0 mediciones · 0 lotes');
+    assert.equal(etiquetaConteoBloque(undefined, meds, false), '3 mediciones');
   });
 });

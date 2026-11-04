@@ -2,10 +2,9 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { IconoCamara, IconoMoverACarpeta } from './Iconos';
 import { nivelColor, nivelLabel } from '../lib/statusUtils';
-import { formatoPct } from '../lib/textUtils';
 import { formatFecha } from '../utils/dateFormat';
 import {
-  destinoMedicion, etiquetaTestera, etiquetaTesteraLote, miniaturaDe, nombreCorto,
+  destinoMedicion, etiquetaTestera, etiquetaTesteraLote, miniaturaDe, nombreCorto, textoPctMedicion,
 } from '../lib/mosaico';
 
 // Contenedor de la cuadrícula: alto máximo definido con scroll interno.
@@ -54,7 +53,7 @@ export function TesteraFoto({ medicion, idPunto, mostrarFecha = false, subtitulo
       <span className="mosaico-tile__punto" aria-hidden="true" style={{ background: color }} title={nivelLabel(nivel)} />
       {etiquetaDia && <span className="mosaico-tile__dia">{etiquetaDia}</span>}
       <span className="mosaico-tile__pie">
-        <span className="mosaico-tile__pct">{medicion.area_corroida_pct == null ? nivelLabel(nivel) : formatoPct(medicion.area_corroida_pct)}</span>
+        <span className="mosaico-tile__pct">{textoPctMedicion(medicion)}</span>
         <span className="mosaico-tile__nombre">
           {subtitulo ?? (mostrarFecha ? fecha : nombreCorto(medicion, horaCorta(medicion.timestamp)))}
         </span>

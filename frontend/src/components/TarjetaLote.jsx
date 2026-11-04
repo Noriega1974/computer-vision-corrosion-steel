@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import NivelIcon from './NivelIcon';
 import { IconoCheck, IconoMoverACarpeta, IconoReloj } from './Iconos';
-import { nivelBg, nivelColor, nivelLabel } from '../lib/statusUtils';
-import { formatoPct } from '../lib/textUtils';
+import { nivelBg, nivelColor, nivelColorTexto, nivelLabel } from '../lib/statusUtils';
+import { formatoPct, plural } from '../lib/textUtils';
 import { iniciales } from '../lib/galeriaCarpetas';
 import { formatFecha } from '../utils/dateFormat';
 import { CARD_PILDORA_STYLE, CARD_SUBTITULO_STYLE, CARD_TITULO_STYLE } from './cardTextStyles';
@@ -38,10 +38,11 @@ export default function TarjetaLote({ lote, onClick, compacta = false }) {
   const [imgError, setImgError] = useState(false);
   const peorNivel = lote?.peorNivel ?? 0;
   const color = nivelColor(peorNivel);
+  const colorTexto = nivelColorTexto(peorNivel);
   const bg = nivelBg(peorNivel);
   const fechaTexto = lote?.ultimaFecha ? formatFecha(lote.ultimaFecha) : 'Sin fecha';
   const total = lote?.total ?? 0;
-  const cantidadTexto = `${total} ${total === 1 ? 'imagen' : 'imágenes'}`;
+  const cantidadTexto = plural(total, 'medición', 'mediciones');
   const srcPortada = !imgError ? lote?.preview : null;
 
   if (compacta) {
@@ -128,7 +129,7 @@ export default function TarjetaLote({ lote, onClick, compacta = false }) {
             <span>·</span>
             <span>{fechaTexto}</span>
             <span>·</span>
-            <span style={{ color, fontWeight: 700 }}>
+            <span style={{ color: colorTexto, fontWeight: 700 }}>
               {nivelLabel(peorNivel)} (Máx. {formatoPct(lote?.peorPct ?? 0)})
             </span>
           </div>
@@ -245,7 +246,7 @@ export default function TarjetaLote({ lote, onClick, compacta = false }) {
             borderRadius: 999,
             background: bg,
             border: `1px solid ${color}45`,
-            color,
+            color: colorTexto,
             fontSize: 11,
             fontWeight: 700,
             fontFamily: 'var(--font-ui)',
@@ -272,6 +273,7 @@ export function FichaDetalleLote({ lote, onVolver, textoVolver = '← Volver', a
   if (!lote) return null;
   const peorNivel = lote.peorNivel ?? 0;
   const color = nivelColor(peorNivel);
+  const colorTexto = nivelColorTexto(peorNivel);
   const bg = nivelBg(peorNivel);
   const total = lote.total ?? 0;
   const fechaTexto = lote.ultimaFecha ? formatFecha(lote.ultimaFecha, { conHora: true }) : 'Sin fecha';
@@ -303,7 +305,7 @@ export function FichaDetalleLote({ lote, onVolver, textoVolver = '← Volver', a
         <EstadoLoteBadge estado={lote.estado} />
         <span role="group" aria-label="Resumen del lote" style={{ display: 'contents' }}>
           <span style={chip} title={fechaTexto}>{total} img</span>
-          <span style={{ ...chip, color, background: bg, borderColor: `${color}45`, fontWeight: 700 }}>
+          <span style={{ ...chip, color: colorTexto, background: bg, borderColor: `${color}45`, fontWeight: 700 }}>
             <NivelIcon nivel={peorNivel} size={11} color={color} />
             {nivelLabel(peorNivel)}
           </span>
@@ -375,7 +377,7 @@ export function FichaDetalleLote({ lote, onVolver, textoVolver = '← Volver', a
               marginTop: 2,
               fontVariantNumeric: 'tabular-nums',
             }}>
-              {total} {total === 1 ? 'imagen' : 'imágenes'} · Fecha: {fechaTexto}
+              {plural(total, 'medición', 'mediciones')} · Fecha: {fechaTexto}
             </div>
           </div>
         </div>
@@ -400,7 +402,7 @@ export function FichaDetalleLote({ lote, onVolver, textoVolver = '← Volver', a
             Cantidad
           </div>
           <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-primary)', marginTop: 2 }}>
-            {total} {total === 1 ? 'imagen' : 'imágenes'}
+            {plural(total, 'medición', 'mediciones')}
           </div>
         </div>
         <div>
@@ -416,7 +418,7 @@ export function FichaDetalleLote({ lote, onVolver, textoVolver = '← Volver', a
             borderRadius: 999,
             background: bg,
             border: `1px solid ${color}45`,
-            color,
+            color: colorTexto,
             fontSize: 'var(--text-2xs)',
             fontWeight: 700,
           }}>
@@ -428,7 +430,7 @@ export function FichaDetalleLote({ lote, onVolver, textoVolver = '← Volver', a
           <div style={{ fontSize: 'var(--text-3xs)', color: 'var(--text-faint)', textTransform: 'uppercase', fontWeight: 600 }}>
             % máximo
           </div>
-          <div style={{ fontSize: 'var(--text-xs)', fontWeight: 800, color, marginTop: 2 }}>
+          <div style={{ fontSize: 'var(--text-xs)', fontWeight: 800, color: colorTexto, marginTop: 2 }}>
             {formatoPct(lote.peorPct ?? 0)}
           </div>
         </div>

@@ -4,11 +4,12 @@ import { useMedicionesPunto } from '../hooks/useMedicionesPunto';
 import { useResumenDiario } from '../hooks/useResumenDiario';
 import { useMedicionesDia } from '../hooks/useMedicionesDia';
 import {
-  nivelColor, nivelBg, nivelLabel,
+  nivelColor, nivelColorTexto, nivelBg, nivelLabel,
 } from '../lib/statusUtils';
 import Skeleton, { SkeletonLinea } from './Skeleton';
 import { useConteoRecordado } from '../hooks/useConteoRecordado';
 import { formatoPct, etiquetaBase } from '../lib/textUtils';
+import { textoPctMedicion } from '../lib/mosaico';
 import { agruparPorLote } from '../lib/galeriaCarpetas';
 import { anioColombia } from '../lib/fechas';
 import { aniosDesde, textoMedicionesConLotes, textoMedicionesDia } from '../lib/resumenDiario';
@@ -393,6 +394,7 @@ const botonVolverStyle = {
 function CajaDia({ dia, onAbrir }) {
   const nivel = dia.peor_nivel;
   const color = nivel == null ? 'var(--text-muted)' : nivelColor(nivel);
+  const colorTexto = nivel == null ? 'var(--text-muted)' : nivelColorTexto(nivel);
   return (
     <button
       type="button"
@@ -419,7 +421,7 @@ function CajaDia({ dia, onAbrir }) {
 
       {nivel != null && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
-          <span style={{ ...HISTORIAL_LINEA_STYLE, color, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ ...HISTORIAL_LINEA_STYLE, color: colorTexto, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: color }} />
             {nivelLabel(nivel)}
           </span>
@@ -486,7 +488,7 @@ function MedicionRow({ medicion, idPunto }) {
           </div>
         )}
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, marginBottom: 2 }}>
-          <span style={{ ...HISTORIAL_LINEA_STYLE, color, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ ...HISTORIAL_LINEA_STYLE, color: nivelColorTexto(nivel), display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
             {nivelLabel(nivel)}
           </span>
@@ -500,7 +502,7 @@ function MedicionRow({ medicion, idPunto }) {
           }} />
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, display: 'flex', justifyContent: 'space-between', gap: 6 }}>
-          <span>Área corroída: {formatoPct(medicion.area_corroida_pct)} {etiquetaBase(medicion)}</span>
+          <span>Área corroída: {textoPctMedicion(medicion)}{medicion.area_corroida_pct != null && ` ${etiquetaBase(medicion)}`}</span>
           {medicion.notas && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 100 }}>{medicion.notas}</span>}
         </div>
       </div>
@@ -517,7 +519,7 @@ function MedicionRow({ medicion, idPunto }) {
     <Link
       to={destino}
       className="historial-fila historial-fila--link"
-      aria-label={`Ver foto del ${fecha}: ${nivelLabel(nivel)}, ${formatoPct(medicion.area_corroida_pct)}`}
+      aria-label={`Ver foto del ${fecha}: ${nivelLabel(nivel)}, ${textoPctMedicion(medicion)}`}
     >
       {contenido}
     </Link>

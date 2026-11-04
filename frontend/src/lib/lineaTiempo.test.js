@@ -225,7 +225,7 @@ describe('lineaTiempo.js — filtrado y agrupación cronológica', () => {
     assert.match(diaOct28.gradienteSegmentos, /#dc2626 66\.67% 100%/);
     assert.match(diaOct28.gradienteSuave, /linear-gradient\(to bottom,/);
     assert.notEqual(diaOct28.gradienteSuave, diaOct28.gradienteSegmentos);
-    assert.match(diaOct28.resumenTexto, /28\/10\/2026 · 6 imágenes: 2 severa \(33%\), 2 moderada \(33%\), 2 sin corrosión \(33%\)/);
+    assert.match(diaOct28.resumenTexto, /28\/10\/2026 · 6 mediciones: 2 severa \(33%\), 2 moderada \(33%\), 2 sin corrosión \(33%\)/);
   });
 
   it('repartoVisible da a cada nivel presente al menos 12 % sin perder el total', () => {
@@ -248,7 +248,7 @@ describe('lineaTiempo.js — filtrado y agrupación cronológica', () => {
     const severa = dia.segmentos.find((s) => s.nivel === 3);
     assert.ok(severa.hastaPct - severa.desdePct >= 11.99);
     assert.equal(severa.porcentajeRedondeado, 0);  // el texto conserva la proporción real
-    assert.match(dia.resumenTexto, /301 imágenes: 1 severa \(0%\), 300 sin corrosión \(100%\)/);
+    assert.match(dia.resumenTexto, /301 mediciones: 1 severa \(0%\), 300 sin corrosión \(100%\)/);
   });
 
   it('leve y moderada usan colores claramente distintos en la barra', () => {

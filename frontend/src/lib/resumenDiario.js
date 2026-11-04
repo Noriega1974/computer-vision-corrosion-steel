@@ -2,6 +2,8 @@
 // The server answers one year per call; consumers that need several years
 // (a location's history) call it once per year and merge here.
 
+import { plural } from './textUtils.js';
+
 export const ANIO_INICIO_DATOS = 2026;
 
 // [2026 .. anioActual]; never a future year.
@@ -33,15 +35,6 @@ export function combinarResumenes(respuestas = []) {
   }
   dias.sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0));
   return { dias, totales, truncado };
-}
-
-const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
-
-// "N imágenes · x lotes con y imágenes" (same wording as formatearConteoMediciones).
-export function textoImagenesYLotes(total, lotes) {
-  const count = Number(lotes?.count) || 0;
-  const imagenes = Number(lotes?.imagenes) || 0;
-  return `${plural(total, 'imagen', 'imágenes')} · ${plural(count, 'lote', 'lotes')} con ${plural(imagenes, 'imagen', 'imágenes')}`;
 }
 
 // "X mediciones con Y lotes" (header of a location). Without batches: "X mediciones".

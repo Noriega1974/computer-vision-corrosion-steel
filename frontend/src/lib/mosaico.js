@@ -1,6 +1,6 @@
 // Helpers for the square photo tiles ("mosaico") used in the dashboard panels.
 import { nivelLabel } from './statusUtils.js';
-import { formatoPct } from './textUtils.js';
+import { formatoPct, plural } from './textUtils.js';
 
 // Route to the photo detail, same shape the list rows used.
 export function destinoMedicion(medicion, idPuntoFallback) {
@@ -12,6 +12,13 @@ export function destinoMedicion(medicion, idPuntoFallback) {
 
 export function miniaturaDe(medicion) {
   return medicion?.url_thumbnail || medicion?.url_imagen || null;
+}
+
+// Percentage text of a measurement that tolerates a missing value: the level
+// label when there is a level, otherwise "Sin dato" (never "0,0%").
+export function textoPctMedicion(medicion) {
+  if (medicion?.area_corroida_pct != null) return formatoPct(medicion.area_corroida_pct);
+  return medicion?.nivel_corrosion != null ? nivelLabel(medicion.nivel_corrosion) : 'Sin dato';
 }
 
 // Accessible name of a photo tile: name, level and percentage.
@@ -28,7 +35,7 @@ export function etiquetaTestera(medicion, fechaTexto = '') {
 
 export function etiquetaTesteraLote(nombre, total, nivel) {
   const n = Number(total) || 0;
-  return `Lote ${nombre || 'sin nombre'}, ${n} ${n === 1 ? 'imagen' : 'imágenes'}, peor nivel ${nivelLabel(nivel ?? 0)}`;
+  return `Lote ${nombre || 'sin nombre'}, ${plural(n, 'medición', 'mediciones')}, peor nivel ${nivelLabel(nivel ?? 0)}`;
 }
 
 // Short name under a tile: photo name, otherwise the time of the day.
