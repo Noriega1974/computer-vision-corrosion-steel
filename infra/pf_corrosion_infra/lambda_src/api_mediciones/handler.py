@@ -719,9 +719,15 @@ def lambda_handler(event: dict, context) -> dict:
                 dia_hasta = _fecha_estricta(hasta) if hasta else None
                 if (desde and not dia_desde) or (hasta and not dia_hasta) or (dia_desde and dia_hasta and dia_desde > dia_hasta):
                     return _respuesta(400, ERROR_RANGO)
-                inferior = _inicio_dia_utc(dia_desde) if dia_desde else ""
-                superior = _fin_dia_utc(dia_hasta) if dia_hasta else "~"
-                condicion = condicion & Key("timestamp").between(inferior, superior)
+                # DynamoDB rejects empty strings as key values, so an open end
+                # uses a one-sided condition instead of BETWEEN with "".
+                if dia_desde and dia_hasta:
+                    rango_ts = Key("timestamp").between(_inicio_dia_utc(dia_desde), _fin_dia_utc(dia_hasta))
+                elif dia_desde:
+                    rango_ts = Key("timestamp").gte(_inicio_dia_utc(dia_desde))
+                else:
+                    rango_ts = Key("timestamp").lte(_fin_dia_utc(dia_hasta))
+                condicion = condicion & rango_ts
             creador = _usuario_actual(event)
 
             # GSI tipo-timestamp-index: PK="medicion" constante, SK=timestamp DESC
