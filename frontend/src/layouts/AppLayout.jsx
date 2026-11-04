@@ -1,4 +1,4 @@
-import { leerModoOscuro } from '../lib/tema';
+import { leerModoOscuro, CLAVE_MODO_OSCURO } from '../lib/tema';
 import React, { useState, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
@@ -33,9 +33,15 @@ export default function AppLayout() {
   // Aplicar tema al documento raíz
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
-    localStorage.setItem('corria-darkmode', darkMode);
-    window.dispatchEvent(new CustomEvent('corria-darkmode', { detail: darkMode }));
   }, [darkMode]);
+
+  // Only an explicit toggle saves the choice; mounting never writes the key.
+  const alternarOscuro = () => {
+    const siguiente = !darkMode;
+    try { localStorage.setItem(CLAVE_MODO_OSCURO, String(siguiente)); } catch { /* storage blocked */ }
+    setDarkMode(siguiente);
+    window.dispatchEvent(new CustomEvent('corria-darkmode', { detail: siguiente }));
+  };
 
   // El selector "Modo de visualización" en Configuración cambia el tema
   // desde ahí -- se escucha el mismo evento que se dispara arriba.
@@ -105,7 +111,7 @@ export default function AppLayout() {
           onMenuToggle={handleSidebarToggle}
           isMobile={isMobile}
           darkMode={darkMode}
-          onToggleDark={() => setDarkMode(d => !d)}
+          onToggleDark={alternarOscuro}
         />
 
         <main style={{

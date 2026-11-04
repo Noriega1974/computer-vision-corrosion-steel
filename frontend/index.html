@@ -9,6 +9,10 @@
     <meta name="description" content="Panel de inspección de corrosión en lámina galvanizada: registro de mediciones, detección asistida por IA y seguimiento por planta." />
     <!-- Título de arranque. A partir del primer render lo reemplaza
          PageHeader con el nombre de la sección activa. -->
+    <!-- Apply the saved theme before first paint (no light flash). Nothing saved = light. -->
+    <script>
+      try { document.documentElement.setAttribute('data-theme', localStorage.getItem('corria-darkmode') === 'true' ? 'dark' : 'light'); } catch (e) {}
+    </script>
     <title>PixelRust · Detección de corrosión</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import { modoOscuroInicial } from './tema.js';
 
 describe('modoOscuroInicial', () => {
-  it('the saved choice wins over the system preference', () => {
-    assert.equal(modoOscuroInicial('true', false), true);
-    assert.equal(modoOscuroInicial('false', true), false);
+  it('only an explicit saved "true" is dark', () => {
+    assert.equal(modoOscuroInicial('true'), true);
+    assert.equal(modoOscuroInicial('false'), false);
   });
-  it('falls back to the system preference when nothing is saved', () => {
-    assert.equal(modoOscuroInicial(null, true), true);
-    assert.equal(modoOscuroInicial(null, false), false);
+  it('is light when nothing (or junk) is saved, whatever the system prefers', () => {
+    assert.equal(modoOscuroInicial(null), false);
     assert.equal(modoOscuroInicial(undefined), false);
-    assert.equal(modoOscuroInicial('otro', true), true);
+    assert.equal(modoOscuroInicial('otro'), false);
+    assert.equal(modoOscuroInicial(null, true), false);
   });
 });
