@@ -177,7 +177,7 @@ export default function BarraProgresoSubida({ enlaceNuevaMedicion = false, onDes
       {descartando && !running && (
         <ConfirmDialog
           title="Descartar las fotos pendientes"
-          message={`Las ${detenidas === 1 ? 'foto pendiente no se subirá' : `${detenidas} fotos pendientes no se subirán`}. Las fotos ya analizadas se conservan en la galería.`}
+          message={`${detenidas === 1 ? 'La foto pendiente no se subirá' : `Las ${detenidas} fotos pendientes no se subirán`}. Las fotos ya analizadas se conservan en la galería.`}
           confirmLabel="Descartar"
           cancelLabel="Volver"
           tone="danger"

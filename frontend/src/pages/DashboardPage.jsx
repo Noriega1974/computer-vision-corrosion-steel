@@ -80,18 +80,18 @@ export default function DashboardPage() {
   // -- nadie leía ese parámetro. Selecciona el punto apenas carga la lista.
   // Applied once: a later refetch must not undo what the user picked since.
   const [searchParams] = useSearchParams();
-  const puntoUrlAplicadoRef = useRef(false);
+  // Remembers which ?punto= value was already applied, so a refetch never undoes the
+  // user's later pick, but a new ?punto= value (or a point that loads later) still applies.
+  const puntoUrlAplicadoRef = useRef(null);
   const seleccionPorUrlRef = useRef(null);
   useEffect(() => {
-    if (puntoUrlAplicadoRef.current) return;
     const idPunto = searchParams.get('punto');
-    if (!idPunto || puntos.length === 0) return;
-    puntoUrlAplicadoRef.current = true;
+    if (!idPunto || idPunto === puntoUrlAplicadoRef.current || puntos.length === 0) return;
     const match = puntos.find(p => p.id_bloque === idPunto);
-    if (match) {
-      seleccionPorUrlRef.current = match.id_bloque;
-      setSelectedPunto(match);
-    }
+    if (!match) return;
+    puntoUrlAplicadoRef.current = idPunto;
+    seleccionPorUrlRef.current = match.id_bloque;
+    setSelectedPunto(match);
   }, [searchParams, puntos]);
 
 
