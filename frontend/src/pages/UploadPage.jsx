@@ -132,16 +132,20 @@ export default function UploadPage() {
   const [exifGps, setExifGps] = useState(null);       // {latitude, longitude}
   const [dragOver, setDragOver] = useState(false);
 
-  // Multi-photo mode (2+ files or explicit batch selection): queue handled by useUploadLote.
+  // Cola de varias fotos (gestor de subida en segundo plano). `modo` es la elección de
+  // arriba: 'individual' guarda cada foto como medición propia; 'lote' las agrupa bajo un
+  // nombre. Cambiar de modo conserva las fotos y solo cambia cómo se guardarán.
   const lote = useUploadLote();
+  const [modo, setModo] = useState('individual');
   const [nombreLote, setNombreLote] = useState('');
   const [loteIdActivo, setLoteIdActivo] = useState(null);
-  // Cola de varias fotos: existe mientras haya fotos en ella. Con una sola foto se
-  // usa el flujo individual; la opción de agrupar en un lote solo aparece con 2 o más.
+  // La cola se muestra mientras tenga fotos; una sola foto individual usa el flujo de una foto.
   const modoLote = lote.iniciado || lote.items.length > 0;
-  const [agruparEnLote, setAgruparEnLote] = useState(true);
-  // Con una sola foto en la cola no hay lote que formar; una sesión ya iniciada conserva el suyo.
-  const agrupar = lote.iniciado ? Boolean(loteIdActivo) : (agruparEnLote && lote.items.length > 1);
+  // Cola (varias fotos o carga por lotes) frente al flujo de una sola foto.
+  const usaCola = modoLote || modo === 'lote';
+  // Una sesión ya iniciada conserva su lote (o la falta de él).
+  const agrupar = lote.iniciado ? Boolean(loteIdActivo) : modo === 'lote';
+  const cambioDeModoBloqueado = lote.iniciado || uploading;
   const [avisoArchivos, setAvisoArchivos] = useState(null);  // {rechazados: string[], excedidos: number}
 
   // Detalles opcionales
@@ -195,14 +199,35 @@ export default function UploadPage() {
     let excedidos = 0;
     if (modoLote) {
       excedidos = lote.agregar(validos);
-    } else if (validos.length === 1) {
+    } else if (validos.length === 1 && modo === 'individual') {
       procesarImagen(validos[0]);
-    } else if (validos.length >= 2) {
-      setAgruparEnLote(true);
+    } else if (validos.length >= 1) {
       excedidos = lote.agregar(validos);
     }
     setAvisoArchivos(rechazados.length || excedidos ? { rechazados, excedidos } : null);
-  }, [modoLote, lote, procesarImagen]);
+  }, [modoLote, modo, lote, procesarImagen]);
+
+  const limpiarFotoUnica = useCallback(() => {
+    setImagen(null); setNombre(''); setPreview(null); setExifGps(null);
+  }, []);
+
+  // Cambiar de modo conserva las fotos. Una foto suelta pasa a la cola al agrupar; en la
+  // cola, una sola foto individual vuelve al flujo de una foto (efecto de abajo).
+  const cambiarModo = useCallback((nuevo) => {
+    if (cambioDeModoBloqueado || nuevo === modo) return;
+    if (nuevo === 'lote' && imagen) {
+      lote.agregar([imagen]);
+      limpiarFotoUnica();
+    }
+    setModo(nuevo);
+  }, [cambioDeModoBloqueado, modo, imagen, lote, limpiarFotoUnica]);
+
+  useEffect(() => {
+    if (modo !== 'individual' || lote.iniciado || lote.items.length !== 1) return;
+    const archivo = lote.items[0].file;
+    lote.limpiar();
+    procesarImagen(archivo);
+  }, [modo, lote, procesarImagen]);
 
   // Drag & drop
   const handleDrop = useCallback(e => {
@@ -229,7 +254,7 @@ export default function UploadPage() {
     setErrorLocal(null);
   }, [lote]);
 
-  const faltaAlgo = (modoLote ? (!bloqueSeleccionado || lote.items.length === 0) : (!imagen || !bloqueSeleccionado)) || fechaInvalida;
+  const faltaAlgo = (usaCola ? (!bloqueSeleccionado || lote.items.length === 0) : (!imagen || !bloqueSeleccionado)) || fechaInvalida;
 
   // Body of one /medicion request in batch mode: shared fields plus the row's
   // own name and EXIF GPS, and the batch folder identity (lote_id + lote_nombre).
@@ -268,7 +293,7 @@ export default function UploadPage() {
         return;
       }
     }
-    if (modoLote) {
+    if (usaCola) {
       if (!bloqueSeleccionado || lote.running || lote.items.length === 0) return;
       setErrorLocal(null);
       const loteId = agrupar ? (loteIdActivo || generarLoteId()) : null;
@@ -365,7 +390,7 @@ export default function UploadPage() {
         <form onSubmit={handleSubmit}>
 
           {/* ─── SECCIÓN 1: Imagen ─── */}
-          <Section title={modoLote ? '1. Imágenes' : '1. Foto'} accent="var(--accent-amber)">
+          <Section title={!modoLote && preview ? '1. Foto' : '1. Imágenes'} accent="var(--accent-amber)">
             <p
               role="note"
               style={{
@@ -384,48 +409,49 @@ export default function UploadPage() {
               </Link>
             </p>
 
-            {modoLote && !lote.iniciado && lote.items.length > 1 && (
-              <div style={{ marginBottom: 'var(--space-3)' }}>
-                <div
-                  role="radiogroup"
-                  aria-label="Cómo subir las imágenes"
-                  style={{
-                    display: 'inline-flex', padding: 3, gap: 2, borderRadius: 9, maxWidth: '100%',
-                    background: 'var(--bg-inset)', border: '1px solid var(--border)',
-                  }}
-                >
-                  {[
-                    { valor: true, titulo: 'Un lote' },
-                    { valor: false, titulo: 'Fotos individuales' },
-                  ].map((op) => {
-                    const activo = agrupar === op.valor;
-                    return (
-                      <button
-                        key={String(op.valor)}
-                        type="button"
-                        role="radio"
-                        aria-checked={activo}
-                        onClick={() => setAgruparEnLote(op.valor)}
-                        style={{
-                          padding: '6px 14px', borderRadius: 7, cursor: 'pointer', border: 'none',
-                          background: activo ? 'var(--accent-amber)' : 'transparent',
-                          color: activo ? 'white' : 'var(--text-secondary)',
-                          fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
-                          transition: 'background-color var(--dur-fast), color var(--dur-fast)',
-                        }}
-                      >
-                        {op.titulo}
-                      </button>
-                    );
-                  })}
-                </div>
-                <div style={{ marginTop: 6, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
-                  {agrupar ? 'Se agrupan bajo un nombre en la galería.' : 'Cada imagen se guarda por separado.'}
-                </div>
+            <div style={{ marginBottom: 'var(--space-3)' }}>
+              <div
+                role="radiogroup"
+                aria-label="Tipo de carga"
+                style={{
+                  display: 'inline-flex', padding: 3, gap: 2, borderRadius: 9, maxWidth: '100%',
+                  background: 'var(--bg-inset)', border: '1px solid var(--border)',
+                  opacity: cambioDeModoBloqueado ? 0.6 : 1,
+                }}
+              >
+                {[
+                  { valor: 'individual', titulo: 'Muestras individuales' },
+                  { valor: 'lote', titulo: 'Carga por lotes' },
+                ].map((op) => {
+                  const activo = modo === op.valor;
+                  return (
+                    <button
+                      key={op.valor}
+                      type="button"
+                      role="radio"
+                      aria-checked={activo}
+                      disabled={cambioDeModoBloqueado}
+                      onClick={() => cambiarModo(op.valor)}
+                      style={{
+                        padding: '6px 14px', borderRadius: 7, border: 'none',
+                        cursor: cambioDeModoBloqueado ? 'not-allowed' : 'pointer',
+                        background: activo ? 'var(--accent-amber)' : 'transparent',
+                        color: activo ? 'white' : 'var(--text-secondary)',
+                        fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)',
+                        transition: 'background-color var(--dur-fast), color var(--dur-fast)',
+                      }}
+                    >
+                      {op.titulo}
+                    </button>
+                  );
+                })}
               </div>
-            )}
+              <div style={{ marginTop: 6, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
+                {agrupar ? 'Se agrupan bajo un nombre en la galería.' : 'Cada imagen se guarda como una medición independiente.'}
+              </div>
+            </div>
 
-            {modoLote && !lote.iniciado && agrupar && (
+            {!lote.iniciado && agrupar && (
               <div style={{ marginBottom: 'var(--space-3)' }}>
                 <label htmlFor="upload-nombre-lote" style={labelStyle}>
                   Nombre del lote
@@ -455,6 +481,7 @@ export default function UploadPage() {
                   onAgregar={procesarArchivos}
                   onVerGaleria={irAGaleria}
                   onSubirMas={reiniciarLote}
+                  agrupado={agrupar}
                 />
               </>
             ) : !preview ? (
@@ -517,7 +544,7 @@ export default function UploadPage() {
                 <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
                   <button
                     type="button"
-                    onClick={() => { setImagen(null); setNombre(''); setPreview(null); setExifGps(null); }}
+                    onClick={limpiarFotoUnica}
                     style={{ ...btnSecondaryStyle, flex: 'none', padding: '8px 16px', fontSize: 'var(--text-xs)' }}
                   >
                     Cambiar imagen
@@ -635,7 +662,7 @@ export default function UploadPage() {
                 )}
               </div>
             )}
-            {modoLote && (
+            {modo === 'lote' && (
               <div style={{ marginTop: 8, fontSize: 'var(--text-2xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
                 Todo el lote usa esta fecha.
               </div>
@@ -665,7 +692,7 @@ export default function UploadPage() {
           )}
 
           {/* Botón submit (in batch mode it disappears once the batch starts) */}
-          {!(modoLote && lote.iniciado) && (<>
+          {!lote.iniciado && (<>
           <button
             type="submit"
             disabled={faltaAlgo || uploading}
@@ -688,7 +715,7 @@ export default function UploadPage() {
             ) : (
               <>
                 <IconoCamara size={18} aria-hidden="true" />
-                {modoLote ? `Analizar ${lote.items.length.toLocaleString('es-CO')} ${lote.items.length === 1 ? 'imagen' : 'imágenes'}` : 'Analizar imagen'}
+                {usaCola ? `Analizar ${lote.items.length.toLocaleString('es-CO')} ${lote.items.length === 1 ? 'imagen' : 'imágenes'}` : 'Analizar imagen'}
               </>
             )}
           </button>
@@ -697,7 +724,7 @@ export default function UploadPage() {
             <p id="upload-falta" style={{ margin: 'var(--space-2) 0 0', fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>
               {fechaInvalida
                 ? 'Falta: una fecha válida (hoy o anterior)'
-                : modoLote
+                : usaCola
                   ? (!bloqueSeleccionado && lote.items.length === 0 ? 'Falta: imágenes y punto' : !bloqueSeleccionado ? 'Falta: elegir el punto de medición' : 'Falta: al menos una imagen')
                   : (!imagen && !bloqueSeleccionado ? 'Falta: foto y punto' : !imagen ? 'Falta: la foto' : 'Falta: el punto')}
             </p>

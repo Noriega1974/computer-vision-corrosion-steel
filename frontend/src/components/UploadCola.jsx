@@ -110,7 +110,7 @@ function TesteraCola({ it, ocupado, iniciado, seleccionando, seleccionada, onAlt
 // Queue for a batch upload (up to LOTE_MAX rows). Paged, FILAS_POR_PAGINA rows
 // at a time, so a 1000-photo batch never renders 1000 rows or previews at once.
 // The polite live region announces only per-row completion.
-export default function UploadCola({ lote, onQuitar, onQuitarVarias, onReintentar, onAgregar, onVerGaleria, onSubirMas }) {
+export default function UploadCola({ lote, onQuitar, onQuitarVarias, onReintentar, onAgregar, onVerGaleria, onSubirMas, agrupado = true }) {
   const { items, running, anuncio, iniciado, terminado, listos, errores } = lote;
   const resumenRef = useRef(null);
   const inputRef = useRef(null);
@@ -159,7 +159,7 @@ export default function UploadCola({ lote, onQuitar, onQuitarVarias, onReintenta
             {errores > 0 && <> · <span style={numStyle}>{errores}</span> con error</>}
           </h3>
           <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-3)', flexWrap: 'wrap' }}>
-            <button type="button" onClick={onSubirMas} style={btnSecondary}>Subir otro lote</button>
+            <button type="button" onClick={onSubirMas} style={btnSecondary}>{agrupado ? 'Subir otro lote' : 'Subir más imágenes'}</button>
             <button type="button" onClick={onVerGaleria} style={btnPrimary}>Ver en la galería</button>
           </div>
         </div>
@@ -225,7 +225,7 @@ export default function UploadCola({ lote, onQuitar, onQuitarVarias, onReintenta
         ref={listaRef}
         tabIndex={-1}
         altoMax={420}
-        label={paginas > 1 ? `Imágenes del lote, página ${pagina + 1} de ${paginas}` : 'Imágenes del lote'}
+        label={paginas > 1 ? `Imágenes, página ${pagina + 1} de ${paginas}` : 'Imágenes'}
         style={{ outline: 'none' }}
       >
         {filas.map((it) => (
@@ -244,7 +244,7 @@ export default function UploadCola({ lote, onQuitar, onQuitarVarias, onReintenta
       </Mosaico>
 
       {paginas > 1 && (
-        <nav aria-label="Páginas del lote" style={{
+        <nav aria-label="Páginas de imágenes" style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
           marginTop: 'var(--space-3)', fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)', color: 'var(--text-muted)',
         }}>
