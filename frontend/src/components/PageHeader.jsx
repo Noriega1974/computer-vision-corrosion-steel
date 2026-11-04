@@ -10,6 +10,7 @@ const ROUTE_TITLES = {
   '/upload':       'Nueva medición',
   '/galeria':      'Galería',
   '/puntos':       'Puntos',
+  '/zonas':        'Zonas',
   '/usuarios':     'Usuarios',
   '/configuracion':'Configuración',
   '/deteccion-ia': 'Detección IA',

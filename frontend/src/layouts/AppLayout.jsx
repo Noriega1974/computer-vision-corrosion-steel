@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import Sidebar from '../components/Sidebar';
 import PageHeader from '../components/PageHeader';
+import LimiteErrores from '../components/LimiteErrores';
 
 export default function AppLayout() {
   const { logout } = useAuth();
+  const { pathname } = useLocation();
 
   // Estado del sidebar — persiste en localStorage
   const [collapsed, setCollapsed] = useState(
@@ -112,7 +114,9 @@ export default function AppLayout() {
           overflow: 'auto',
           background: 'var(--bg-page)',
         }}>
-          <Outlet />
+          <LimiteErrores key={pathname}>
+            <Outlet />
+          </LimiteErrores>
         </main>
       </div>
     </div>
