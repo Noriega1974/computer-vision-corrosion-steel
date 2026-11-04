@@ -160,7 +160,8 @@ export default function TarjetaLote({ lote, onClick, compacta = false }) {
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, width: '100%' }}>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ ...CARD_TITULO_STYLE, color: 'var(--text-primary)' }}>
+          {/* Up to two lines (the name identifies the batch), then date and count underneath. */}
+          <div className="tarjeta-lote__titulo" title={lote?.nombre || 'Lote sin nombre'} style={{ ...CARD_TITULO_STYLE, color: 'var(--text-primary)' }}>
             {lote?.nombre || 'Lote sin nombre'}
           </div>
           <div style={{

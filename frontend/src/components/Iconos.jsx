@@ -560,3 +560,13 @@ export function IconoCalendario(props) {
     </Base>
   );
 }
+
+export function IconoMasAcciones(props) {
+  return (
+    <Base {...props}>
+      <circle cx="5.5" cy="12" r="1.2"/>
+      <circle cx="12" cy="12" r="1.2"/>
+      <circle cx="18.5" cy="12" r="1.2"/>
+    </Base>
+  );
+}

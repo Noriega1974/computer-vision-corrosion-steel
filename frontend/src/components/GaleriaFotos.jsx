@@ -14,6 +14,7 @@ import DatePicker from './DatePicker';
 import { enRangoDiasColombia, hoyColombiaISO, fechaUltimaMedicionISO } from '../lib/fechas';
 import { agruparPorLote, contarOcultasPorFiltro, formatearConteoMediciones, medicionesDeLote } from '../lib/galeriaCarpetas';
 import TarjetaLote, { FichaDetalleLote } from './TarjetaLote';
+import MenuMasAcciones from './MenuMasAcciones';
 
 const ORDENES = [
   { key: 'recientes', label: 'Más recientes' },
@@ -350,38 +351,14 @@ export default function GaleriaFotos({
                     <IconoCasillaMarcada size={13} aria-hidden="true" />
                     Seleccionar lote completo
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => accionDeLote('mover')}
+                  <MenuMasAcciones
                     disabled={accionesLoteBloqueadas}
                     title={tituloAccionLote}
-                    style={{
-                      opacity: accionesLoteBloqueadas ? 0.5 : 1,
-                      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 9px',
-                      background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 7,
-                      cursor: accionesLoteBloqueadas ? 'not-allowed' : 'pointer', color: 'var(--text-secondary)',
-                      fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-2xs)',
-                    }}
-                  >
-                    <IconoMoverACarpeta size={13} aria-hidden="true" />
-                    Mover lote
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => accionDeLote('eliminar')}
-                    disabled={accionesLoteBloqueadas}
-                    title={tituloAccionLote}
-                    style={{
-                      opacity: accionesLoteBloqueadas ? 0.5 : 1,
-                      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 9px',
-                      background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.3)', borderRadius: 7,
-                      cursor: accionesLoteBloqueadas ? 'not-allowed' : 'pointer', color: 'var(--accent-red)',
-                      fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-2xs)',
-                    }}
-                  >
-                    <IconoEliminar size={13} aria-hidden="true" />
-                    Eliminar lote
-                  </button>
+                    items={[
+                      { key: 'mover', label: 'Mover lote', Icono: IconoMoverACarpeta, onClick: () => accionDeLote('mover') },
+                      { key: 'eliminar', label: 'Eliminar lote', Icono: IconoEliminar, peligro: true, onClick: () => accionDeLote('eliminar') },
+                    ]}
+                  />
                 </div>
               ) : null}
             />
