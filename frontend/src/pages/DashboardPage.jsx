@@ -8,6 +8,7 @@ import ColombiaMap from '../components/ColombiaMap';
 import PlantDetail from '../components/PlantDetail';
 import PlantsTable from '../components/PlantsTable';
 import LineaTiempoMediciones from '../components/LineaTiempoMediciones';
+import BarraProgresoSubida from '../components/BarraProgresoSubida';
 import Skeleton from '../components/Skeleton';
 
 import { useBloques } from '../hooks/useBloques';
@@ -108,7 +109,7 @@ export default function DashboardPage() {
           width: '100%',
         }}
       >
-
+        <BarraProgresoSubida enlaceNuevaMedicion />
 
         {/* ========================================================
             KPI SECTION

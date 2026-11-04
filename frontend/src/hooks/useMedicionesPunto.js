@@ -4,7 +4,8 @@ import { useRefreshKey } from './RefreshKeyContext';
 
 // `completo` trae hasta 500 fotos del punto sin máscaras ni detecciones (la
 // página de un punto en la galería); por defecto el backend entrega 50.
-export function useMedicionesPunto(idPunto, { completo = false } = {}) {
+// `limite` (1-500) pide solo las N más recientes (p. ej. 1 para la última medición).
+export function useMedicionesPunto(idPunto, { completo = false, limite = null } = {}) {
   const { key: globalKey } = useRefreshKey();
   const [localKey, setLocalKey] = useState(0);
   const [mediciones, setMediciones] = useState([]);
@@ -32,7 +33,7 @@ export function useMedicionesPunto(idPunto, { completo = false } = {}) {
       setLoading(true);
     }
     setError(null);
-    apiGet(`/mediciones/${idPunto}${completo ? '?limite=500&resumen=1' : ''}`)
+    apiGet(`/mediciones/${idPunto}${completo ? '?limite=500&resumen=1' : (limite ? `?limite=${limite}` : '')}`)
       .then(data => {
         if (!cancelled) {
           setMediciones(data?.mediciones ?? []);
@@ -46,7 +47,7 @@ export function useMedicionesPunto(idPunto, { completo = false } = {}) {
         }
       });
     return () => { cancelled = true; };
-  }, [idPunto, completo, globalKey, localKey]);
+  }, [idPunto, completo, limite, globalKey, localKey]);
 
   const refetch = useCallback(() => setLocalKey(k => k + 1), []);
   return { mediciones, loading, error, refetch };

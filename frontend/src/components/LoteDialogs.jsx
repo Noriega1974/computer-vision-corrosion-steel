@@ -36,7 +36,29 @@ function Marco({ titulo, children, onCancelar, onConfirmar, confirmar, confirman
 
 const fotos = (n) => `${n} ${n === 1 ? 'foto' : 'fotos'}`;
 
-export function EliminarLoteDialog({ cantidad, procesando, onConfirmar, onCancelar }) {
+function AvisoOcultasPorFiltro({ ocultasPorFiltro = 0, cantidad = 0 }) {
+  if (!ocultasPorFiltro || ocultasPorFiltro <= 0) return null;
+  return (
+    <p
+      role="note"
+      style={{
+        ...textoStyle,
+        marginTop: 10,
+        padding: '8px 10px',
+        borderRadius: 7,
+        background: 'rgba(217,119,6,0.10)',
+        border: '1px solid rgba(217,119,6,0.35)',
+        color: 'var(--text-primary)',
+        fontSize: 'var(--text-xs)',
+        fontWeight: 600,
+      }}
+    >
+      {`Atención: esta acción afecta al lote completo e incluye ${ocultasPorFiltro} ${ocultasPorFiltro === 1 ? 'imagen oculta' : 'imágenes ocultas'} por el filtro activo (total: ${cantidad} imágenes).`}
+    </p>
+  );
+}
+
+export function EliminarLoteDialog({ cantidad, ocultasPorFiltro = 0, procesando, onConfirmar, onCancelar }) {
   return (
     <Marco
       titulo={`¿Eliminar ${fotos(cantidad)}?`} confirmar="Eliminar" confirmando="Eliminando…" peligro
@@ -47,13 +69,14 @@ export function EliminarLoteDialog({ cantidad, procesando, onConfirmar, onCancel
           ? 'La foto y su resultado de corrosión se borran para siempre y dejan de contar en las estadísticas del punto. Esta acción no se puede deshacer.'
           : 'Las fotos y sus resultados de corrosión se borran para siempre y dejan de contar en las estadísticas del punto. Esta acción no se puede deshacer.'}
       </p>
+      <AvisoOcultasPorFiltro ocultasPorFiltro={ocultasPorFiltro} cantidad={cantidad} />
     </Marco>
   );
 }
 
 // Destino: admin y tecnico eligen entre los puntos de su empresa (el backend ya
 // los acota); super_admin elige primero la empresa y luego el punto.
-export function MoverLoteDialog({ cantidad, puntoActual, procesando, onConfirmar, onCancelar }) {
+export function MoverLoteDialog({ cantidad, ocultasPorFiltro = 0, puntoActual, procesando, onConfirmar, onCancelar }) {
   const { user } = useAuth();
   const esSuperAdmin = user?.groups?.includes('super_admin');
   const { empresas } = useEmpresas(esSuperAdmin);
@@ -71,6 +94,7 @@ export function MoverLoteDialog({ cantidad, puntoActual, procesando, onConfirmar
       onCancelar={onCancelar}
     >
       <p style={textoStyle}>Las {fotos(cantidad)} seleccionadas pasarán al punto que elijas.</p>
+      <AvisoOcultasPorFiltro ocultasPorFiltro={ocultasPorFiltro} cantidad={cantidad} />
       {esSuperAdmin && (
         <>
           <label htmlFor="mover-empresa" style={etiquetaStyle}>Zona</label>

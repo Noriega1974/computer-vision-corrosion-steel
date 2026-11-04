@@ -721,6 +721,100 @@ def _lote_nombre(valor) -> str:
     return _nombre_foto(valor)
 
 
+# ── Idempotencia de POST /medicion con imagen_key ────────────────────────────
+# El cliente reintenta tras un 502/503/504 (el análisis pudo terminar aunque la
+# respuesta se perdiera). Un ítem marcador {id_punto: "IDEM#<imagen_key>", sk:
+# "IDEM"} (sin tipo_registro: no entra a los GSI ni a los listados) registra el
+# estado: "procesando" mientras corre (un reintento recibe 409) y "listo" con la
+# referencia a la medición creada (un reintento recibe la misma respuesta, sin
+# duplicar). La clave cuelga de uploads/{sub}/, así que es propia del usuario.
+SK_IDEMPOTENCIA = "IDEM"
+IDEM_PROCESANDO_MAX_S = 120   # un reclamo más viejo se considera abandonado
+
+
+def _pk_idempotencia(imagen_key: str) -> str:
+    return f"IDEM#{imagen_key}"
+
+
+def _marcador_idempotencia(imagen_key: str) -> dict | None:
+    try:
+        return tabla_mediciones.get_item(Key={"id_punto": _pk_idempotencia(imagen_key), "sk": SK_IDEMPOTENCIA}).get("Item")
+    except Exception as exc:
+        logger.warning("No se pudo leer el marcador de idempotencia %s: %s", imagen_key, exc)
+        return None
+
+
+def _respuesta_previa(marcador: dict, bloque_id: str, bloque: dict) -> dict | None:
+    """Cuerpo de la respuesta original si el marcador está 'listo', es del mismo
+    bloque y la medición sigue existiendo; None en cualquier otro caso."""
+    if marcador.get("estado") != "listo" or marcador.get("bloque_id") != bloque_id:
+        return None
+    try:
+        existe = tabla_mediciones.get_item(Key={"id_punto": bloque_id, "sk": marcador["sk_medicion"]}).get("Item")
+        if not existe:
+            return None
+        cuerpo = json.loads(s3.get_object(Bucket=BUCKET_NAME, Key=marcador["s3_key_resultado"])["Body"].read())
+    except Exception as exc:
+        logger.warning("No se pudo reconstruir la respuesta previa de %s: %s", marcador.get("id_medicion"), exc)
+        return None
+    cuerpo["bloque_info"] = {
+        "id_bloque": bloque_id, "nombre": bloque.get("nombre", ""), "ciudad": bloque.get("ciudad", ""),
+        "coordenadas": bloque.get("coordenadas", {}),
+    }
+    return cuerpo
+
+
+MENSAJE_YA_PROCESADA = ("Esta foto ya se procesó antes y no se puede analizar de nuevo. "
+                        "Revisa la galería: si no aparece, vuelve a subirla")
+
+
+def _medicion_previa_existe(marcador: dict, bloque_id: str) -> bool:
+    """True si la medición que cerró un marcador 'listo' sigue en su bloque. Un
+    error de lectura se propaga (500): mejor fallar que reprocesar y duplicar."""
+    if marcador.get("bloque_id") != bloque_id or not marcador.get("sk_medicion"):
+        return False
+    return bool(tabla_mediciones.get_item(Key={"id_punto": bloque_id, "sk": marcador["sk_medicion"]}).get("Item"))
+
+
+def _subida_existe(imagen_key: str) -> bool:
+    try:
+        s3.head_object(Bucket=BUCKET_NAME, Key=imagen_key)
+        return True
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
+            return False
+        raise
+
+
+def _reclamar_idempotencia(imagen_key: str, retomar_listo: bool = False) -> bool:
+    """Marca la clave como 'procesando'. False si otra solicitud la tiene (o ya
+    terminó); un reclamo abandonado (más de IDEM_PROCESANDO_MAX_S) se retoma.
+    Con `retomar_listo` también se retoma un marcador 'listo' cuya medición ya
+    no existe (la condición sigue siendo atómica: solo un reintento gana)."""
+    ahora = int(time.time())
+    condicion = Attr("sk").not_exists() | (Attr("estado").eq("procesando") & Attr("inicio").lt(ahora - IDEM_PROCESANDO_MAX_S))
+    if retomar_listo:
+        condicion = condicion | Attr("estado").eq("listo")
+    try:
+        tabla_mediciones.put_item(
+            Item={"id_punto": _pk_idempotencia(imagen_key), "sk": SK_IDEMPOTENCIA, "estado": "procesando", "inicio": ahora},
+            ConditionExpression=condicion,
+        )
+        return True
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            return False
+        raise
+
+
+def _liberar_idempotencia(imagen_key: str) -> None:
+    """Quita el reclamo tras un fallo para que el reintento pueda procesar."""
+    try:
+        tabla_mediciones.delete_item(Key={"id_punto": _pk_idempotencia(imagen_key), "sk": SK_IDEMPOTENCIA})
+    except Exception as exc:
+        logger.warning("No se pudo liberar el marcador de idempotencia %s: %s", imagen_key, exc)
+
+
 def _ahora_utc() -> datetime:
     """Current UTC time (single seam so tests can freeze the clock)."""
     return datetime.now(timezone.utc)
@@ -747,6 +841,9 @@ def _siguiente_timestamp(ts: str) -> str:
 
 def _procesar_solicitud(event: dict, tiempos: dict) -> dict:
     t_inicio = time.perf_counter()
+    clave_reclamada = None   # imagen_key con reclamo de idempotencia a liberar si algo falla
+    conservar_subida = False  # no se pudo cerrar el marcador: el temporal queda para un reintento
+    retomar_listo = False    # marcador 'listo' sin respuesta reconstruible y sin medición: se reprocesa
     try:
         creador = _usuario_actual(event)
         if creador and creador.get("rol") == "cliente":
@@ -815,6 +912,26 @@ def _procesar_solicitud(event: dict, tiempos: dict) -> dict:
         fecha_clima = timestamp_custom if timestamp_custom else None
         clima = _obtener_clima(coords.get("lat"), coords.get("lng"), fecha_clima) if coords.get("lat") is not None else None
 
+        usa_clave = not imagen_b64 and isinstance(imagen_key, str)
+        if usa_clave and tomado_por_id and imagen_key.startswith(_prefijo_usuario(tomado_por_id)):
+            # Reintento de una solicitud que ya terminó (o que aún corre).
+            marcador = _marcador_idempotencia(imagen_key)
+            if marcador:
+                previa = _respuesta_previa(marcador, bloque_id_body, bloque)
+                if previa is not None:
+                    return _respuesta(200, previa)
+                if marcador.get("estado") == "procesando" and int(marcador.get("inicio", 0)) > time.time() - IDEM_PROCESANDO_MAX_S:
+                    return _respuesta(409, {"error": "La foto todavía se está analizando. Espera un momento e inténtalo de nuevo"})
+                if marcador.get("estado") == "listo":
+                    # No se pudo rehacer la respuesta: nunca un 409 permanente. Solo se
+                    # reprocesa si la medición ya no existe Y el temporal sigue ahí;
+                    # si no, se avisa que la foto ya se procesó.
+                    if _medicion_previa_existe(marcador, bloque_id_body) or not _subida_existe(imagen_key):
+                        return _respuesta(410, {"error": MENSAJE_YA_PROCESADA})
+                    retomar_listo = True
+        else:
+            usa_clave = False
+
         if imagen_b64:
             datos_imagen = base64.b64decode(imagen_b64)
         else:
@@ -827,6 +944,11 @@ def _procesar_solicitud(event: dict, tiempos: dict) -> dict:
         except Image.DecompressionBombError:
             return _respuesta(400, {"error": "La foto es demasiado grande para analizarla. Usa una imagen de menor resolución"})
         del datos_imagen
+
+        if usa_clave:
+            if not _reclamar_idempotencia(imagen_key, retomar_listo):
+                return _respuesta(409, {"error": "La foto todavía se está analizando. Espera un momento e inténtalo de nuevo"})
+            clave_reclamada = imagen_key
 
         resultado_ml = _inferir(imagen, tiempos)
 
@@ -1031,7 +1153,24 @@ def _procesar_solicitud(event: dict, tiempos: dict) -> dict:
                     logger.error("Rollback S3 (resultado) falló para %s: %s", s3_key_resultado, rb)
             raise
 
-        if not imagen_b64:
+        if clave_reclamada:
+            try:
+                tabla_mediciones.put_item(Item={
+                    "id_punto": _pk_idempotencia(clave_reclamada), "sk": SK_IDEMPOTENCIA, "estado": "listo",
+                    "bloque_id": bloque_id_body, "sk_medicion": f"MED#{ts}", "id_medicion": id_medicion,
+                    "s3_key_resultado": s3_key_resultado,
+                })
+                clave_reclamada = None
+            except Exception as exc:
+                logger.warning("No se pudo cerrar el marcador de idempotencia %s: %s", clave_reclamada, exc)
+                # Sin marcador 'listo' un reintento no puede recuperar esta respuesta:
+                # se libera el reclamo (queda libre para reprocesar) y se conserva
+                # el temporal; el marcador 'procesando' no puede quedar bloqueando.
+                _liberar_idempotencia(clave_reclamada)
+                clave_reclamada = None
+                conservar_subida = True
+
+        if not imagen_b64 and not conservar_subida:
             # La copia definitiva ya está en empresas/...: el temporal sobra.
             _borrar_subida(imagen_key)
 
@@ -1055,4 +1194,6 @@ def _procesar_solicitud(event: dict, tiempos: dict) -> dict:
 
     except Exception as e:
         logger.exception("Error en inferencia: %s", e)
+        if clave_reclamada:
+            _liberar_idempotencia(clave_reclamada)
         return _respuesta(500, {"error": "Ocurrió un error inesperado. Inténtalo de nuevo; si persiste, contacta a un administrador"})

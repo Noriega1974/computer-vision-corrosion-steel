@@ -125,7 +125,7 @@ export const apiDelete = (path) => request('DELETE', path);
 // `onProgress(fraction)` es opcional (0..1). fetch no expone el progreso de
 // subida, así que con callback se usa XMLHttpRequest; sin él, el camino
 // original con fetch queda intacto.
-export async function apiSubirS3({ url, fields }, file, onProgress) {
+export async function apiSubirS3({ url, fields }, file, onProgress, signal) {
   const form = new FormData();
   Object.entries(fields).forEach(([k, v]) => form.append(k, v));
   form.append('file', file);
@@ -137,7 +137,7 @@ export async function apiSubirS3({ url, fields }, file, onProgress) {
   };
 
   if (typeof onProgress !== 'function') {
-    const res = await fetchConRedLegible(url, { method: 'POST', body: form });
+    const res = await fetchConRedLegible(url, { method: 'POST', body: form, signal });
     if (!res.ok) throw errorHttp(res.status);
     return;
   }
@@ -155,6 +155,10 @@ export async function apiSubirS3({ url, fields }, file, onProgress) {
     };
     // Same message fetch produces for unreadable responses (network, CORS).
     xhr.onerror = () => reject(new Error('No se pudo conectar con el servidor. Revisa tu conexión a internet e inténtalo de nuevo.'));
+    // Cancelling (logout) aborts the transfer; the caller ignores the outcome.
+    xhr.onabort = () => reject(new Error('Subida cancelada.'));
+    if (signal?.aborted) { reject(new Error('Subida cancelada.')); return; }
+    signal?.addEventListener('abort', () => xhr.abort(), { once: true });
     xhr.send(form);
   });
 }
