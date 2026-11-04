@@ -78,12 +78,20 @@ export default function DashboardPage() {
 
   // "Ver punto en dashboard" (MedicionDetailPage) navega a /dashboard?punto=X
   // -- nadie leía ese parámetro. Selecciona el punto apenas carga la lista.
+  // Applied once: a later refetch must not undo what the user picked since.
   const [searchParams] = useSearchParams();
+  const puntoUrlAplicadoRef = useRef(false);
+  const seleccionPorUrlRef = useRef(null);
   useEffect(() => {
+    if (puntoUrlAplicadoRef.current) return;
     const idPunto = searchParams.get('punto');
     if (!idPunto || puntos.length === 0) return;
+    puntoUrlAplicadoRef.current = true;
     const match = puntos.find(p => p.id_bloque === idPunto);
-    if (match) setSelectedPunto(match);
+    if (match) {
+      seleccionPorUrlRef.current = match.id_bloque;
+      setSelectedPunto(match);
+    }
   }, [searchParams, puntos]);
 
 
@@ -96,6 +104,10 @@ export default function DashboardPage() {
     const previo = idSeleccionadoPrevio.current;
     idSeleccionadoPrevio.current = idSeleccionado;
     if (!idSeleccionado || idSeleccionado === previo) return;
+    // A selection that came from the URL is not a click: do not move the page.
+    if (seleccionPorUrlRef.current === idSeleccionado) { seleccionPorUrlRef.current = null; return; }
+    seleccionPorUrlRef.current = null;
+    if (typeof window.matchMedia !== 'function') return;
     if (!window.matchMedia('(max-width: 1024px)').matches) return;
     const reducir = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     detalleRef.current?.scrollIntoView({ behavior: reducir ? 'auto' : 'smooth', block: 'start' });

@@ -54,8 +54,9 @@ export function textoPromedio(pct) {
   return `${n.toFixed(1).replace('.', ',')} % promedio`;
 }
 
-// "5 de 8 puntos"
+// "5 de 8 puntos"; no total (missing, invalid or 0) -> "Sin datos", never "0 de 0 puntos".
 export function textoCobertura(cobertura) {
+  if (!(Number(cobertura?.total_puntos) > 0)) return 'Sin datos';
   const con = entero(cobertura?.con_medicion_30d);
   const total = entero(cobertura?.total_puntos);
   return `${con} de ${total} ${total === 1 ? 'punto' : 'puntos'}`;

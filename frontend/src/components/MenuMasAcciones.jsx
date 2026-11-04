@@ -23,6 +23,9 @@ export default function MenuMasAcciones({ items, etiqueta = 'Más acciones', dis
     return () => document.removeEventListener('mousedown', fuera);
   }, [abierto]);
 
+  // A disabled menu cannot stay open (e.g. a batch starts while it is showing).
+  useEffect(() => { if (disabled) setAbierto(false); }, [disabled]);
+
   const cerrar = (devolverFoco) => {
     setAbierto(false);
     if (devolverFoco) botonRef.current?.focus();
@@ -32,7 +35,7 @@ export default function MenuMasAcciones({ items, etiqueta = 'Más acciones', dis
     const lista = itemsDom();
     const i = lista.indexOf(document.activeElement);
     if (e.key === 'Escape') { e.preventDefault(); cerrar(true); }
-    else if (e.key === 'Tab') cerrar(false);
+    else if (e.key === 'Tab') cerrar(true); // the items unmount: park focus on the trigger so Tab continues from it
     else if (e.key === 'ArrowDown') { e.preventDefault(); lista[(i + 1) % lista.length]?.focus(); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); lista[(i - 1 + lista.length) % lista.length]?.focus(); }
     else if (e.key === 'Home') { e.preventDefault(); lista[0]?.focus(); }
@@ -50,7 +53,7 @@ export default function MenuMasAcciones({ items, etiqueta = 'Más acciones', dis
         aria-controls={abierto ? idMenu : undefined}
         disabled={disabled}
         title={title}
-        onClick={() => setAbierto((v) => !v)}
+        onClick={() => { if (abierto) cerrar(true); else setAbierto(true); }}
         onKeyDown={(e) => { if (e.key === 'ArrowDown' && !abierto) { e.preventDefault(); setAbierto(true); } }}
       >
         <IconoMasAcciones size={15} aria-hidden="true" />
@@ -64,7 +67,8 @@ export default function MenuMasAcciones({ items, etiqueta = 'Más acciones', dis
               type="button"
               role="menuitem"
               className={`menu-acciones__item${peligro ? ' menu-acciones__item--peligro' : ''}`}
-              onClick={() => { cerrar(false); onClick(); }}
+              // Focus goes back to the trigger first, so a dialog opened by the item records it as its opener.
+              onClick={() => { cerrar(true); onClick(); }}
             >
               {Icono && <Icono size={14} aria-hidden="true" />}
               {label}

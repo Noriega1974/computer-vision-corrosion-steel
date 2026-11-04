@@ -94,7 +94,7 @@ function ListaSubieron({ puntos: puntosProp, cantidad, id }) {
         color: 'var(--text-muted)', lineHeight: 1.45,
       }}
     >
-      {puntos.map((p) => <li key={p.id_punto}>{textoSubio(p)}</li>)}
+      {puntos.map((p) => <li key={p.id_punto} style={{ overflowWrap: 'anywhere' }}>{textoSubio(p)}</li>)}
       {restantes > 0 && <li>y {restantes} más</li>}
     </ul>
   );
@@ -204,10 +204,14 @@ export default function KPIBar({ empresaId = null }) {
             <Tarjeta
               etiqueta={`Medidos en ${VENTANA_DIAS} días`}
               valor={(
-                <span title={textoCobertura(datos?.cobertura)}>
-                  <span>{Number(datos?.cobertura?.con_medicion_30d) || 0}</span>
-                  <span style={estiloTextoValor}>{` de ${Number(datos?.cobertura?.total_puntos) || 0} ${Number(datos?.cobertura?.total_puntos) === 1 ? 'punto' : 'puntos'}`}</span>
-                </span>
+                textoCobertura(datos?.cobertura) === 'Sin datos'
+                  ? <span style={estiloTextoValor}>Sin datos</span>
+                  : (
+                    <span title={textoCobertura(datos?.cobertura)}>
+                      <span>{Number(datos?.cobertura?.con_medicion_30d) || 0}</span>
+                      <span style={estiloTextoValor}>{` de ${Number(datos?.cobertura?.total_puntos)} ${Number(datos?.cobertura?.total_puntos) === 1 ? 'punto' : 'puntos'}`}</span>
+                    </span>
+                  )
               )}
               cargando={cargando}
             >

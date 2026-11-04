@@ -38,6 +38,8 @@ test('el promedio usa coma decimal y un espacio antes del %', () => {
 test('cobertura y mediciones en 30 días', () => {
   assert.equal(textoCobertura({ con_medicion_30d: 5, total_puntos: 8 }), '5 de 8 puntos');
   assert.equal(textoCobertura({ con_medicion_30d: 1, total_puntos: 1 }), '1 de 1 punto');
+  assert.equal(textoCobertura(undefined), 'Sin datos');
+  assert.equal(textoCobertura({ con_medicion_30d: 0, total_puntos: 0 }), 'Sin datos');
   assert.equal(textoMediciones30d(1), '1 medición en 30 días');
   assert.equal(textoMediciones30d(12), '12 mediciones en 30 días');
 });
