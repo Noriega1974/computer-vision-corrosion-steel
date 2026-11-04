@@ -130,7 +130,7 @@ def _claims(event: dict) -> dict:
     return event.get("requestContext", {}).get("authorizer", {}).get("claims", {})
 
 
-def _usuario_actual(event: dict) -> dict | None:
+def _resolver_usuario_actual(event: dict) -> dict | None:
     """Resuelve el ítem completo (rol, empresa_id, id_usuario, ...) del
     usuario autenticado a partir de `sub` (claim del JWT), vía el GSI
     cognito-sub-index de la tabla `usuarios`. Necesario porque `id_usuario`
@@ -149,6 +149,17 @@ def _usuario_actual(event: dict) -> dict | None:
     )
     items = resp.get("Items", [])
     return items[0] if items else None
+
+
+def _usuario_actual(event: dict) -> dict | None:
+    """Memoiza `_resolver_usuario_actual` por invocación (en el propio event):
+    el gate de cuenta inactiva y la ruta llaman a esto en la misma petición y
+    así la tabla `usuarios` se lee una sola vez."""
+    if not isinstance(event, dict):
+        return _resolver_usuario_actual(event)
+    if "_usuario_actual_cache" not in event:
+        event["_usuario_actual_cache"] = _resolver_usuario_actual(event)
+    return event["_usuario_actual_cache"]
 
 
 # ── Cuenta o afiliación desactivada ──────────────────────────────────────────

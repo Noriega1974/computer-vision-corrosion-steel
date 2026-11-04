@@ -99,3 +99,45 @@ def test_fuera_de_alcance_en_funcion_pura(u):
     assert u._fuera_de_alcance({"rol": "admin"}, {"rol": "tecnico"}) is True  # None == None no cuenta
     assert u._fuera_de_alcance({"rol": "tecnico", "empresa_id": "EMP-1"}, {"rol": "cliente", "empresa_id": "EMP-1"}) is True
     assert u._fuera_de_alcance({"rol": "super_admin"}, {"rol": "super_admin"}) is False
+
+
+def _como_yo(u, monkeypatch, rol):
+    monkeypatch.setattr(u, "_usuario_actual", lambda ev: {"id_usuario": "YO", "rol": rol, "empresa_id": "EMP-1"})
+    u.tabla.items.append({"id_usuario": "YO", "rol": rol, "empresa_id": "EMP-1", "email": "yo@x.co"})
+
+
+@pytest.mark.parametrize("rol", ["admin", "super_admin"])
+def test_puede_editarse_a_si_mismo_campos_no_privilegiados(u, monkeypatch, rol):
+    _como_yo(u, monkeypatch, rol)
+    r = u.lambda_handler(_ev("PUT", "/usuarios/{id_usuario}", "YO", {"nombre": "Nuevo", "telefono": "300", "cargo": "Jefe"}), None)
+    assert r["statusCode"] == 200, r["body"]
+    assert u.cognito.llamadas == []
+
+
+@pytest.mark.parametrize("rol_nuevo", ["super_admin", "tecnico"])
+def test_no_puede_cambiarse_el_propio_rol(u, monkeypatch, rol_nuevo):
+    _como_yo(u, monkeypatch, "admin")
+    r = u.lambda_handler(_ev("PUT", "/usuarios/{id_usuario}", "YO", {"nombre": "X", "rol": rol_nuevo}), None)
+    assert r["statusCode"] == 403
+    assert u.cognito.llamadas == [] and u.tabla.actualizados == []
+
+
+def test_enviar_su_mismo_rol_no_lo_cambia_ni_falla(u, monkeypatch):
+    _como_yo(u, monkeypatch, "admin")
+    r = u.lambda_handler(_ev("PUT", "/usuarios/{id_usuario}", "YO", {"nombre": "X", "rol": "admin"}), None)
+    assert r["statusCode"] == 200 and u.cognito.llamadas == []
+
+
+def test_no_se_reactiva_a_si_mismo(u, monkeypatch):
+    _como_yo(u, monkeypatch, "admin")
+    r = u.lambda_handler(_ev("PUT", "/usuarios/{id_usuario}", "YO", {"reactivar": True}), None)
+    assert r["statusCode"] == 403
+
+
+@pytest.mark.parametrize("objetivo", ["TEC", "CLI"])
+@pytest.mark.parametrize("rol_nuevo", ["admin", "super_admin"])
+def test_admin_no_promueve_a_admin_ni_super_admin(u, monkeypatch, objetivo, rol_nuevo):
+    _como(u, monkeypatch, "admin")
+    r = u.lambda_handler(_ev("PUT", "/usuarios/{id_usuario}", objetivo, {"rol": rol_nuevo}), None)
+    assert r["statusCode"] == 403, r["body"]
+    assert u.cognito.llamadas == [] and u.tabla.actualizados == []

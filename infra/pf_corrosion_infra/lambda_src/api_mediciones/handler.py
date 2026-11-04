@@ -129,7 +129,7 @@ def _claims(event: dict) -> dict:
     return event.get("requestContext", {}).get("authorizer", {}).get("claims", {})
 
 
-def _usuario_actual(event: dict) -> dict | None:
+def _resolver_usuario_actual(event: dict) -> dict | None:
     """Resuelve el ítem completo (rol, empresa_id, id_usuario, ...) del
     usuario autenticado a partir de `sub` (claim del JWT), vía el GSI
     cognito-sub-index de la tabla `usuarios`. Replicado igual en
@@ -144,6 +144,17 @@ def _usuario_actual(event: dict) -> dict | None:
     )
     items = resp.get("Items", [])
     return items[0] if items else None
+
+
+def _usuario_actual(event: dict) -> dict | None:
+    """Memoiza `_resolver_usuario_actual` por invocación (en el propio event):
+    el gate de cuenta inactiva y la ruta llaman a esto en la misma petición y
+    así la tabla `usuarios` se lee una sola vez."""
+    if not isinstance(event, dict):
+        return _resolver_usuario_actual(event)
+    if "_usuario_actual_cache" not in event:
+        event["_usuario_actual_cache"] = _resolver_usuario_actual(event)
+    return event["_usuario_actual_cache"]
 
 
 # ── Cuenta o afiliación desactivada ──────────────────────────────────────────
@@ -524,14 +535,16 @@ def _puntos_en_alcance(creador: dict, empresa_filtro: str | None) -> list:
     return [b for b in items if b.get("activo") is not False and b.get("id_bloque")]
 
 
-def _estado_actual(id_punto: str) -> dict | None:
+def _estado_actual(id_punto: str, truncado: list | None = None) -> dict | None:
     """Estado del punto en su último día local medido y en el anterior.
 
     Una Query por punto (ScanIndexForward=False, proyección mínima) que pagina
     solo hasta ver 3 días locales distintos (el tercero confirma que el segundo
     está completo) o agotar la partición, con tope MAX_PAGINAS_ESTADO. Costo:
     O(P) consultas secuenciales, cada una de pocas páginas; P < 200.
-    Devuelve None si el punto no tiene mediciones."""
+    Devuelve None si el punto no tiene mediciones. Si se agota el tope de
+    páginas con la partición sin terminar, agrega el id a `truncado` (el
+    estado puede ser incompleto)."""
     nombres = {"#t": "timestamp", "#n": "nivel_corrosion", "#p": "area_corroida_pct"}
     kwargs = {
         "KeyConditionExpression": Key("id_punto").eq(id_punto) & Key("sk").begins_with(SK_MEDICION_PREFIJO),
@@ -562,6 +575,10 @@ def _estado_actual(id_punto: str) -> dict | None:
         if not ultima or len(dias) >= 3:
             break
         kwargs = {**kwargs, "ExclusiveStartKey": ultima}
+    else:
+        logger.warning("indicadores: punto %s truncado tras %d páginas; estado parcial", id_punto, MAX_PAGINAS_ESTADO)
+        if truncado is not None:
+            truncado.append(id_punto)
     if not dias:
         return None
     # Los ítems llegan por sk (≈ timestamp) desc, pero se ordena por día por si el sk difiere.
@@ -576,7 +593,9 @@ def _estado_actual(id_punto: str) -> dict | None:
     return actual
 
 
-def _contar_mediciones(desde_ts: str, empresa: str | None, filtrar: bool) -> int:
+def _contar_mediciones(desde_ts: str, empresa: str | None, filtrar: bool, truncado: list | None = None) -> int:
+    """Cuenta mediciones desde `desde_ts`. Si se agota MAX_PAGINAS_RESUMEN con
+    más páginas por leer, deja un elemento en `truncado` (el conteo es parcial)."""
     kwargs = {
         "IndexName": "tipo-timestamp-index",
         "KeyConditionExpression": Key("tipo_registro").eq("medicion") & Key("timestamp").gte(desde_ts),
@@ -592,6 +611,10 @@ def _contar_mediciones(desde_ts: str, empresa: str | None, filtrar: bool) -> int
         if not ultima:
             break
         kwargs = {**kwargs, "ExclusiveStartKey": ultima}
+    else:
+        logger.warning("indicadores: conteo de mediciones truncado tras %d páginas", MAX_PAGINAS_RESUMEN)
+        if truncado is not None:
+            truncado.append(True)
     return total
 
 
@@ -615,9 +638,10 @@ def _indicadores(event: dict) -> dict:
     por_nivel = [0, 0, 0, 0]
     sin_mediciones = 0
     criticos, subieron, con_30d, atrasados = [], [], 0, []
+    puntos_truncados: list = []
     for b in puntos:
         nombre = b.get("nombre") or b["id_bloque"]
-        est = _estado_actual(b["id_bloque"])
+        est = _estado_actual(b["id_bloque"], puntos_truncados)
         if est is None:
             sin_mediciones += 1
             atrasados.append((0, None, nombre, b["id_bloque"]))
@@ -650,10 +674,11 @@ def _indicadores(event: dict) -> dict:
 
     subieron.sort(key=lambda s: (-(s["a"] - s["de"]), -s["a"], s["nombre"]))
     empresa_conteo = empresa_filtro if es_super else creador.get("empresa_id")
+    conteo_truncado: list = []
     if not es_super and not empresa_conteo:
         mediciones_30d = 0
     else:
-        mediciones_30d = _contar_mediciones(_inicio_dia_utc(inicio), empresa_conteo, bool(empresa_conteo))
+        mediciones_30d = _contar_mediciones(_inicio_dia_utc(inicio), empresa_conteo, bool(empresa_conteo), conteo_truncado)
 
     return _respuesta(200, {
         "total_puntos": len(puntos),
@@ -663,6 +688,9 @@ def _indicadores(event: dict) -> dict:
         "subieron_nivel": {"cantidad": len(subieron), "puntos": subieron[:LISTA_SUBIERON_MAX]},
         "cobertura": {"con_medicion_30d": con_30d, "total_puntos": len(puntos), "mas_atrasado": mas_atrasado},
         "mediciones_30d": mediciones_30d,
+        "mediciones_30d_truncado": bool(conteo_truncado),
+        "puntos_truncados": len(puntos_truncados),
+        "parcial": bool(conteo_truncado or puntos_truncados),
         "generado_en": ahora.strftime("%Y-%m-%dT%H:%M:%SZ"),
     })
 

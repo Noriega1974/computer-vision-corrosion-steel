@@ -813,7 +813,14 @@ def lambda_handler(event: dict, context) -> dict:
             usuario = resp.get("Item")
             if not usuario:
                 return _respuesta(404, {"error": "No se encontró el usuario. Actualiza la lista e inténtalo de nuevo"})
-            if _fuera_de_alcance(creador, usuario):
+            # Editarse a uno mismo (perfil) no pasa por el alcance de gestión, pero
+            # solo campos no privilegiados: nunca el propio rol ni reactivar.
+            es_propio = bool(creador.get("id_usuario")) and creador.get("id_usuario") == id_usuario
+            if es_propio:
+                if body.get("reactivar") is True or ("rol" in body and body["rol"] != usuario.get("rol")):
+                    return _respuesta(403, {"error": "No puedes cambiar tu propio rol. Pide ayuda a un superadministrador"})
+                body = {k: v for k, v in body.items() if k != "rol"}
+            elif _fuera_de_alcance(creador, usuario):
                 return _respuesta(403, {"error": MENSAJE_FUERA_DE_ALCANCE.format(accion="modificar")})
 
             if body.get("reactivar") is True:

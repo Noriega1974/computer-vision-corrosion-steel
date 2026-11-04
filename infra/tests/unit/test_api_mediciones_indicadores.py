@@ -107,7 +107,8 @@ def test_sin_datos_devuelve_ceros_y_nulos(h):
     assert c == {"total_puntos": 0, "por_nivel": [0, 0, 0, 0], "sin_mediciones": 0, "mas_critico": None,
                  "subieron_nivel": {"cantidad": 0, "puntos": []},
                  "cobertura": {"con_medicion_30d": 0, "total_puntos": 0, "mas_atrasado": None},
-                 "mediciones_30d": 0, "generado_en": "2026-11-04T15:00:00Z"}
+                 "mediciones_30d": 0, "mediciones_30d_truncado": False, "puntos_truncados": 0,
+                 "parcial": False, "generado_en": "2026-11-04T15:00:00Z"}
 
 
 def test_incluye_puntos_sin_fotos_y_excluye_inactivos(h):
@@ -224,3 +225,38 @@ def test_sin_registro_de_usuario_403(h, monkeypatch):
     monkeypatch.setattr(h, "tabla_usuarios", fakes.FakeTabla([]))
     _montar(h, [], [])
     assert _get(h)[0] == 403
+
+
+def test_respuesta_completa_no_es_parcial(h):
+    _montar(h, [_bloque("B1", "A")], [_med("B1", "2026-11-03T15:00:00+00:00")])
+    _, r = _get(h)
+    assert r["parcial"] is False and r["mediciones_30d_truncado"] is False and r["puntos_truncados"] == 0
+
+
+def test_punto_que_agota_el_tope_de_paginas_marca_parcial(h, monkeypatch):
+    monkeypatch.setattr(h, "PAGINA_ESTADO", 1)
+    monkeypatch.setattr(h, "MAX_PAGINAS_ESTADO", 1)
+    _montar(h, [_bloque("B1", "A")], [_med("B1", "2026-11-03T15:00:00+00:00"), _med("B1", "2026-11-03T14:00:00+00:00")])
+    _, r = _get(h)
+    assert r["puntos_truncados"] == 1 and r["parcial"] is True
+
+
+def test_conteo_que_agota_el_tope_de_paginas_marca_truncado(h, monkeypatch):
+    monkeypatch.setattr(h, "MAX_PAGINAS_RESUMEN", 1)
+    _montar(h, [_bloque("B1", "A")], [_med("B1", "2026-11-03T15:00:00+00:00"), _med("B1", "2026-11-03T14:00:00+00:00")])
+    _, r = _get(h)
+    assert r["mediciones_30d_truncado"] is True and r["parcial"] is True
+
+
+def test_usuario_actual_se_lee_una_sola_vez_por_peticion(h):
+    class Contada(fakes.FakeTabla):
+        lecturas = 0
+
+        def query(self, **kw):
+            Contada.lecturas += 1
+            return super().query(**kw)
+
+    h.tabla_usuarios = Contada([{"rol": "admin", "empresa_id": "EMP-1"}])
+    _montar(h, [_bloque("B1", "A")], [_med("B1", "2026-11-03T15:00:00+00:00")])
+    assert _get(h)[0] == 200
+    assert Contada.lecturas == 1

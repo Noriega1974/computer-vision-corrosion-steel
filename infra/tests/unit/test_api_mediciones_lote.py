@@ -178,6 +178,7 @@ def test_eliminar_individual_permite_tecnico(h, monkeypatch):
           "requestContext": {"authorizer": {"claims": {"sub": "s"}}}}
     assert h.lambda_handler(ev, None)["statusCode"] == 200
     _rol(h, monkeypatch, "cliente")
+    ev.pop("_usuario_actual_cache", None)   # el usuario se memoiza por petición; esta es otra
     assert h.lambda_handler(ev, None)["statusCode"] == 403
 
 
