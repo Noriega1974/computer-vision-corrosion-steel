@@ -463,7 +463,6 @@ export default function UploadPage() {
                   onQuitar={quitarDeLote}
                   onQuitarVarias={lote.quitarVarias}
                   onReintentar={(id) => lote.reintentar(id)}
-                  onReanudar={lote.reanudar}
                   onAgregar={procesarArchivos}
                   onVerGaleria={irAGaleria}
                   onSubirMas={reiniciarLote}
