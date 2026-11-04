@@ -114,7 +114,7 @@ export default function AppLayout() {
           overflow: 'auto',
           background: 'var(--bg-page)',
         }}>
-          <LimiteErrores key={pathname}>
+          <LimiteErrores pathname={pathname}>
             <Outlet />
           </LimiteErrores>
         </main>

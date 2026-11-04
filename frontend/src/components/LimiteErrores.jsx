@@ -14,6 +14,10 @@ export default class LimiteErrores extends React.Component {
     return { error };
   }
 
+  componentDidUpdate(prevProps) {
+    if (this.state.error && prevProps.pathname !== this.props.pathname) this.reintentar();
+  }
+
   componentDidCatch(error, info) {
     console.error('Error al mostrar la página', error, info?.componentStack);
   }
