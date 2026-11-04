@@ -4,6 +4,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useGestionUsuarios } from '../hooks/useUsuarios';
 import { useEmpresas } from '../hooks/useEmpresas';
 import { useUsuarioPerfil } from '../hooks/useUsuario';
+import { puedeGestionar } from '../lib/permisosUsuarios';
 import { useAuth } from '../auth/AuthContext';
 import { IconoActualizar, IconoAgregar, IconoCerrar, IconoCheck, IconoCopiar, IconoDesactivarUsuario, IconoEditar, IconoEliminar, IconoEmpresa, IconoError, IconoExito, IconoFlechaAbajo, IconoFlechaArriba, IconoReloj } from '../components/Iconos';
 import { formatFecha } from '../utils/dateFormat';
@@ -693,6 +694,11 @@ export default function UsersPage() {
                       const activo = esActivo(u);
                       const rolKey = u.rol ?? u.role ?? u.grupos?.[0] ?? 'cliente';
                       const esSelf = me?.email === u.email;
+                      // Mismo alcance que el backend: ocultar lo que daría 403.
+                      const gestionable = puedeGestionar(
+                        { rol: miRol, empresa_id: miPerfil?.empresa_id },
+                        { rol: rolKey, empresa_id: u.empresa_id },
+                      );
                       const esColab = !!u.es_colaborador;
                       const diasRestantes = esColab && u.vence_en
                         ? Math.max(0, Math.ceil((new Date(u.vence_en) - Date.now()) / 86400000))
@@ -733,7 +739,7 @@ export default function UsersPage() {
                           </td>
                           {isAdmin && (
                             <td style={{ padding: '10px 14px' }}>
-                              <div style={{ display: 'flex', gap: 6 }}>
+                              {gestionable && (<div style={{ display: 'flex', gap: 6 }}>
                                 {/* Editar */}
                                 <button
                                   onClick={() => { setEditUsuario(u); setFormError(null); }}
@@ -763,7 +769,7 @@ export default function UsersPage() {
                                     <IconoEliminar size={13} />
                                   </button>
                                 )}
-                              </div>
+                              </div>)}
                             </td>
                           )}
                         </tr>
