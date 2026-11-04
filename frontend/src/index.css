@@ -2424,6 +2424,18 @@ select option {
 }
 .mosaico-tile__accion:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
 .mosaico-tile__accion--quitar { top: 4px; right: 4px; }
+.mosaico-tile__selector {
+  position: absolute; inset: 0; z-index: 2; border: none; padding: 0; margin: 0; cursor: pointer;
+  background: transparent;
+}
+.mosaico-tile__selector:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: -3px; }
+.mosaico-tile__casilla {
+  position: absolute; top: 5px; right: 5px; width: 20px; height: 20px; border-radius: 5px;
+  display: inline-flex; align-items: center; justify-content: center; color: #fff;
+  background: rgba(0, 0, 0, 0.5); border: 2px solid rgba(255, 255, 255, 0.9);
+}
+.mosaico-tile--seleccionada { box-shadow: 0 0 0 2px var(--accent-amber); }
+.mosaico-tile--seleccionada .mosaico-tile__casilla { background: var(--accent-amber); border-color: var(--accent-amber); }
 .mosaico-tile__accion--reintentar { bottom: 4px; left: 50%; transform: translateX(-50%); }
 .mosaico-tile__dia {
   position: absolute; top: 5px; left: 22px; max-width: calc(100% - 60px); padding: 1px 6px; border-radius: 999px;

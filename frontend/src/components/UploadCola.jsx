@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { IconoAgregarImagen, IconoError, IconoEliminar, IconoFlechaAdelante, IconoFlechaAtras } from './Iconos';
+import { IconoAgregarImagen, IconoCheck, IconoError, IconoEliminar, IconoFlechaAdelante, IconoFlechaAtras } from './Iconos';
 import { nivelColor, nivelLabel } from '../lib/statusUtils';
 import { formatoPct, etiquetaBase } from '../lib/textUtils';
 import { LOTE_MAX } from '../hooks/useUploadLote';
-import { paginar } from '../lib/gestorSubida';
+import { paginar, alternarSeleccion, seleccionarIds, podarSeleccion } from '../lib/gestorSubida';
+import ConfirmDialog from './ConfirmDialog';
 import NotaPctAproximado from './NotaPctAproximado';
 import { Mosaico } from './Mosaico';
 import { estadoTesteraSubida } from '../lib/mosaico';
@@ -21,6 +22,11 @@ const btnSecondary = {
   ...btnBase, background: 'var(--bg-inset)', border: '1px solid var(--border)',
   color: 'var(--text-secondary)',
 };
+const chipBtn = {
+  display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 999,
+  background: 'var(--bg-inset)', border: '1px solid var(--border)', color: 'var(--text-secondary)',
+  fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 'var(--text-xs)', cursor: 'pointer',
+};
 const btnPrimary = { ...btnBase, background: 'var(--accent-amber)', border: 'none', color: 'white' };
 
 // Preview with its own object URL: created on mount and revoked on unmount,
@@ -36,7 +42,7 @@ function Previa({ file }) {
 }
 
 // One square tile of the queue: preview, status overlay and its actions.
-function TesteraCola({ it, ocupado, iniciado, onQuitar, onReintentar }) {
+function TesteraCola({ it, ocupado, iniciado, seleccionando, seleccionada, onAlternar, onQuitar, onReintentar }) {
   const nombre = it.nombre || it.file.name;
   const estado = it.estado;
   const r = it.resultado ?? {};
@@ -46,7 +52,7 @@ function TesteraCola({ it, ocupado, iniciado, onQuitar, onReintentar }) {
     ? `Listo, ${nivelLabel(nivel)}${r.area_corroida_pct != null ? `, ${formatoPct(r.area_corroida_pct)}` : ''}`
     : estado === 'error' ? `Error: ${it.error}` : estadoTesteraSubida(it);
   return (
-    <div className="mosaico-tile" role="group" aria-label={`${nombre}: ${texto}`}>
+    <div className={`mosaico-tile${seleccionada ? ' mosaico-tile--seleccionada' : ''}`} role="group" aria-label={`${nombre}: ${texto}`}>
       <Previa file={it.file} />
       {estado === 'listo' ? (
         <>
@@ -82,7 +88,15 @@ function TesteraCola({ it, ocupado, iniciado, onQuitar, onReintentar }) {
           Reintentar
         </button>
       )}
-      {!iniciado && (
+      {!iniciado && seleccionando && (
+        <button type="button" role="checkbox" aria-checked={seleccionada} onClick={onAlternar}
+          aria-label={`Seleccionar ${nombre}`} className="mosaico-tile__selector">
+          <span className="mosaico-tile__casilla" aria-hidden="true">
+            {seleccionada && <IconoCheck size={13} />}
+          </span>
+        </button>
+      )}
+      {!iniciado && !seleccionando && (
         <button type="button" onClick={onQuitar}
           aria-label={`Quitar ${nombre} de la lista`}
           className="mosaico-tile__accion mosaico-tile__accion--quitar">
@@ -96,13 +110,32 @@ function TesteraCola({ it, ocupado, iniciado, onQuitar, onReintentar }) {
 // Queue for a batch upload (up to LOTE_MAX rows). Paged, FILAS_POR_PAGINA rows
 // at a time, so a 1000-photo batch never renders 1000 rows or previews at once.
 // The polite live region announces only per-row completion.
-export default function UploadCola({ lote, onQuitar, onReintentar, onAgregar, onVerGaleria, onSubirMas }) {
+export default function UploadCola({ lote, onQuitar, onQuitarVarias, onReintentar, onAgregar, onVerGaleria, onSubirMas }) {
   const { items, running, anuncio, iniciado, terminado, listos, errores } = lote;
   const resumenRef = useRef(null);
   const inputRef = useRef(null);
   const listaRef = useRef(null);
   const [paginaPedida, setPaginaPedida] = useState(0);
   const { filas, pagina, paginas, desde } = paginar(items, paginaPedida);
+  const [seleccionando, setSeleccionando] = useState(false);
+  const [seleccion, setSeleccion] = useState(() => new Set());
+  const [confirmando, setConfirmando] = useState(false);
+  const modoSeleccion = seleccionando && !iniciado;
+
+  // Rows removed elsewhere (or the whole queue) must not stay selected.
+  useEffect(() => {
+    setSeleccion((prev) => {
+      const podada = podarSeleccion(prev, items);
+      return podada.size === prev.size ? prev : podada;
+    });
+    if (items.length === 0) setSeleccionando(false);
+  }, [items]);
+
+  const salirDeSeleccion = () => { setSeleccionando(false); setSeleccion(new Set()); setConfirmando(false); };
+  const quitarSeleccion = () => {
+    onQuitarVarias([...seleccion]);
+    salirDeSeleccion();
+  };
 
   // Move focus to the summary when the batch ends so keyboard/AT users land on the outcome.
   useEffect(() => { if (terminado) resumenRef.current?.focus(); }, [terminado]);
@@ -137,10 +170,56 @@ export default function UploadCola({ lote, onQuitar, onReintentar, onAgregar, on
         marginBottom: 'var(--space-2)', fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)', color: 'var(--text-muted)',
       }}>
         <span>
-          <span style={numStyle}>{items.length}</span> {items.length === 1 ? 'imagen' : 'imágenes'} en el lote
+          <span style={numStyle}>{items.length.toLocaleString('es-CO')}</span> de{' '}
+          <span style={numStyle}>{LOTE_MAX.toLocaleString('es-CO')}</span> imágenes
+          {!iniciado && <> · más imágenes, más tiempo de análisis</>}
           {paginas > 1 && <> · mostrando <span style={numStyle}>{desde + 1}</span>-<span style={numStyle}>{desde + filas.length}</span></>}
         </span>
+        {!iniciado && items.length > 0 && (
+          <button type="button" aria-pressed={modoSeleccion}
+            onClick={() => (modoSeleccion ? salirDeSeleccion() : setSeleccionando(true))}
+            style={{ ...btnSecondary, padding: '4px 10px', fontSize: 'var(--text-xs)' }}>
+            {modoSeleccion ? 'Listo' : 'Seleccionar'}
+          </button>
+        )}
       </div>
+
+      {modoSeleccion && (
+        <div role="toolbar" aria-label="Acciones sobre las imágenes seleccionadas" style={{
+          display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 'var(--space-2)',
+          fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)',
+        }}>
+          <button type="button" style={chipBtn} onClick={() => setSeleccion(seleccionarIds(seleccion, filas.map((f) => f.id)))}>
+            Esta página
+          </button>
+          <button type="button" style={chipBtn} onClick={() => setSeleccion(new Set(items.map((f) => f.id)))}>
+            Todas ({items.length})
+          </button>
+          <button type="button" style={chipBtn} disabled={seleccion.size === 0} onClick={() => setSeleccion(new Set())}>
+            Ninguna
+          </button>
+          <button type="button" disabled={seleccion.size === 0 || running}
+            onClick={() => (seleccion.size > 1 ? setConfirmando(true) : quitarSeleccion())}
+            style={{
+              ...chipBtn, marginLeft: 'auto', background: 'var(--accent-red)', borderColor: 'var(--accent-red)', color: 'white',
+              opacity: seleccion.size === 0 ? 0.5 : 1, cursor: seleccion.size === 0 ? 'not-allowed' : 'pointer',
+            }}>
+            <IconoEliminar size={13} aria-hidden="true" /> Quitar seleccionadas ({seleccion.size})
+          </button>
+          <span aria-live="polite" role="status" style={visuallyHidden}>{seleccion.size} seleccionadas</span>
+        </div>
+      )}
+
+      {confirmando && (
+        <ConfirmDialog
+          title={`Quitar ${seleccion.size} imágenes`}
+          message="Se quitarán de la lista y no se analizarán. Las fotos originales no se borran de tu dispositivo."
+          confirmLabel="Quitar"
+          tone="danger"
+          onConfirm={quitarSeleccion}
+          onCancel={() => setConfirmando(false)}
+        />
+      )}
 
       <Mosaico
         ref={listaRef}
@@ -155,6 +234,9 @@ export default function UploadCola({ lote, onQuitar, onReintentar, onAgregar, on
             it={it}
             ocupado={running}
             iniciado={iniciado}
+            seleccionando={modoSeleccion}
+            seleccionada={seleccion.has(it.id)}
+            onAlternar={() => setSeleccion((prev) => alternarSeleccion(prev, it.id))}
             onQuitar={() => onQuitar(it.id)}
             onReintentar={() => onReintentar(it.id)}
           />

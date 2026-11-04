@@ -4,6 +4,7 @@ import { subirUnaMedicion, MAX_FOTO_MB } from './useUploadMedicion';
 import { useRefreshKey } from './RefreshKeyContext';
 import { useAuth } from '../auth/AuthContext';
 import {
+  quitarSeleccionadas,
   FASE_MEDICION,
   FASE_PREVIA,
   LOTE_MAX,
@@ -107,6 +108,13 @@ function useGestorSubida() {
   const quitar = useCallback((id) => {
     if (sesionRef.current) return;  // rows are fixed once the batch starts
     setItems((prev) => prev.filter((x) => x.id !== id));
+  }, []);
+
+  // Bulk removal of the selected rows (same rule: only before the batch starts).
+  const quitarVarias = useCallback((ids) => {
+    if (sesionRef.current) return;
+    const quitar = new Set(ids);
+    setItems((prev) => quitarSeleccionadas(prev, quitar));
   }, []);
 
   // Logout (or switching account): abort the pool, drop the queue and the session so the
@@ -271,7 +279,7 @@ function useGestorSubida() {
     items, running, sesion, anuncio, avisoCerrado, progreso, iniciado, terminado,
     listos: progreso.completadas,
     errores: progreso.fallidas,
-    agregar, quitar, limpiar, iniciar, reintentar, reanudar, cerrarAviso,
+    agregar, quitar, quitarVarias, limpiar, iniciar, reintentar, reanudar, cerrarAviso,
   };
 }
 

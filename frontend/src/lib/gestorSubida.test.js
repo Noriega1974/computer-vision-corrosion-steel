@@ -7,6 +7,10 @@ import {
   FASE_MEDICION,
   MENSAJE_NO_CONFIRMADO,
   clasificarFallo,
+  alternarSeleccion,
+  seleccionarIds,
+  podarSeleccion,
+  quitarSeleccionadas,
   esReanudable,
   calcularProgresoSubida,
   ejecutarColaConcurrencia,
@@ -315,5 +319,31 @@ describe('gestorSubida: paging and refresh throttle', () => {
     assert.equal(debeInvalidar(1000, null), true);
     assert.equal(debeInvalidar(5000, 1000), false);
     assert.equal(debeInvalidar(11000, 1000), true);
+  });
+});
+
+describe('gestorSubida: multi-select helpers', () => {
+  it('toggles an id without mutating the previous selection', () => {
+    const a = new Set(['a']);
+    const b = alternarSeleccion(a, 'b');
+    assert.deepEqual([...b], ['a', 'b']);
+    assert.deepEqual([...a], ['a']);
+    assert.deepEqual([...alternarSeleccion(b, 'a')], ['b']);
+  });
+
+  it('adds a group of ids keeping the existing ones', () => {
+    assert.deepEqual([...seleccionarIds(new Set(['x']), ['a', 'b', 'x'])].sort(), ['a', 'b', 'x']);
+  });
+
+  it('prunes ids that are no longer in the queue', () => {
+    const items = [{ id: 'a' }, { id: 'c' }];
+    assert.deepEqual([...podarSeleccion(new Set(['a', 'b', 'c']), items)], ['a', 'c']);
+    assert.equal(podarSeleccion(new Set(), items).size, 0);
+  });
+
+  it('removes the selected rows and keeps the order of the rest', () => {
+    const items = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+    assert.deepEqual(quitarSeleccionadas(items, new Set(['b'])).map((x) => x.id), ['a', 'c']);
+    assert.equal(quitarSeleccionadas(items, new Set()), items);
   });
 });

@@ -174,6 +174,33 @@ export function paginar(lista, pagina, porPagina = FILAS_POR_PAGINA) {
   return { filas: lista.slice(desde, desde + porPagina), pagina: actual, paginas, desde };
 }
 
+// Multi-select helpers for the pre-upload queue. Selections are Sets of row ids and
+// every helper returns a new Set, so React state is never mutated.
+export function alternarSeleccion(seleccion, id) {
+  const nueva = new Set(seleccion);
+  if (nueva.has(id)) nueva.delete(id); else nueva.add(id);
+  return nueva;
+}
+
+// Adds every id to the selection (e.g. "Seleccionar todas" on the current page).
+export function seleccionarIds(seleccion, ids) {
+  const nueva = new Set(seleccion);
+  ids.forEach((id) => nueva.add(id));
+  return nueva;
+}
+
+// Drops ids that no longer exist in the queue (rows removed or cleared).
+export function podarSeleccion(seleccion, items) {
+  const vivos = new Set(items.map((it) => it.id));
+  return new Set([...seleccion].filter((id) => vivos.has(id)));
+}
+
+// Rows left after removing the selected ones; same array when nothing is selected.
+export function quitarSeleccionadas(items, seleccion) {
+  if (!seleccion || seleccion.size === 0) return items;
+  return items.filter((it) => !seleccion.has(it.id));
+}
+
 // File helpers shared by the single and batch flows.
 export const NOMBRE_MAX = 80;
 const TIPOS_OK = ['image/jpeg', 'image/png', 'image/jpg'];
