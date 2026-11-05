@@ -132,6 +132,69 @@ def test_mover_rollback_de_copia_fallido_registra_orphan(m, monkeypatch, caplog)
     assert f"key={copia}" in _orphans(caplog)[0].getMessage()
 
 
+# ── Fila de idempotencia (IDEM#) ─────────────────────────────────────────────
+
+def _con_idem(m, n=1):
+    """Agrega a la tabla la fila IDEM de MED-n y marca la medición con su idem_key."""
+    clave = f"uploads/sub/{n}.jpg"
+    for i in m.tabla.items:
+        if i.get("id_medicion") == f"MED-{n}":
+            i["idem_key"] = clave
+    m.tabla.items.append({"id_punto": f"IDEM#{clave}", "sk": "IDEM", "estado": "listo"})
+    # (sin id_medicion: el doble de query() no filtra por partition key)
+    return f"IDEM#{clave}"
+
+
+def _hay(m, pk):
+    return any(i["id_punto"] == pk for i in m.tabla.items)
+
+
+def test_eliminar_individual_borra_la_fila_idem(m):
+    pk = _con_idem(m, 1)
+    assert m.lambda_handler(_delete_ev(1), None)["statusCode"] == 200
+    assert not _hay(m, pk)
+
+
+def test_lote_eliminar_borra_las_filas_idem(m):
+    pk1, pk2 = _con_idem(m, 1), _con_idem(m, 2)
+    c = _cuerpo(m.lambda_handler(_post("eliminar", [_it(1), _it(2)]), None))
+    assert c["ok"] == ["MED-1", "MED-2"]
+    assert not _hay(m, pk1) and not _hay(m, pk2)
+
+
+def test_eliminar_medicion_sin_idem_key_no_toca_otras_filas_idem(m):
+    pk = _con_idem(m, 2)
+    assert m.lambda_handler(_delete_ev(1), None)["statusCode"] == 200   # MED-1 no tiene idem_key
+    assert _hay(m, pk)
+
+
+def test_mover_borra_la_fila_idem(m):
+    pk = _con_idem(m, 1)
+    for k in ("s3_key_imagen", "s3_key_thumbnail"):
+        m.s3.objetos[(B, _med(1)[k])] = b"x"
+    m.s3.objetos[(B, _med(1)["s3_key_resultado"])] = json.dumps({"id_punto": "BLQ-1"}).encode()
+    c = _cuerpo(m.lambda_handler(_post("mover", [_it(1)], destino_bloque_id="BLQ-2"), None))
+    assert c["ok"] == ["MED-1"] and not _hay(m, pk)
+
+
+def test_idem_que_no_se_puede_borrar_reintenta_y_registra_orphan_idem(m, monkeypatch, caplog):
+    pk = _con_idem(m, 1)
+    original = m.tabla.delete_item
+    intentos = []
+
+    def falla(Key):
+        if Key["id_punto"] == pk:
+            intentos.append(1)
+            raise CAUSA
+        return original(Key=Key)
+
+    monkeypatch.setattr(m.tabla, "delete_item", falla)
+    r = m.lambda_handler(_delete_ev(1), None)
+    assert r["statusCode"] == 200 and _cuerpo(r) == {"ok": True, "id_medicion": "MED-1"}
+    assert len(intentos) == 2
+    assert any("ORPHAN_IDEM" in x.getMessage() and pk[5:] in x.getMessage() for x in caplog.records)
+
+
 # ═══ api_puntos ══════════════════════════════════════════════════════════════
 
 class TablaBloques(fakes.FakeTabla):

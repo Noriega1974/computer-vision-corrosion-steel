@@ -713,11 +713,30 @@ def _borrar_objeto_s3(key: str, contexto: str) -> bool:
     return False
 
 
+def _borrar_idem(item: dict, contexto: str) -> None:
+    """Borra la fila de idempotencia (`IDEM#<idem_key>`) de la medición, con un
+    reintento. Las mediciones anteriores a `idem_key` no la traen: su fila la
+    limpia infra/scripts/limpiar_huerfanos.py. Si falla deja `ORPHAN_IDEM`
+    en CloudWatch y no lanza (la medición ya no existe)."""
+    clave = item.get("idem_key")
+    if not clave:
+        return
+    error = None
+    for _ in range(2):
+        try:
+            tabla.delete_item(Key={"id_punto": f"IDEM#{clave}", "sk": "IDEM"})
+            return
+        except Exception as e:
+            error = e
+    logger.error("ORPHAN_IDEM key=%s contexto=%s error=%s", clave, contexto, error)
+
+
 def _borrar_medicion(item: dict) -> list:
     """Borra el ítem de DynamoDB y sus objetos en S3. Devuelve las claves S3
     que no se pudieron borrar (tras un reintento): el ítem ya no existe, así
     que no se falla, pero quedan registradas como ORPHAN_S3."""
     tabla.delete_item(Key={"id_punto": item["id_punto"], "sk": item["sk"]})
+    _borrar_idem(item, "borrar_medicion")
     huerfanas = []
     for campo in CAMPOS_S3:
         key = item.get(campo)
@@ -890,6 +909,8 @@ def _mover_medicion(item: dict, bloque: dict) -> None:
             _borrar_objeto_s3(key, "mover_rollback_copia")
         raise
 
+    # La fila de idempotencia apuntaba a la medición en su bloque viejo.
+    _borrar_idem(item, "mover_medicion")
     for key in viejas.values():
         _borrar_objeto_s3(key, "mover_borrar_original")
 
