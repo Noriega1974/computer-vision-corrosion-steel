@@ -206,7 +206,7 @@ def test_detecta_todas_las_categorias_de_huerfanos_y_discordancias():
         rep["bloques_sin_empresa"] + rep["mediciones_sin_bloque"] + rep["mediciones_empresa_discordante"]
         + rep["usuarios_sin_empresa"] + rep["usuarios_ddb_sin_cognito"] + rep["cognito_sin_usuario_ddb"]
         + rep["usuarios_estado_discordante"] + rep["s3_huerfanos"]["archivos_huerfanos"]
-        + rep["referencias_s3_rotas"]
+        + rep["referencias_s3_rotas"] + rep["idem_huerfanas"] + rep["s3_huerfanos"]["marcadores_huerfanos"]
     )
     d = [x for x in rep["usuarios_estado_discordante"] if x["motivo"] == "colaborador_expirado_sigue_activo"]
     assert d[0]["vence_en"] == "2026-10-15T00:00:00+00:00"
@@ -440,3 +440,68 @@ def test_usuario_sin_ningun_cruce_posible_se_reporta():
     rep = _auditar_usuarios(usuarios, cog)
     assert len(rep["usuarios_ddb_sin_cognito"]) == 1
     assert len(rep["cognito_sin_usuario_ddb"]) == 1
+
+
+# ── Filas IDEM y marcadores de carpeta huérfanos ─────────────────────────────
+
+def _medicion(id_med, punto="BLQ-1"):
+    return {"id_punto": punto, "sk": f"MED#2026-10-0{id_med[-1]}T00:00:00+00:00", "id_medicion": id_med, "empresa_id": "EMP-1"}
+
+
+def _idem(imagen, id_med, estado="listo"):
+    fila = {"id_punto": f"IDEM#{imagen}", "sk": "IDEM", "estado": estado}
+    if id_med:
+        fila["id_medicion"] = id_med
+    return fila
+
+
+def test_idem_sin_medicion_es_hallazgo_y_con_medicion_o_procesando_no():
+    ddb = DdbResourceFake({
+        "t-emp": [{"id_empresa": "EMP-1", "activa": True}],
+        "t-blq": [{"id_bloque": "BLQ-1", "empresa_id": "EMP-1", "nombre": "P"}],
+        "t-pm": [
+            _medicion("MED-1"),
+            _idem("uploads/s/vivo.jpg", "MED-1"),
+            _idem("uploads/s/borrada.jpg", "MED-2"),
+            _idem("uploads/s/sin-id.jpg", None),
+            _idem("uploads/s/en-curso.jpg", None, estado="procesando"),
+        ],
+    })
+    rep = detectar_huerfanos.auditar_huerfanos(ddb, S3ListFake([]), None, {**CFG, "bucket_name": "", "user_pool_id": ""})
+    assert [i["imagen_key"] for i in rep["idem_huerfanas"]] == ["uploads/s/borrada.jpg", "uploads/s/sin-id.jpg"]
+    assert rep["idem_huerfanas"][0]["id_medicion"] == "MED-2"
+    assert rep["resumen"]["total_hallazgos"] == 2
+    assert "IDEM#) sin medición: 2" in detectar_huerfanos.formatear_reporte_humano(rep)
+
+
+def test_marcadores_de_entidades_inexistentes_son_hallazgo_y_los_de_entidades_vivas_informativos():
+    ddb = DdbResourceFake({
+        "t-emp": [{"id_empresa": "EMP-1", "activa": True}],
+        "t-blq": [{"id_bloque": "BLQ-1", "empresa_id": "EMP-1", "nombre": "P"}],
+    })
+    s3 = S3ListFake([
+        {"Key": "empresas/EMP-1/", "Size": 0},               # zona viva
+        {"Key": "empresas/EMP-1/BLQ-1/", "Size": 0},         # punto vivo
+        {"Key": "empresas/EMP-1/BLQ-BORRADO/", "Size": 0},   # punto borrado
+        {"Key": "empresas/EMP-BORRADA/", "Size": 0},         # zona borrada
+        {"Key": "empresas/EMP-BORRADA/BLQ-X/", "Size": 0},   # zona y punto borrados
+        {"Key": "otra/carpeta/", "Size": 0},                 # fuera de empresas/: informativo
+    ])
+    rep = detectar_huerfanos.auditar_huerfanos(ddb, s3, None, {**CFG, "user_pool_id": ""})
+    assert [o["key"] for o in rep["s3_huerfanos"]["marcadores_huerfanos"]] == [
+        "empresas/EMP-1/BLQ-BORRADO/", "empresas/EMP-BORRADA/", "empresas/EMP-BORRADA/BLQ-X/"]
+    assert [o["key"] for o in rep["s3_huerfanos"]["marcadores_carpeta"]] == [
+        "empresas/EMP-1/", "empresas/EMP-1/BLQ-1/", "otra/carpeta/"]
+    assert rep["resumen"]["total_hallazgos"] == 3
+
+
+def test_marcador_huerfano_ignora_claves_que_no_son_marcadores_de_zona_o_punto():
+    f = detectar_huerfanos.marcador_huerfano
+    assert f("empresas/E/B/portada/", {"E"}, {"B"}) is None     # subcarpeta: no se toca
+    assert f("empresas/E/B/foto.jpg", set(), set()) is None
+    assert f("uploads/x/", set(), set()) is None
+
+
+def test_exit_2_con_idem_huerfana(sesion):
+    sesion.tablas = {detectar_huerfanos.DEFAULT_CONFIG["tabla_mediciones"]: [_idem("uploads/s/a.jpg", "MED-9")]}
+    assert detectar_huerfanos.main(ARGS_OK) == 2
