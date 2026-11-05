@@ -1,7 +1,7 @@
 import Aviso, { AvisoEnLinea } from '../components/Aviso';
 import ErrorEstado from '../components/ErrorEstado';
 import React, { useState } from 'react';
-import { IconoActivar, IconoAgregar, IconoCerrar, IconoCheck, IconoEditar, IconoFlechaAbajo, IconoUbicacion } from '../components/Iconos';
+import { IconoActivar, IconoAgregar, IconoCerrar, IconoCheck, IconoEditar, IconoEliminar, IconoFlechaAbajo, IconoUbicacion } from '../components/Iconos';
 import { useGestionEmpresas } from '../hooks/useEmpresas';
 import ZonaMapPicker from '../components/ZonaMapPicker';
 import ImagenUploader from '../components/ImagenUploader';
@@ -329,12 +329,14 @@ function ZonaForm({ initial = {}, isEdit, onSubmit, saving, error }) {
 // Puntos (antes Bloques) viven DENTRO de una zona y se administran aparte,
 // en /puntos.
 export default function ZonasPage() {
-  const { empresas, loading, error, mutating, mutError, crearEmpresa, editarEmpresa, refetch } = useGestionEmpresas();
+  const { empresas, loading, error, mutating, mutError, crearEmpresa, editarEmpresa, eliminarEmpresa, refetch } = useGestionEmpresas();
   const filasSkeleton = useConteoRecordado('zonas:lista', empresas, loading);
 
   const [showCreate, setShowCreate] = useState(false);
   const [editZona, setEditZona] = useState(null);
   const [confirmToggle, setConfirmToggle] = useState(null); // { zona, activarDespues }
+  const [confirmEliminar, setConfirmEliminar] = useState(null); // zona a eliminar
+  const [eliminarError, setEliminarError] = useState(null);
   const [formError, setFormError] = useState(null);
   const [toast, setToast] = useState(null);
 
@@ -386,6 +388,20 @@ export default function ZonasPage() {
       // se cierra igual para que ese banner no quede tapado por el overlay.
     } finally {
       setConfirmToggle(null);
+    }
+  };
+
+  // El 409 del backend dice qué falta (puntos, usuarios, archivos): el diálogo
+  // queda abierto con ese mensaje para que no se pierda.
+  const handleEliminar = async () => {
+    if (!confirmEliminar) return;
+    setEliminarError(null);
+    try {
+      await eliminarEmpresa(confirmEliminar.id_empresa);
+      setToast(`Zona ${confirmEliminar.nombre} eliminada correctamente.`);
+      setConfirmEliminar(null);
+    } catch (err) {
+      setEliminarError(err.message || 'No se pudo eliminar la zona. Inténtalo de nuevo');
     }
   };
 
@@ -483,6 +499,15 @@ export default function ZonasPage() {
                             >
                               <IconoActivar size={13} />
                             </button>
+                            {/* Eliminar: esta página es solo de super_admin (RoleRoute); el backend también lo exige. */}
+                            <button
+                              onClick={() => { setConfirmEliminar(e); setEliminarError(null); }}
+                              title="Eliminar zona"
+                              aria-label="Eliminar zona"
+                              className="btn-accion btn-accion--danger"
+                            >
+                              <IconoEliminar size={13} />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -526,6 +551,23 @@ export default function ZonasPage() {
           onCancel={() => setConfirmToggle(null)}
           loading={mutating}
         />
+      )}
+
+      {confirmEliminar && (
+        <ConfirmDialog
+          title={`¿Eliminar la zona ${confirmEliminar.nombre}?`}
+          message="Solo se puede eliminar una zona vacía: sin puntos y sin usuarios. Se borran también su logo y sus carpetas vacías. Esta acción no se puede deshacer. Si solo quieres que deje de usarse, desactívala."
+          confirmLabel="Eliminar"
+          loadingLabel="Eliminando…"
+          tone="danger"
+          onConfirm={handleEliminar}
+          onCancel={() => setConfirmEliminar(null)}
+          loading={mutating}
+        >
+          {eliminarError && (
+            <AvisoEnLinea tone="error" style={{ marginTop: 'var(--space-3)' }}>{eliminarError}</AvisoEnLinea>
+          )}
+        </ConfirmDialog>
       )}
 
       {toast && <Aviso message={toast} onDismiss={() => setToast(null)} />}

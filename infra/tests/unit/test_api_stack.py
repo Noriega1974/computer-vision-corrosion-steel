@@ -76,8 +76,8 @@ def test_rutas_de_logo_y_portada_con_cognito_y_su_lambda():
     metodos = api.find_resources("AWS::ApiGateway::Method", {"Properties": {"AuthorizationType": "COGNITO_USER_POOLS"}})
     def _de(lambda_, verbo):
         return [m for m in metodos.values() if m["Properties"]["HttpMethod"] == verbo and lambda_ in str(m["Properties"]["Integration"]["Uri"])]
-    # logo: PUT + DELETE de empresas; portada: PUT + DELETE de bloques (ademas de los existentes)
-    assert len(_de("Usuarios", "DELETE")) == 3 and len(_de("Puntos", "DELETE")) == 2
+    # DELETE de empresas (zona vacía) + logo: PUT + DELETE de empresas; portada: PUT + DELETE de bloques (ademas de los existentes)
+    assert len(_de("Usuarios", "DELETE")) == 4 and len(_de("Puntos", "DELETE")) == 2
     assert len(_de("Usuarios", "POST")) >= 4 and len(_de("Puntos", "POST")) == 2
 
 

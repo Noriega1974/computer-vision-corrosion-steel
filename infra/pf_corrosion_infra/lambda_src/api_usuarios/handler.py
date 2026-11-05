@@ -32,6 +32,10 @@ Rutas API Gateway:
                                              (no bloqueante)
   PUT    /empresas/{id_empresa}           → editar nombre, activar-desactivar, departamento,
                                              ciudad, tipo_material y/o `zonas` (solo super_admin)
+  DELETE /empresas/{id_empresa}           → eliminar una zona vacía (solo super_admin): 404 si no existe;
+                                             409 si tiene puntos o usuarios (con los conteos) o si quedan
+                                             objetos reales en `empresas/{id}/` (fotos); si no, borra el
+                                             logo, los marcadores vacíos de S3 y el ítem. Sin cascada.
   POST   /empresas/{id_empresa}/logo/upload-url → POST prefirmado de S3 para el logo (imagen
                                              JPEG/PNG/WebP, máx. 5 MB); body {content_type}
   PUT    /empresas/{id_empresa}/logo      → fija `logo_key` (la clave devuelta por upload-url) y
@@ -76,6 +80,7 @@ logger.setLevel(logging.INFO)
 TABLA_USUARIOS           = os.environ["TABLA_USUARIOS"]
 TABLA_EMPRESAS           = os.environ["TABLA_EMPRESAS"]
 TABLA_PUNTOS_MEDICIONES  = os.environ["TABLA_PUNTOS_MEDICIONES"]
+TABLA_BLOQUES            = os.environ["TABLA_BLOQUES"]
 USER_POOL_ID             = os.environ["USER_POOL_ID"]
 BUCKET_NAME              = os.environ["BUCKET_NAME"]
 REGION                   = os.environ["REGION"]
@@ -84,6 +89,8 @@ dynamodb = boto3.resource("dynamodb", region_name=REGION)
 tabla    = dynamodb.Table(TABLA_USUARIOS)
 tabla_empresas = dynamodb.Table(TABLA_EMPRESAS)
 tabla_puntos_mediciones = dynamodb.Table(TABLA_PUNTOS_MEDICIONES)
+# Solo lectura: contar los puntos (bloques) de una zona antes de eliminarla.
+tabla_bloques = dynamodb.Table(TABLA_BLOQUES)
 cognito  = boto3.client("cognito-idp", region_name=REGION)
 # Solo para dejar el marcador `empresas/{id_empresa}/` al crear una empresa
 # (grant acotado a PutObject bajo ese prefijo, ver CorriaComputeStack). También
@@ -335,6 +342,72 @@ def _logo_quitar(empresa: dict) -> dict:
         )
         _borrar_objeto(anterior)
     return _respuesta(200, _con_logo_url(tabla_empresas.get_item(Key={"id_empresa": id_empresa}).get("Item", {})))
+
+def _contar(tabla_dyn, indice: str, campo: str, valor: str) -> int:
+    """Cuenta los ítems de un GSI (`campo` = `valor`) paginando, sin traerlos."""
+    total = 0
+    kwargs = dict(IndexName=indice, KeyConditionExpression=Key(campo).eq(valor), Select="COUNT")
+    while True:
+        resp = tabla_dyn.query(**kwargs)
+        total += resp.get("Count", len(resp.get("Items", [])))
+        if "LastEvaluatedKey" not in resp:
+            return total
+        kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
+
+def _plural(n: int, sing: str, plur: str) -> str:
+    return f"{n} {sing if n == 1 else plur}"
+
+def _objetos_de_empresa(id_empresa: str) -> list[dict]:
+    """Todos los objetos bajo `empresas/{id_empresa}/` (clave y tamaño)."""
+    objetos = []
+    kwargs = dict(Bucket=BUCKET_NAME, Prefix=f"empresas/{id_empresa}/")
+    while True:
+        resp = s3.list_objects_v2(**kwargs)
+        objetos.extend(resp.get("Contents", []))
+        if not resp.get("IsTruncated"):
+            return objetos
+        kwargs["ContinuationToken"] = resp["NextContinuationToken"]
+
+def _eliminar_empresa(empresa: dict) -> dict:
+    """DELETE /empresas/{id}: solo una zona vacía. Primero decide (conteos y
+    listado de S3, sin tocar nada); solo si todo está limpio borra el logo y
+    los marcadores vacíos y, al final, el ítem. Si un borrado de S3 falla se
+    aborta antes de borrar el ítem: el reintento retoma donde quedó."""
+    id_empresa = empresa["id_empresa"]
+    puntos = _contar(tabla_bloques, "empresa_id-index", "empresa_id", id_empresa)
+    usuarios = _contar(tabla, "empresa-index", "empresa_id", id_empresa)
+    if puntos or usuarios:
+        partes = []
+        if puntos:
+            partes.append(_plural(puntos, "punto", "puntos"))
+        if usuarios:
+            partes.append(_plural(usuarios, "usuario", "usuarios"))
+        return _respuesta(409, {
+            "error": f"No se puede eliminar la zona porque aún tiene {' y '.join(partes)}. "
+                     "Elimina o mueve los puntos y reasigna o elimina los usuarios, e inténtalo de nuevo",
+            "puntos": puntos, "usuarios": usuarios,
+        })
+
+    # Solo se borran marcadores (clave terminada en "/" y 0 bytes) y los archivos de logo
+    # de esta zona; cualquier otro objeto (fotos, resultados) frena el borrado.
+    por_borrar, reales = [], []
+    for o in _objetos_de_empresa(id_empresa):
+        clave = o["Key"]
+        if (clave.endswith("/") and not o.get("Size")) or _CLAVE_LOGO.match(clave) or clave == empresa.get("logo_key"):
+            por_borrar.append(clave)
+        else:
+            reales.append(clave)
+    if reales:
+        return _respuesta(409, {
+            "error": f"No se puede eliminar la zona porque aún guarda {_plural(len(reales), 'archivo', 'archivos')} en el almacenamiento. "
+                     "Pide ayuda al equipo técnico para revisarlos antes de eliminarla",
+            "archivos": len(reales),
+        })
+
+    for clave in por_borrar:
+        s3.delete_object(Bucket=BUCKET_NAME, Key=clave)   # sin best-effort: si falla, el ítem sigue y se puede reintentar
+    tabla_empresas.delete_item(Key={"id_empresa": id_empresa})
+    return _respuesta(200, {"ok": True, "id_empresa": id_empresa})
 
 def _fuera_de_alcance(creador: dict, usuario_objetivo: dict) -> bool:
     """True si `creador` NO puede operar (editar, cambiar rol, deshabilitar,
@@ -1136,6 +1209,17 @@ def lambda_handler(event: dict, context) -> dict:
                 ExpressionAttributeValues=valores,
             )
             return _respuesta(200, _con_logo_url(tabla_empresas.get_item(Key={"id_empresa": id_empresa}).get("Item", {})))
+
+        # ── DELETE /empresas/{id_empresa} — eliminar una zona vacía (solo
+        # super_admin) ────────────────────────────────────────────────────────
+        elif metodo == "DELETE" and resource == "/empresas/{id_empresa}" and id_empresa:
+            creador = _usuario_actual(event)
+            if not creador or creador.get("rol") != "super_admin":
+                return _respuesta(403, {"error": "Solo un superadministrador puede eliminar zonas"})
+            empresa = tabla_empresas.get_item(Key={"id_empresa": id_empresa}).get("Item")
+            if not empresa:
+                return _respuesta(404, {"error": "No se encontró la zona. Actualiza la lista e inténtalo de nuevo"})
+            return _eliminar_empresa(empresa)
 
         # ── Logo de la empresa: super_admin cualquiera; admin y tecnico solo la
         # suya; cliente nunca (ver _puede_gestionar_logo) ──────────────────────

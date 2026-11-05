@@ -89,6 +89,8 @@ class CorriaApiStack(Stack):
 
         empresas_id = empresas.add_resource("{id_empresa}")
         empresas_id.add_method("PUT", usuarios_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
+        # Eliminar una zona vacía (solo super_admin; 409 si tiene puntos o usuarios).
+        empresas_id.add_method("DELETE", usuarios_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
 
         # Logo de la empresa: POST prefirmado de S3 (upload-url), luego PUT fija
         # la clave y DELETE la quita. RBAC en el handler (super_admin cualquier
