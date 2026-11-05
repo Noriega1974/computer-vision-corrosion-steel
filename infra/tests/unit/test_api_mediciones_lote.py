@@ -287,3 +287,76 @@ def test_mover_destino_inexistente_o_inactivo(h):
 def test_mover_resultado_parcial(h):
     c = _cuerpo(h.lambda_handler(_post("mover", [_it(1), _it(99)], destino_bloque_id="BLQ-2"), None))
     assert c["ok"] == ["MED-1"] and c["error"][0]["id_medicion"] == "MED-99"
+
+
+# ── Renombrar lote ───────────────────────────────────────────────────────────
+
+def _lote_con_nombre(h):
+    for it in h.tabla.items:
+        it["lote_nombre"] = "Lote viejo"
+
+
+def test_lote_renombrar_actualiza_cada_medicion(h):
+    _lote_con_nombre(h)
+    r = h.lambda_handler(_post("renombrar", [_it(1), _it(2)], nombre="  Lote   nuevo\t"), None)
+    c = _cuerpo(r)
+    assert r["statusCode"] == 200 and c["ok"] == ["MED-1", "MED-2"] and c["actualizadas"] == 2 and c["nombre"] == "Lote nuevo"
+    por_id = {i["id_medicion"]: i["lote_nombre"] for i in h.tabla.items}
+    assert por_id == {"MED-1": "Lote nuevo", "MED-2": "Lote nuevo", "MED-3": "Lote viejo", "MED-4": "Lote viejo"}
+
+
+def test_lote_renombrar_trunca_a_80(h):
+    r = h.lambda_handler(_post("renombrar", [_it(1)], nombre="a" * 200), None)
+    assert _cuerpo(r)["nombre"] == "a" * 80
+
+
+@pytest.mark.parametrize("nombre", ["", "   ", "\x01\x02", 5, None])
+def test_lote_renombrar_nombre_invalido_400(h, nombre):
+    _lote_con_nombre(h)
+    assert h.lambda_handler(_post("renombrar", [_it(1)], nombre=nombre), None)["statusCode"] == 400
+    assert all(i["lote_nombre"] == "Lote viejo" for i in h.tabla.items)
+
+
+def test_lote_renombrar_sin_items_400(h):
+    assert h.lambda_handler(_post("renombrar", [], nombre="x"), None)["statusCode"] == 400
+
+
+def test_lote_renombrar_cliente_403(h, monkeypatch):
+    _rol(h, monkeypatch, "cliente")
+    _lote_con_nombre(h)
+    assert h.lambda_handler(_post("renombrar", [_it(1)], nombre="x"), None)["statusCode"] == 403
+    assert all(i["lote_nombre"] == "Lote viejo" for i in h.tabla.items)
+
+
+def test_lote_renombrar_otra_empresa_error_por_item(h):
+    _lote_con_nombre(h)
+    c = _cuerpo(h.lambda_handler(_post("renombrar", [_it(1), _it(3, "BLQ-9")], nombre="Nuevo"), None))
+    assert c["ok"] == ["MED-1"] and [e["id_medicion"] for e in c["error"]] == ["MED-3"]
+    assert next(i for i in h.tabla.items if i["id_medicion"] == "MED-3")["lote_nombre"] == "Lote viejo"
+
+
+def test_lote_renombrar_tecnico_solo_si_todas_son_suyas(h, monkeypatch):
+    _rol(h, monkeypatch, "tecnico")
+    _lote_con_nombre(h)
+    por_id = {i["id_medicion"]: i for i in h.tabla.items}
+    por_id["MED-1"]["tomado_por_id"] = "s"
+    por_id["MED-2"]["tomado_por_id"] = "otro"
+    r = h.lambda_handler(_post("renombrar", [_it(1), _it(2)], nombre="Nuevo"), None)
+    assert r["statusCode"] == 403 and _cuerpo(r)["cantidad_ajenas"] == 1
+    assert all(i["lote_nombre"] == "Lote viejo" for i in h.tabla.items)   # no se tocó nada
+    r = h.lambda_handler(_post("renombrar", [_it(1)], nombre="Nuevo"), None)
+    assert r["statusCode"] == 200 and por_id["MED-1"]["lote_nombre"] == "Nuevo"
+
+
+def test_lote_renombrar_falla_de_una_no_frena_las_demas(h):
+    _lote_con_nombre(h)
+    original = h.tabla.update_item
+
+    def update(Key, **kw):
+        if Key["sk"] == "MED#2026-10-01":
+            raise RuntimeError("ConditionalCheckFailedException")
+        return original(Key=Key, **kw)
+
+    h.tabla.update_item = update
+    c = _cuerpo(h.lambda_handler(_post("renombrar", [_it(1), _it(2)], nombre="Nuevo"), None))
+    assert c["ok"] == ["MED-2"] and c["error"][0]["id_medicion"] == "MED-1" and c["actualizadas"] == 1

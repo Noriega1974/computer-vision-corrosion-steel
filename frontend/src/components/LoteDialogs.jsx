@@ -3,6 +3,7 @@ import ConfirmDialog from './ConfirmDialog';
 import { useAuth } from '../auth/AuthContext';
 import { useBloques } from '../hooks/useBloques';
 import { useEmpresas } from '../hooks/useEmpresas';
+import { NOMBRE_LOTE_MAX, normalizarNombreLote } from '../lib/galeriaCarpetas';
 
 const textoStyle = { fontSize: 14, color: 'var(--text-primary)', fontFamily: 'var(--font-ui)', lineHeight: 1.6, margin: 0 };
 const selectStyle = {
@@ -70,6 +71,30 @@ export function EliminarLoteDialog({ cantidad, ocultasPorFiltro = 0, procesando,
           : 'Las fotos y sus resultados de corrosión se borran para siempre y dejan de contar en las estadísticas del punto. Esta acción no se puede deshacer.'}
       </p>
       <AvisoOcultasPorFiltro ocultasPorFiltro={ocultasPorFiltro} cantidad={cantidad} />
+    </Marco>
+  );
+}
+
+// El nombre vive en cada foto del lote: el cambio se aplica a todas (las del lote completo).
+export function RenombrarLoteDialog({ nombreActual = '', cantidad, procesando, onConfirmar, onCancelar }) {
+  const [valor, setValor] = useState(nombreActual);
+  const limpio = normalizarNombreLote(valor);
+  const sinCambios = limpio === nombreActual;
+  const puedeGuardar = Boolean(limpio) && !sinCambios && !procesando;
+  return (
+    <Marco
+      titulo="Renombrar lote" confirmar="Guardar" confirmando="Guardando…"
+      deshabilitado={!limpio || sinCambios} procesando={procesando}
+      onConfirmar={() => onConfirmar(limpio)} onCancelar={onCancelar}
+    >
+      <p style={textoStyle}>El nuevo nombre se aplica a las {fotos(cantidad)} del lote.</p>
+      <label htmlFor="renombrar-lote" style={etiquetaStyle}>Nombre del lote</label>
+      <input
+        id="renombrar-lote" type="text" value={valor} maxLength={NOMBRE_LOTE_MAX} autoComplete="off"
+        onChange={e => setValor(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter' && puedeGuardar) { e.preventDefault(); onConfirmar(limpio); } }}
+        style={selectStyle}
+      />
     </Marco>
   );
 }

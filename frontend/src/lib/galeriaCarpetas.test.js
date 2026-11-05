@@ -12,6 +12,7 @@ import {
   medicionesDeLote,
   contarOcultasPorFiltro,
   etiquetaConteoBloque,
+  normalizarNombreLote,
 } from './galeriaCarpetas.js';
 
 describe('galeriaCarpetas', () => {
@@ -217,5 +218,19 @@ describe('galeriaCarpetas', () => {
     assert.equal(etiquetaConteoBloque(1, [], false), '1 medición');
     assert.equal(etiquetaConteoBloque(0, [], true), '0 mediciones · 0 lotes');
     assert.equal(etiquetaConteoBloque(undefined, meds, false), '3 mediciones');
+  });
+});
+
+describe('normalizarNombreLote', () => {
+  it('colapsa espacios y quita caracteres de control', () => {
+    assert.equal(normalizarNombreLote('  Lote \t  norte\u0001 sur '), 'Lote norte sur');
+  });
+  it('trunca a 80 caracteres', () => {
+    assert.equal(normalizarNombreLote('a'.repeat(200)), 'a'.repeat(80));
+  });
+  it('devuelve vacío para vacío, solo espacios o valores no texto', () => {
+    assert.equal(normalizarNombreLote('   '), '');
+    assert.equal(normalizarNombreLote(null), '');
+    assert.equal(normalizarNombreLote(undefined), '');
   });
 });

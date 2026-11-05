@@ -32,6 +32,14 @@ const nombreLoteLimpio = (m) => {
   return String(m.lote_nombre).trim();
 };
 
+// Mismo límite y limpieza que el backend (`lote_nombre`): sin caracteres de control,
+// espacios colapsados y recortado a 80. Vacío significa que no se puede guardar.
+export const NOMBRE_LOTE_MAX = 80;
+export function normalizarNombreLote(valor) {
+  const limpio = String(valor ?? '').replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').split(/\s+/).filter(Boolean).join(' ');
+  return limpio.slice(0, NOMBRE_LOTE_MAX).trimEnd();
+}
+
 // Calcula el desglose unificado de imágenes y lotes sobre una lista de mediciones.
 export function resumenConteoMediciones(mediciones = []) {
   const lista = Array.isArray(mediciones) ? mediciones : [];

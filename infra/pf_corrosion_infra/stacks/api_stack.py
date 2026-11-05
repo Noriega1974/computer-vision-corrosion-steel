@@ -130,7 +130,7 @@ class CorriaApiStack(Stack):
 
         # Acciones en lote (máx. 100 por solicitud; RBAC en el handler).
         mediciones_lote = mediciones.add_resource("lote")
-        for accion in ("eliminar", "mover"):
+        for accion in ("eliminar", "mover", "renombrar"):
             mediciones_lote.add_resource(accion).add_method("POST", mediciones_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
 
         mediciones_id = mediciones.add_resource("{id_punto}")

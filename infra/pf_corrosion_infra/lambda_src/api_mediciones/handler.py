@@ -940,6 +940,46 @@ def _nombre_foto(valor) -> str:
     return limpio[:NOMBRE_MAX].rstrip()
 
 
+def _lote_renombrar(event: dict) -> dict:
+    """POST /mediciones/lote/renombrar: cambia `lote_nombre` en cada medición
+    pedida (el lote no es una entidad: el nombre vive en cada ítem). Misma
+    entrada y resolución que eliminar/mover; el técnico solo si TODAS las
+    mediciones son suyas. El nombre no puede quedar vacío."""
+    creador = _usuario_actual(event)
+    if not _puede_gestionar(creador):
+        return _respuesta(403, {"error": "No tienes permiso para renombrar lotes. Pide ayuda a un administrador"})
+    try:
+        pedidos, body = _leer_lote(event)
+        valor = body.get("nombre")
+        if not isinstance(valor, str):
+            raise ValueError("Escribe el nombre nuevo del lote e inténtalo de nuevo")
+        nombre = _nombre_foto(valor)   # mismas reglas que `lote_nombre` al subir: sin control, espacios colapsados, 80
+        if not nombre:
+            raise ValueError("El nombre del lote no puede quedar vacío")
+    except ValueError as e:
+        return _respuesta(400, {"error": str(e)})
+
+    encontrados, errores = _resolver_lote(creador, pedidos)
+    ajenas = _ajenas_para_tecnico(creador, _sub(event), encontrados)
+    if ajenas:
+        return _rechazo_ajenas(len(ajenas), "renombrar")
+    ok = []
+    for item in encontrados:
+        try:
+            tabla.update_item(
+                Key={"id_punto": item["id_punto"], "sk": item["sk"]},
+                UpdateExpression="SET #ln = :n",
+                ExpressionAttributeNames={"#ln": "lote_nombre"},
+                ExpressionAttributeValues={":n": nombre},
+                ConditionExpression=Attr("id_medicion").eq(item["id_medicion"]),
+            )
+            ok.append(item["id_medicion"])
+        except Exception as e:
+            logger.exception("No se pudo renombrar el lote de %s: %s", item.get("id_medicion"), e)
+            errores.append({"id_medicion": item["id_medicion"], "motivo": "No se pudo renombrar. Inténtalo de nuevo"})
+    return _respuesta(200, {"ok": ok, "error": errores, "nombre": nombre, "actualizadas": len(ok)})
+
+
 def _renombrar_medicion(event: dict, id_punto: str) -> dict:
     """Misma identificación y autorización por empresa que `_eliminar_medicion`:
     admin y super_admin renombran cualquier foto de su alcance; el técnico solo
@@ -998,11 +1038,13 @@ def lambda_handler(event: dict, context) -> dict:
         if rechazo:
             return rechazo
 
-        # ── POST /mediciones/lote/eliminar | /mediciones/lote/mover ──────────
+        # ── POST /mediciones/lote/eliminar | mover | renombrar ───────────────
         if http_method == "POST" and resource == "/mediciones/lote/eliminar":
             return _lote_eliminar(event)
         if http_method == "POST" and resource == "/mediciones/lote/mover":
             return _lote_mover(event)
+        if http_method == "POST" and resource == "/mediciones/lote/renombrar":
+            return _lote_renombrar(event)
 
         # ── DELETE /mediciones/{id_punto} ────────────────────────────────────
         if http_method == "DELETE" and id_punto:
