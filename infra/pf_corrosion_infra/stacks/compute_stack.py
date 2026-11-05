@@ -166,6 +166,7 @@ class CorriaComputeStack(Stack):
                 "TABLA_USUARIOS": usuarios_table.table_name,
                 "TABLA_EMPRESAS": empresas_table.table_name,
                 "TABLA_PUNTOS_MEDICIONES": puntos_mediciones_table.table_name,
+                "TABLA_BLOQUES": bloques_table.table_name,
                 "USER_POOL_ID": user_pool.user_pool_id,
                 "BUCKET_NAME": images_bucket.bucket_name,
             },
@@ -181,6 +182,24 @@ class CorriaComputeStack(Stack):
         # solo bajo ese prefijo.
         images_bucket.grant_read(self.api_usuarios_fn, "empresas/*/logo/*")
         images_bucket.grant_delete(self.api_usuarios_fn, "empresas/*/logo/*")
+        # DELETE /empresas/{id} (zona vacía): lista el prefijo `empresas/` y borra
+        # solo marcadores, es decir claves que terminan en "/" (`empresas/{e}/` y
+        # `empresas/{e}/{b}/`). El patrón `empresas/*/` no alcanza a las fotos
+        # (sus claves no terminan en "/"); además el handler solo borra objetos de
+        # 0 bytes y logos, y se niega si queda cualquier otro archivo.
+        self.api_usuarios_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["s3:ListBucket"],
+                resources=[images_bucket.bucket_arn],
+                conditions={"StringLike": {"s3:prefix": ["empresas/*"]}},
+            )
+        )
+        self.api_usuarios_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["s3:DeleteObject"],
+                resources=[images_bucket.arn_for_objects("empresas/*/")],
+            )
+        )
         # Lectura: verificar que un empresa_id exista al crear un usuario con
         # empresa explícita (super_admin). Escritura: POST /empresas (crear
         # empresas nuevas), restringido a super_admin dentro del handler.
@@ -189,6 +208,8 @@ class CorriaComputeStack(Stack):
         # a eliminar permanentemente tiene puntos/mediciones asociados, para
         # bloquear el borrado en vez de dejarlos huérfanos — nunca escribe acá.
         puntos_mediciones_table.grant_read_data(self.api_usuarios_fn)
+        # DELETE /empresas/{id}: cuenta los puntos de la zona (GSI empresa_id-index); solo lectura.
+        bloques_table.grant_read_data(self.api_usuarios_fn)
         # Narrow Cognito admin-* actions actually used by the handler
         # (create/delete/enable/disable users, set password, group
         # membership) — mirrors the scoping used in the source account,

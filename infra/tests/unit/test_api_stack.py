@@ -61,11 +61,11 @@ def test_mediciones_tiene_patch_con_cognito_y_permiso_de_invocacion():
 
 def test_mediciones_lote_post_con_cognito():
     api, _ = _stacks()
-    for parte in ("lote", "eliminar", "mover"):
+    for parte in ("lote", "eliminar", "mover", "renombrar"):
         api.has_resource_properties("AWS::ApiGateway::Resource", {"PathPart": parte})
     metodos = api.find_resources("AWS::ApiGateway::Method", {"Properties": {"HttpMethod": "POST", "AuthorizationType": "COGNITO_USER_POOLS"}})
     mediciones = [m for m in metodos.values() if "Mediciones" in str(m["Properties"]["Integration"]["Uri"])]
-    assert len(mediciones) == 2
+    assert len(mediciones) == 3
 
 
 def test_rutas_de_logo_y_portada_con_cognito_y_su_lambda():
@@ -76,8 +76,8 @@ def test_rutas_de_logo_y_portada_con_cognito_y_su_lambda():
     metodos = api.find_resources("AWS::ApiGateway::Method", {"Properties": {"AuthorizationType": "COGNITO_USER_POOLS"}})
     def _de(lambda_, verbo):
         return [m for m in metodos.values() if m["Properties"]["HttpMethod"] == verbo and lambda_ in str(m["Properties"]["Integration"]["Uri"])]
-    # logo: PUT + DELETE de empresas; portada: PUT + DELETE de bloques (ademas de los existentes)
-    assert len(_de("Usuarios", "DELETE")) == 3 and len(_de("Puntos", "DELETE")) == 2
+    # DELETE de empresas (zona vacía) + logo: PUT + DELETE de empresas; portada: PUT + DELETE de bloques (ademas de los existentes)
+    assert len(_de("Usuarios", "DELETE")) == 4 and len(_de("Puntos", "DELETE")) == 2
     assert len(_de("Usuarios", "POST")) >= 4 and len(_de("Puntos", "POST")) == 2
 
 

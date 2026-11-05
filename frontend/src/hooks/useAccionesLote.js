@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { apiPost } from '../lib/apiClient';
 import { useRefreshKey } from './RefreshKeyContext';
 
-// POST /mediciones/lote/eliminar y /mediciones/lote/mover (api_mediciones).
+// POST /mediciones/lote/eliminar, /mover y /renombrar (api_mediciones).
 // El backend acepta hasta 100 por solicitud y responde 200 con resultado por
 // ítem: { ok: [id_medicion], error: [{ id_medicion, motivo }] }. Aquí se parte
 // la selección en tandas de 100 y se unen los resultados; si una tanda entera
@@ -48,5 +48,10 @@ export function useAccionesLote() {
     [ejecutar],
   );
 
-  return { eliminar, mover, procesando };
+  const renombrar = useCallback(
+    (items, nombre) => ejecutar('/mediciones/lote/renombrar', items, { nombre }),
+    [ejecutar],
+  );
+
+  return { eliminar, mover, renombrar, procesando };
 }

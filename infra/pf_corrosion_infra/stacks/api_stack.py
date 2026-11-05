@@ -89,6 +89,8 @@ class CorriaApiStack(Stack):
 
         empresas_id = empresas.add_resource("{id_empresa}")
         empresas_id.add_method("PUT", usuarios_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
+        # Eliminar una zona vacía (solo super_admin; 409 si tiene puntos o usuarios).
+        empresas_id.add_method("DELETE", usuarios_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
 
         # Logo de la empresa: POST prefirmado de S3 (upload-url), luego PUT fija
         # la clave y DELETE la quita. RBAC en el handler (super_admin cualquier
@@ -130,7 +132,7 @@ class CorriaApiStack(Stack):
 
         # Acciones en lote (máx. 100 por solicitud; RBAC en el handler).
         mediciones_lote = mediciones.add_resource("lote")
-        for accion in ("eliminar", "mover"):
+        for accion in ("eliminar", "mover", "renombrar"):
             mediciones_lote.add_resource(accion).add_method("POST", mediciones_integration, authorization_type=apigateway.AuthorizationType.COGNITO, authorizer=authorizer)
 
         mediciones_id = mediciones.add_resource("{id_punto}")

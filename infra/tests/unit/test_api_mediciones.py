@@ -77,11 +77,30 @@ def test_falta_id_medicion_400(h):
     assert h.lambda_handler(_patch("x", id_medicion=None), None)["statusCode"] == 400
 
 
-@pytest.mark.parametrize("rol", ["tecnico", "cliente"])
-def test_rol_sin_permiso_403(h, monkeypatch, rol):
-    _rol(h, monkeypatch, rol)
+def test_cliente_403(h, monkeypatch):
+    _rol(h, monkeypatch, "cliente")
     assert h.lambda_handler(_patch("x"), None)["statusCode"] == 403
     assert h.tabla.items[0]["nombre"] == "viejo"
+
+
+def test_tecnico_renombra_su_foto(h, monkeypatch):
+    _rol(h, monkeypatch, "tecnico")
+    h.tabla.items[0]["tomado_por_id"] = "s"
+    r = h.lambda_handler(_patch("Mía"), None)
+    assert r["statusCode"] == 200 and h.tabla.items[0]["nombre"] == "Mía"
+
+
+def test_tecnico_no_renombra_foto_ajena(h, monkeypatch):
+    _rol(h, monkeypatch, "tecnico")
+    h.tabla.items[0]["tomado_por_id"] = "otra-persona"
+    r = h.lambda_handler(_patch("x"), None)
+    assert r["statusCode"] == 403 and h.tabla.items[0]["nombre"] == "viejo"
+
+
+def test_tecnico_otra_empresa_404(h, monkeypatch):
+    _rol(h, monkeypatch, "tecnico", "EMP-2")
+    h.tabla.items[0]["tomado_por_id"] = "s"
+    assert h.lambda_handler(_patch("x"), None)["statusCode"] == 404
 
 
 def test_otra_empresa_404(h, monkeypatch):

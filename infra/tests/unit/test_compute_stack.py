@@ -134,9 +134,9 @@ def test_logo_y_portada_leen_y_borran_solo_bajo_su_prefijo():
                         ("ApiPuntosFunctionServiceRole", "/empresas/*/*/portada/*")]:
         s3_stmts = [s for s in _politica(t, rol) if any(a.startswith("s3:") for a in _acciones(s))]
         lectura = [s for s in s3_stmts if any(a.startswith("s3:GetObject") for a in _acciones(s))]
-        borrado = [s for s in s3_stmts if any(a.startswith("s3:DeleteObject") for a in _acciones(s))]
+        borrado = [s for s in s3_stmts if any(a.startswith("s3:DeleteObject") for a in _acciones(s)) and patron in str(s["Resource"])]
         assert len(lectura) == 1 and patron in str(lectura[0]["Resource"])
-        assert len(borrado) == 1 and patron in str(borrado[0]["Resource"])
+        assert len(borrado) == 1
         # ninguna sentencia da lectura/borrado sobre todo el bucket
         assert not [s for s in lectura + borrado if "'/*'" in str(s["Resource"])]
 
@@ -193,3 +193,27 @@ def test_inferencia_puede_leer_empresas_y_actualizar_la_tabla_para_reanalizar():
     sobre_empresas = [s for s in sentencias if "/empresas/*" in str(s.get("Resource")) and "Images" in str(s.get("Resource"))]
     assert any("s3:GetObject*" in str(s["Action"]) and "s3:PutObject" in str(s["Action"]) for s in sobre_empresas)
     assert any("dynamodb:UpdateItem" in str(s["Action"]) and "PuntosMediciones" in str(s["Resource"]) for s in sentencias)
+
+
+def test_eliminar_zona_lista_solo_empresas_y_borra_solo_marcadores():
+    t = _plantilla()
+    s3_stmts = [s for s in _politica(t, "ApiUsuariosFunctionServiceRole") if any(a.startswith("s3:") for a in _acciones(s))]
+    listado = [s for s in s3_stmts if "s3:ListBucket" in _acciones(s)]
+    assert len(listado) == 1 and listado[0]["Condition"] == {"StringLike": {"s3:prefix": ["empresas/*"]}}
+    # el borrado de marcadores (claves que terminan en "/") es la única sentencia de borrado fuera del logo
+    marcadores = [s for s in s3_stmts if "s3:DeleteObject" in _acciones(s) and "/empresas/*/'" in str(s["Resource"])]
+    assert len(marcadores) == 1
+    # ninguna sentencia de borrado alcanza todo el bucket ni todo `empresas/*`
+    borrados = [s for s in s3_stmts if any(a.startswith("s3:DeleteObject") for a in _acciones(s))]
+    assert not [s for s in borrados if "/empresas/*'" in str(s["Resource"]) or "'/*'" in str(s["Resource"])]
+
+
+def test_api_usuarios_lee_bloques_para_contar_los_puntos_de_la_zona():
+    t = _plantilla()
+    fn = next(f for f in t.find_resources("AWS::Lambda::Function", {}).values()
+              if f["Properties"].get("FunctionName") == "pf-corrosion-api-usuarios")
+    assert "TABLA_BLOQUES" in fn["Properties"]["Environment"]["Variables"]
+    dyn = [s for s in _politica(t, "ApiUsuariosFunctionServiceRole") if any(a.startswith("dynamodb:") for a in _acciones(s))]
+    sobre_bloques = [s for s in dyn if "Bloques" in str(s["Resource"])]
+    assert sobre_bloques and not any(a in ("dynamodb:PutItem", "dynamodb:DeleteItem", "dynamodb:UpdateItem")
+                                     for s in sobre_bloques for a in _acciones(s))

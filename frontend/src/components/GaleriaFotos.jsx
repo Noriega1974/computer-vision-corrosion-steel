@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
-import { IconoCasillaMarcada, IconoEliminar, IconoMoverACarpeta, IconoSinResultados, IconoVolver } from './Iconos';
+import { IconoCasillaMarcada, IconoEditar, IconoEliminar, IconoMoverACarpeta, IconoSinResultados, IconoVolver } from './Iconos';
 import MedicionCard from './MedicionCard';
 import BarraSeleccion from './BarraSeleccion';
 import { puedeGestionarMedicion, puedeGestionarLote } from '../lib/permisosMediciones';
-import { EliminarLoteDialog, MoverLoteDialog } from './LoteDialogs';
+import { EliminarLoteDialog, MoverLoteDialog, RenombrarLoteDialog } from './LoteDialogs';
 import { useAuth } from '../auth/AuthContext';
 import { useAccionesLote } from '../hooks/useAccionesLote';
 import { NIVELES, nivelColor, nivelLabel } from '../lib/statusUtils';
@@ -68,10 +68,10 @@ export default function GaleriaFotos({
   const puedeGestionar = ROLES_GESTION.some(r => user?.groups?.includes(r));
   // El técnico solo mueve y elimina lo que él tomó (regla del backend): las demás fotos no se pueden marcar.
   const gestionable = (m) => Boolean(idPuntoDe(m)) && puedeGestionarMedicion(user?.groups, user?.sub, m);
-  const { eliminar, mover, procesando } = useAccionesLote();
+  const { eliminar, mover, renombrar, procesando } = useAccionesLote();
   const [seleccionando, setSeleccionando] = useState(false);
   const [marcadas, setMarcadas] = useState(() => new Set());
-  const [dialogo, setDialogo] = useState(null); // 'mover' | 'eliminar'
+  const [dialogo, setDialogo] = useState(null); // 'mover' | 'eliminar' | 'renombrar'
   // Las acciones de lote actúan sobre TODO el lote, no solo sobre lo que dejan ver los filtros.
   const [seleccionLoteCompleto, setSeleccionLoteCompleto] = useState(false);
   const [resumen, setResumen] = useState(null); // { texto, errores: [...] }
@@ -182,6 +182,20 @@ export default function GaleriaFotos({
     setResumen({
       texto: partes.join(', '),
       errores: error.map(e => `${nombres.get(e.id_medicion) ?? e.id_medicion}: ${e.motivo}`),
+      conError: error.length > 0,
+    });
+    salirDeSeleccion();
+  }
+
+  // Renombrar el lote abierto: el nuevo nombre se escribe en cada foto del lote.
+  async function ejecutarRenombrar(nombre) {
+    const { ok, error } = await renombrar(elegidas.map(m => ({ id_punto: idPuntoDe(m), id_medicion: m.id_medicion })), nombre);
+    const total = ok.length;
+    setResumen({
+      texto: error.length && !total
+        ? 'No se pudo renombrar el lote'
+        : `Lote renombrado a "${nombre}" (${total} ${total === 1 ? 'foto' : 'fotos'})`,
+      errores: error.map(e => `${e.id_medicion}: ${e.motivo}`),
       conError: error.length > 0,
     });
     salirDeSeleccion();
@@ -331,7 +345,7 @@ export default function GaleriaFotos({
             <FichaDetalleLote
               lote={loteAbierto}
               onVolver={() => { setLoteAbiertoId(null); salirDeSeleccion(); }}
-              textoVolver="← Todos los lotes del punto"
+              textoVolver="Volver a los lotes"
               compacta
               acciones={puedeGestionar && puedeGestionarLote(user?.groups, user?.sub, loteCompleto) ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -355,6 +369,7 @@ export default function GaleriaFotos({
                     disabled={accionesLoteBloqueadas}
                     title={tituloAccionLote}
                     items={[
+                      { key: 'renombrar', label: 'Renombrar lote', Icono: IconoEditar, onClick: () => accionDeLote('renombrar') },
                       { key: 'mover', label: 'Mover lote', Icono: IconoMoverACarpeta, onClick: () => accionDeLote('mover') },
                       { key: 'eliminar', label: 'Eliminar lote', Icono: IconoEliminar, peligro: true, onClick: () => accionDeLote('eliminar') },
                     ]}
@@ -457,6 +472,15 @@ export default function GaleriaFotos({
           procesando={procesando}
           onCancelar={() => setDialogo(null)}
           onConfirmar={() => ejecutar(eliminar, { sing: 'eliminada', plur: 'eliminadas' })}
+        />
+      )}
+      {dialogo === 'renombrar' && loteAbierto && (
+        <RenombrarLoteDialog
+          nombreActual={loteAbierto.nombre === 'Lote sin nombre' ? '' : loteAbierto.nombre}
+          cantidad={elegidas.length}
+          procesando={procesando}
+          onCancelar={() => setDialogo(null)}
+          onConfirmar={ejecutarRenombrar}
         />
       )}
       {dialogo === 'mover' && (

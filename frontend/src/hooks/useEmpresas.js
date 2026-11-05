@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { apiGet, apiPost, apiPut } from '../lib/apiClient';
+import { apiDelete, apiGet, apiPost, apiPut } from '../lib/apiClient';
 import { useRefreshKey } from './RefreshKeyContext';
 
-// GET/POST/PUT /empresas -- restringido a super_admin en el backend
-// (api_usuarios/handler.py). Todavía no hay DELETE: una empresa se
-// desactiva (PUT { activa: false }), nunca se borra desde la UI.
+// GET/POST/PUT/DELETE /empresas -- restringido a super_admin en el backend
+// (api_usuarios/handler.py). DELETE solo funciona con la zona vacía (sin puntos
+// ni usuarios; si no, 409 con el detalle); para lo demás se desactiva
+// (PUT { activa: false }).
 // `enabled` evita el fetch (y el 403 esperable) para roles que no son
 // super_admin -- los hooks se llaman igual siempre (regla de React), pero
 // el efecto no dispara la request si enabled es false.
@@ -80,5 +81,18 @@ export function useGestionEmpresas(enabled = true) {
     }
   }, [refetch]);
 
-  return { empresas, loading, error, mutating, mutError, crearEmpresa, editarEmpresa, refetch };
+  // No guarda el error en `mutError` (el banner de la tabla): quien llama lo
+  // muestra en su diálogo, donde el 409 explica qué falta para poder borrar.
+  const eliminarEmpresa = useCallback(async (idEmpresa) => {
+    setMutating(true);
+    try {
+      const result = await apiDelete(`/empresas/${idEmpresa}`);
+      refetch();
+      return result;
+    } finally {
+      setMutating(false);
+    }
+  }, [refetch]);
+
+  return { empresas, loading, error, mutating, mutError, crearEmpresa, editarEmpresa, eliminarEmpresa, refetch };
 }

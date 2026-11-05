@@ -67,7 +67,7 @@ REGION = os.environ["REGION"]
 
 SK_MEDICION_PREFIJO = "MED#"
 
-# Roles que pueden eliminar y mover mediciones (cliente solo lee).
+# Roles que pueden eliminar, mover y renombrar mediciones (cliente solo lee).
 ROLES_GESTION = ("super_admin", "admin", "tecnico")
 CAMPOS_S3 = ("s3_key_imagen", "s3_key_thumbnail", "s3_key_resultado")
 LOTE_MAX = 100
@@ -266,7 +266,7 @@ def _es_del_usuario(item: dict, sub: str) -> bool:
 
 
 def _ajenas_para_tecnico(creador: dict, sub: str, items: list) -> list:
-    """Regla del técnico: solo mueve/elimina lo que él mismo tomó. Para los
+    """Regla del técnico: solo mueve, elimina y renombra lo que él mismo tomó. Para los
     demás roles devuelve []."""
     if creador.get("rol") != "tecnico":
         return []
@@ -940,14 +940,55 @@ def _nombre_foto(valor) -> str:
     return limpio[:NOMBRE_MAX].rstrip()
 
 
-def _renombrar_medicion(event: dict, id_punto: str) -> dict:
-    """Misma identificación y autorización por empresa que `_eliminar_medicion`
-    (pero solo admin/super_admin: tecnico no renombra). La fuente
-    de verdad del nombre es DynamoDB; el JSON de resultado en S3 es una foto del
-    análisis y no se reescribe (la web lee `nombre` del ítem)."""
+def _lote_renombrar(event: dict) -> dict:
+    """POST /mediciones/lote/renombrar: cambia `lote_nombre` en cada medición
+    pedida (el lote no es una entidad: el nombre vive en cada ítem). Misma
+    entrada y resolución que eliminar/mover; el técnico solo si TODAS las
+    mediciones son suyas. El nombre no puede quedar vacío."""
     creador = _usuario_actual(event)
-    if not creador or creador.get("rol") not in ("admin", "super_admin"):
-        return _respuesta(403, {"error": "Solo los administradores pueden renombrar mediciones. Pide ayuda a un administrador"})
+    if not _puede_gestionar(creador):
+        return _respuesta(403, {"error": "No tienes permiso para renombrar lotes. Pide ayuda a un administrador"})
+    try:
+        pedidos, body = _leer_lote(event)
+        valor = body.get("nombre")
+        if not isinstance(valor, str):
+            raise ValueError("Escribe el nombre nuevo del lote e inténtalo de nuevo")
+        nombre = _nombre_foto(valor)   # mismas reglas que `lote_nombre` al subir: sin control, espacios colapsados, 80
+        if not nombre:
+            raise ValueError("El nombre del lote no puede quedar vacío")
+    except ValueError as e:
+        return _respuesta(400, {"error": str(e)})
+
+    encontrados, errores = _resolver_lote(creador, pedidos)
+    ajenas = _ajenas_para_tecnico(creador, _sub(event), encontrados)
+    if ajenas:
+        return _rechazo_ajenas(len(ajenas), "renombrar")
+    ok = []
+    for item in encontrados:
+        try:
+            tabla.update_item(
+                Key={"id_punto": item["id_punto"], "sk": item["sk"]},
+                UpdateExpression="SET #ln = :n",
+                ExpressionAttributeNames={"#ln": "lote_nombre"},
+                ExpressionAttributeValues={":n": nombre},
+                ConditionExpression=Attr("id_medicion").eq(item["id_medicion"]),
+            )
+            ok.append(item["id_medicion"])
+        except Exception as e:
+            logger.exception("No se pudo renombrar el lote de %s: %s", item.get("id_medicion"), e)
+            errores.append({"id_medicion": item["id_medicion"], "motivo": "No se pudo renombrar. Inténtalo de nuevo"})
+    return _respuesta(200, {"ok": ok, "error": errores, "nombre": nombre, "actualizadas": len(ok)})
+
+
+def _renombrar_medicion(event: dict, id_punto: str) -> dict:
+    """Misma identificación y autorización por empresa que `_eliminar_medicion`:
+    admin y super_admin renombran cualquier foto de su alcance; el técnico solo
+    las que tomó él (regla de eliminar y mover); el cliente no renombra. La
+    fuente de verdad del nombre es DynamoDB; el JSON de resultado en S3 es una
+    foto del análisis y no se reescribe (la web lee `nombre` del ítem)."""
+    creador = _usuario_actual(event)
+    if not _puede_gestionar(creador):
+        return _respuesta(403, {"error": "No tienes permiso para renombrar mediciones. Pide ayuda a un administrador"})
 
     qp = event.get("queryStringParameters") or {}
     id_medicion = qp.get("id_medicion")
@@ -965,6 +1006,8 @@ def _renombrar_medicion(event: dict, id_punto: str) -> dict:
     item = next((i for i in _mediciones_de_punto(id_punto) if i.get("id_medicion") == id_medicion), None)
     if not item or not _item_permitido(creador, item):
         return _respuesta(404, {"error": "No se encontró la medición. Actualiza la lista e inténtalo de nuevo"})
+    if _ajenas_para_tecnico(creador, _sub(event), [item]):
+        return _rechazo_ajenas(1, "renombrar")
 
     # "name" es palabra reservada de DynamoDB: va por alias.
     if nombre:
@@ -995,11 +1038,13 @@ def lambda_handler(event: dict, context) -> dict:
         if rechazo:
             return rechazo
 
-        # ── POST /mediciones/lote/eliminar | /mediciones/lote/mover ──────────
+        # ── POST /mediciones/lote/eliminar | mover | renombrar ───────────────
         if http_method == "POST" and resource == "/mediciones/lote/eliminar":
             return _lote_eliminar(event)
         if http_method == "POST" and resource == "/mediciones/lote/mover":
             return _lote_mover(event)
+        if http_method == "POST" and resource == "/mediciones/lote/renombrar":
+            return _lote_renombrar(event)
 
         # ── DELETE /mediciones/{id_punto} ────────────────────────────────────
         if http_method == "DELETE" and id_punto:
