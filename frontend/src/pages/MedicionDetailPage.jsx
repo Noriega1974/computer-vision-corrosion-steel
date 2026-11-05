@@ -301,11 +301,7 @@ export default function MedicionDetailPage() {
   const [avisoReanalizar, setAvisoReanalizar] = useState('');
   const { invalidate } = useRefreshKey();
 
-  const isAdmin =
-    user?.groups?.includes('super_admin') ||
-    user?.groups?.includes('admin');
-  // Eliminar también lo puede tecnico (renombrar sigue siendo de admins).
-  // El técnico solo elimina las mediciones que él tomó.
+  // Eliminar y renombrar: admins cualquiera de su alcance; el técnico solo las que él tomó (regla del backend).
   const puedeEliminar = Boolean(medicion) && puedeGestionarMedicion(user?.groups, user?.sub, medicion);
   const esSuperAdmin = user?.groups?.includes('super_admin');
   // Zona: nombre de la afiliación dueña de la medición. Un no-super_admin
@@ -952,8 +948,8 @@ export default function MedicionDetailPage() {
               <div>
                 <SectionTitle>Gestión de la medición</SectionTitle>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-                  {/* Renombrar la foto: solo admins (el backend lo exige). */}
-                  {isAdmin && (
+                  {/* Renombrar la foto: mismo permiso que eliminar (el backend lo exige). */}
+                  {puedeEliminar && (
                     <NombreFoto
                       idMedicion={idMedicion}
                       bloqueId={medicion.bloque_id}

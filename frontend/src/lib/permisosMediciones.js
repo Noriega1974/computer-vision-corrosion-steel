@@ -1,4 +1,4 @@
-// Quién puede mover o eliminar una medición. Refleja la regla del backend
+// Quién puede mover, eliminar o renombrar una medición. Refleja la regla del backend
 // (api_mediciones): super_admin y admin gestionan cualquiera de su alcance; el
 // técnico solo las que él mismo tomó (inference guarda su `sub` de Cognito en
 // `tomado_por_id` y `usuario_id`); el cliente ninguna.
@@ -9,7 +9,7 @@ export function esMedicionPropia(medicion, sub) {
   return Boolean(sub) && (medicion?.tomado_por_id === sub || medicion?.usuario_id === sub);
 }
 
-// ¿Puede el usuario (grupos de Cognito + sub) mover/eliminar esta medición?
+// ¿Puede el usuario (grupos de Cognito + sub) mover, eliminar o renombrar esta medición?
 export function puedeGestionarMedicion(grupos, sub, medicion) {
   if (tiene(grupos, 'super_admin') || tiene(grupos, 'admin')) return true;
   if (tiene(grupos, 'tecnico')) return esMedicionPropia(medicion, sub);
