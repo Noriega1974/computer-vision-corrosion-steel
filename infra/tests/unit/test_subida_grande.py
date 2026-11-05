@@ -270,6 +270,20 @@ def test_reintento_tras_exito_devuelve_la_misma_medicion_sin_duplicar(h, monkeyp
     assert len(h.tabla_mediciones.escritos) == escritos
 
 
+def test_la_medicion_guarda_idem_key_para_borrar_su_fila_de_idempotencia(h, monkeypatch, tmp_path):
+    _poner_unet(h, monkeypatch, tmp_path)
+    h.s3.put_object("bucket-de-prueba", CLAVE, _foto())
+    _ok(h.lambda_handler(_evento_clave(CLAVE), None))
+    medicion = next(i for i in h.tabla_mediciones.escritos if i.get("tipo_registro") == "medicion")
+    assert medicion["idem_key"] == CLAVE
+
+
+def test_sin_imagen_key_la_medicion_no_lleva_idem_key(h, monkeypatch, tmp_path):
+    _poner_unet(h, monkeypatch, tmp_path)
+    _ok(h.lambda_handler(_evento(_foto()), None))
+    assert "idem_key" not in h.tabla_mediciones.escritos[0]
+
+
 def test_reintento_mientras_corre_el_primero_es_409(h, monkeypatch, tmp_path):
     _poner_unet(h, monkeypatch, tmp_path)
     h.s3.put_object("bucket-de-prueba", CLAVE, _foto())

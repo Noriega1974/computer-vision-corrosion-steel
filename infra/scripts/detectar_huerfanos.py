@@ -47,12 +47,50 @@ CAMPOS_EMPRESAS = ("id_empresa", "activa", "activo", "logo_key")
 CAMPOS_BLOQUES = ("id_bloque", "empresa_id", "nombre", "portada_key")
 CAMPOS_MEDICIONES = (
     "id_punto", "sk", "nombre", "id_medicion", "empresa_id",
-    "s3_key_imagen", "s3_key_thumbnail", "s3_key_resultado",
+    "s3_key_imagen", "s3_key_thumbnail", "s3_key_resultado", "estado",
 )
 CAMPOS_USUARIOS = (
     "id_usuario", "email", "rol", "es_colaborador", "empresa_id", "activo",
     "vence_en", "cognito_sub", "cognito_username",
 )
+
+
+PREFIJO_IDEM = "IDEM#"
+
+
+def idem_huerfanas(items_pm: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Filas de idempotencia `IDEM#<imagen_key>` ya cerradas ('listo') cuya
+    `id_medicion` no corresponde a ninguna medición existente. Las filas
+    'procesando' se ignoran: pueden ser una solicitud en curso."""
+    existentes = {
+        str(it.get("id_medicion", ""))
+        for it in items_pm
+        if str(it.get("sk", "")).startswith("MED#") and it.get("id_medicion")
+    }
+    huerfanas = []
+    for it in items_pm:
+        pk = str(it.get("id_punto", ""))
+        if not pk.startswith(PREFIJO_IDEM) or it.get("sk") != "IDEM" or it.get("estado") != "listo":
+            continue
+        id_med = str(it.get("id_medicion", ""))
+        if id_med and id_med in existentes:
+            continue
+        huerfanas.append({"id_punto": pk, "sk": "IDEM", "id_medicion": id_med, "imagen_key": pk[len(PREFIJO_IDEM):]})
+    return huerfanas
+
+
+def marcador_huerfano(key: str, ids_empresas: set[str], ids_bloques: set[str]) -> bool | None:
+    """Clasifica un marcador de carpeta vacío. None = no es un marcador de
+    `empresas/{e}/` ni `empresas/{e}/{b}/`; True = su zona o punto ya no existe;
+    False = pertenece a una entidad viva (informativo)."""
+    if not key.endswith("/") or not key.startswith("empresas/"):
+        return None
+    partes = key.rstrip("/").split("/")
+    if len(partes) == 2:
+        return partes[1] not in ids_empresas
+    if len(partes) == 3:
+        return partes[1] not in ids_empresas or partes[2] not in ids_bloques
+    return None
 
 
 def _scan_all(tabla, campos: tuple[str, ...] = ()) -> list[dict[str, Any]]:
@@ -323,7 +361,10 @@ def auditar_huerfanos(
 
     archivos_huerfanos = []
     marcadores_carpeta = []
+    marcadores_huerfanos = []
     subidas_temporales = []
+    ids_empresas = set(empresas_por_id)
+    ids_bloques = set(bloques_por_id)
 
     for obj in objetos_s3:
         key = obj.get("Key", "")
@@ -334,7 +375,10 @@ def auditar_huerfanos(
             continue
 
         if key.endswith("/") and size == 0:
-            marcadores_carpeta.append({"key": key, "size": size})
+            if marcador_huerfano(key, ids_empresas, ids_bloques):
+                marcadores_huerfanos.append({"key": key, "size": size})
+            else:
+                marcadores_carpeta.append({"key": key, "size": size})
         elif key.startswith("uploads/"):
             subidas_temporales.append({"key": key, "size": size})
         else:
@@ -345,6 +389,8 @@ def auditar_huerfanos(
         for key, origen in sorted(claves_referenciadas.items()):
             if key not in claves_en_s3:
                 referencias_s3_rotas.append({"key": key, "origen": origen})
+
+    idem_huerfanas_lista = idem_huerfanas(items_pm)
 
     # Informativos: estados intencionales (empresa desactivada = borrado lógico,
     # filas METADATA de legado). No son hallazgos accionables.
@@ -359,6 +405,8 @@ def auditar_huerfanos(
         + len(usuarios_estado_discordante)
         + len(archivos_huerfanos)
         + len(referencias_s3_rotas)
+        + len(idem_huerfanas_lista)
+        + len(marcadores_huerfanos)
     )
 
     return {
@@ -377,6 +425,7 @@ def auditar_huerfanos(
         "mediciones_sin_bloque": mediciones_sin_bloque,
         "mediciones_empresa_discordante": mediciones_empresa_discordante,
         "items_metadata_legado": items_metadata_legado,
+        "idem_huerfanas": idem_huerfanas_lista,
         "usuarios_sin_empresa": usuarios_sin_empresa,
         "usuarios_ddb_sin_cognito": usuarios_ddb_sin_cognito,
         "cognito_sin_usuario_ddb": cognito_sin_usuario_ddb,
@@ -384,6 +433,7 @@ def auditar_huerfanos(
         "s3_huerfanos": {
             "archivos_huerfanos": archivos_huerfanos,
             "marcadores_carpeta": marcadores_carpeta,
+            "marcadores_huerfanos": marcadores_huerfanos,
             "subidas_temporales": subidas_temporales,
         },
         "referencias_s3_rotas": referencias_s3_rotas,
@@ -399,18 +449,20 @@ def formatear_reporte_humano(reporte: dict[str, Any]) -> str:
         f"Usuarios Cognito: {r['total_usuarios_cognito']} | Objetos S3: {r['total_objetos_s3']}",
         f"Total hallazgos accionables: {r['total_hallazgos']} "
         f"(informativos, no cuentan: {r.get('total_informativos', 0)})",
-        "Nota: los marcadores de carpeta S3 y las subidas temporales (uploads/) son informativos "
-        "y NO entran en el total accionable.",
+        "Nota: los marcadores de carpeta S3 de zonas/puntos existentes y las subidas temporales (uploads/) "
+        "son informativos y NO entran en el total accionable.",
         "",
         f"- Bloques sin empresa válida: {len(reporte['bloques_sin_empresa'])}",
         f"- Mediciones sin bloque padre: {len(reporte['mediciones_sin_bloque'])}",
         f"- Mediciones con empresa discordante: {len(reporte['mediciones_empresa_discordante'])}",
+        f"- Filas de idempotencia (IDEM#) sin medición: {len(reporte['idem_huerfanas'])}",
+        f"- Marcadores S3 de zonas/puntos inexistentes: {len(reporte['s3_huerfanos']['marcadores_huerfanos'])}",
         f"- Usuarios sin empresa válida: {len(reporte['usuarios_sin_empresa'])}",
         f"- Usuarios en DDB sin Cognito: {len(reporte['usuarios_ddb_sin_cognito'])}",
         f"- Usuarios en Cognito sin DDB: {len(reporte['cognito_sin_usuario_ddb'])}",
         f"- Usuarios con estado discordante: {len(reporte['usuarios_estado_discordante'])}",
         f"- Archivos S3 huérfanos: {len(reporte['s3_huerfanos']['archivos_huerfanos'])}",
-        f"- [informativo] Marcadores de carpeta S3 (0 B): {len(reporte['s3_huerfanos']['marcadores_carpeta'])}",
+        f"- [informativo] Marcadores de carpeta S3 de entidades vivas (0 B): {len(reporte['s3_huerfanos']['marcadores_carpeta'])}",
         f"- [informativo] Subidas temporales en S3 (uploads/): {len(reporte['s3_huerfanos']['subidas_temporales'])}",
         f"- Referencias S3 rotas en DynamoDB: {len(reporte['referencias_s3_rotas'])}",
         "",

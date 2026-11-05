@@ -1165,6 +1165,10 @@ def _procesar_solicitud(event: dict, tiempos: dict) -> dict:
             # después renombran el bloque, el histórico sigue mostrando cómo
             # se llamaba entonces.
             item_db["bloque_id"] = bloque_id_body
+            # Clave de la fila de idempotencia (IDEM#<imagen_key>): permite a
+            # api_mediciones borrarla junto con la medición (sin huérfanas).
+            if clave_reclamada:
+                item_db["idem_key"] = clave_reclamada
             if bloque.get("nombre"):
                 item_db["bloque_nombre"] = bloque["nombre"]
 
