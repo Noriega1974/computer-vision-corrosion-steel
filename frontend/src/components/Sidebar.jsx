@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { IconoAjustes, IconoCerrar, IconoCuadricula, IconoFlechaAdelante, IconoFlechaAtras, IconoInfo, IconoMundo, IconoPanel, IconoSalir, IconoSubir, IconoUbicacion, IconoUsuarios } from './Iconos';
 
 import { useAuth } from '../auth/AuthContext';
@@ -582,13 +582,17 @@ export default function Sidebar({
           zIndex: 1,
         }}
       >
-        {/* Logo / nombre */}
+        {/* Logo / nombre: lleva al inicio (dashboard) */}
         {(!collapsed || isMobile) && (
-          <div
+          <Link
+            to="/dashboard"
+            title="Ir al inicio"
+            aria-label="PixelRust, ir al inicio"
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: 9,
+              textDecoration: 'none',
             }}
           >
             {/* Logo PixelRust */}
@@ -623,7 +627,7 @@ export default function Sidebar({
             >
               PIXELRUST
             </span>
-          </div>
+          </Link>
         )}
 
         {/* Botón colapsar */}
