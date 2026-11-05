@@ -615,9 +615,16 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
     if metodo == "DELETE":
         # Borrar un bloque con mediciones adentro las dejaría apuntando a un
         # bloque_id inexistente (huérfanas). Bloqueamos en vez de borrar en
-        # cascada. El marcador S3 no se toca: puede quedar, es inocuo.
+        # cascada.
         if _contar_mediciones_de_bloque(id_bloque) > 0:
             return _respuesta(409, {"error": "No se puede eliminar el punto porque tiene mediciones. Elimina o mueve primero sus mediciones"})
+        # El marcador `empresas/{e}/{b}/` se borra ANTES que el ítem y sin
+        # best-effort (como el borrado de zona): si S3 falla se responde 500 con
+        # el punto intacto y el reintento funciona; al revés, el reintento daría
+        # 404 y el marcador quedaría huérfano para siempre.
+        empresa_marcador = bloque.get("empresa_id")
+        if empresa_marcador:
+            s3.delete_object(Bucket=BUCKET_NAME, Key=f"empresas/{empresa_marcador}/{id_bloque}/")
         tabla_bloques.delete_item(Key={"id_bloque": id_bloque})
         # Carrera: el conteo de arriba y las altas de mediciones (otra Lambda,
         # otra tabla) no son atómicos. Se vuelve a contar YA borrado el punto:
@@ -628,6 +635,8 @@ def _handle_bloques(event: dict, metodo: str, id_bloque: str | None) -> dict:
                 tabla_bloques.put_item(Item=bloque, ConditionExpression="attribute_not_exists(id_bloque)")
             except Exception as e:
                 logger.error("RESTAURAR_PUNTO_FALLO id_bloque=%s error=%s", id_bloque, e)
+            if empresa_marcador:
+                _crear_marcador_s3_bloque(empresa_marcador, id_bloque)
             return _respuesta(409, {"error": "No se puede eliminar el punto porque tiene mediciones. Elimina o mueve primero sus mediciones"})
         _borrar_objeto(bloque.get("portada_key"))
         return _respuesta(204, None)

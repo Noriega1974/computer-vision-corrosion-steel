@@ -266,6 +266,15 @@ class CorriaComputeStack(Stack):
         # borrado de la anterior, solo bajo ese prefijo.
         images_bucket.grant_read(self.api_puntos_fn, "empresas/*/*/portada/*")
         images_bucket.grant_delete(self.api_puntos_fn, "empresas/*/*/portada/*")
+        # DELETE /bloques/{id} borra el marcador `empresas/{e}/{b}/`. El patrón
+        # termina en "/": no alcanza a fotos ni resultados (sus claves no
+        # terminan en "/"), solo a marcadores de carpeta.
+        self.api_puntos_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["s3:DeleteObject"],
+                resources=[images_bucket.arn_for_objects("empresas/*/*/")],
+            )
+        )
 
         # ── api-mediciones ───────────────────────────────────────────────
         self.api_mediciones_fn = _lambda.Function(

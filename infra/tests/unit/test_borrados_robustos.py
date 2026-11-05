@@ -256,6 +256,50 @@ def test_punto_sin_mediciones_se_borra_con_204(p, monkeypatch):
     assert p.tabla_bloques.items == []
 
 
+MARCADOR = ("bucket-de-prueba", "empresas/EMP-1/BLQ-1/")
+
+
+def _con_marcador(p):
+    p.s3.objetos[MARCADOR] = b""
+
+
+def test_punto_borrado_elimina_su_marcador_s3(p, monkeypatch):
+    monkeypatch.setattr(p, "tabla_bloques", TablaBloques([_bloque()]))
+    monkeypatch.setattr(p, "tabla", TablaConteo([0]))
+    _con_marcador(p)
+    assert p.lambda_handler(_del_bloque(), None)["statusCode"] == 204
+    assert MARCADOR not in p.s3.objetos
+
+
+def test_punto_con_mediciones_409_conserva_el_marcador(p, monkeypatch):
+    monkeypatch.setattr(p, "tabla_bloques", TablaBloques([_bloque()]))
+    monkeypatch.setattr(p, "tabla", TablaConteo([2]))
+    _con_marcador(p)
+    assert p.lambda_handler(_del_bloque(), None)["statusCode"] == 409
+    assert MARCADOR in p.s3.objetos
+
+
+def test_fallo_al_borrar_el_marcador_da_500_con_el_punto_intacto_y_el_reintento_funciona(p, monkeypatch):
+    monkeypatch.setattr(p, "tabla_bloques", TablaBloques([_bloque()]))
+    monkeypatch.setattr(p, "tabla", TablaConteo([0]))
+    _con_marcador(p)
+    s3 = S3Falla(claves={"empresas/EMP-1/BLQ-1/"}, veces=1)
+    s3.objetos.update(p.s3.objetos)
+    monkeypatch.setattr(p, "s3", s3)
+    assert p.lambda_handler(_del_bloque(), None)["statusCode"] == 500
+    assert [b["id_bloque"] for b in p.tabla_bloques.items] == ["BLQ-1"]       # punto sigue
+    assert p.lambda_handler(_del_bloque(), None)["statusCode"] == 204          # reintento ok
+    assert p.tabla_bloques.items == [] and MARCADOR not in s3.objetos
+
+
+def test_carrera_que_restaura_el_punto_recrea_el_marcador(p, monkeypatch):
+    monkeypatch.setattr(p, "tabla_bloques", TablaBloques([_bloque()]))
+    monkeypatch.setattr(p, "tabla", TablaConteo([0, 1]))
+    _con_marcador(p)
+    assert p.lambda_handler(_del_bloque(), None)["statusCode"] == 409
+    assert MARCADOR in p.s3.objetos
+
+
 def test_punto_con_mediciones_409_sin_borrar(p, monkeypatch):
     monkeypatch.setattr(p, "tabla_bloques", TablaBloques([_bloque()]))
     monkeypatch.setattr(p, "tabla", TablaConteo([3]))
@@ -272,7 +316,7 @@ def test_punto_carrera_medicion_llega_antes_del_borrado_restaura_y_409(p, monkey
     assert "tiene mediciones" in _cuerpo(r)["error"]
     assert p.tabla_bloques.items == [_bloque(portada)]               # punto restaurado
     assert "attribute_not_exists" in p.tabla_bloques.puts[0][1]      # sin pisar nada
-    assert p.s3.eliminados == []                                     # la portada NO se borró
+    assert [k for _, k in p.s3.eliminados if "portada" in k] == []    # la portada NO se borró
 
 
 def test_portada_quitar_reintenta_y_registra_orphan(p, monkeypatch, caplog):

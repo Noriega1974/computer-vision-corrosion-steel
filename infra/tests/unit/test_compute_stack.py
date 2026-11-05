@@ -208,6 +208,16 @@ def test_eliminar_zona_lista_solo_empresas_y_borra_solo_marcadores():
     assert not [s for s in borrados if "/empresas/*'" in str(s["Resource"]) or "'/*'" in str(s["Resource"])]
 
 
+def test_eliminar_punto_borra_solo_marcadores_de_carpeta():
+    t = _plantilla()
+    s3_stmts = [s for s in _politica(t, "ApiPuntosFunctionServiceRole") if any(a.startswith("s3:") for a in _acciones(s))]
+    marcadores = [s for s in s3_stmts if "s3:DeleteObject" in _acciones(s) and "/empresas/*/*/'" in str(s["Resource"])]
+    assert len(marcadores) == 1
+    # ningun borrado alcanza todo el bucket ni `empresas/*` (fotos): solo marcadores y portada
+    borrados = [s for s in s3_stmts if any(a.startswith("s3:DeleteObject") for a in _acciones(s))]
+    assert not [s for s in borrados if "/empresas/*'" in str(s["Resource"]) or "'/*'" in str(s["Resource"])]
+
+
 def test_api_usuarios_lee_bloques_para_contar_los_puntos_de_la_zona():
     t = _plantilla()
     fn = next(f for f in t.find_resources("AWS::Lambda::Function", {}).values()
