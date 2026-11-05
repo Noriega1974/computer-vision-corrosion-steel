@@ -331,7 +331,7 @@ export default function GaleriaFotos({
             <FichaDetalleLote
               lote={loteAbierto}
               onVolver={() => { setLoteAbiertoId(null); salirDeSeleccion(); }}
-              textoVolver="← Todos los lotes del punto"
+              textoVolver="Volver a los lotes"
               compacta
               acciones={puedeGestionar && puedeGestionarLote(user?.groups, user?.sub, loteCompleto) ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>

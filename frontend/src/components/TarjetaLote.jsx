@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import NivelIcon from './NivelIcon';
-import { IconoCheck, IconoMoverACarpeta, IconoReloj } from './Iconos';
+import { IconoCheck, IconoMoverACarpeta, IconoReloj, IconoVolver } from './Iconos';
 import { nivelBg, nivelColor, nivelColorTexto, nivelLabel } from '../lib/statusUtils';
 import { formatoPct, plural } from '../lib/textUtils';
 import { iniciales } from '../lib/galeriaCarpetas';
@@ -292,10 +292,17 @@ export function FichaDetalleLote({ lote, onVolver, textoVolver = '← Volver', a
         fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums',
       }}>
         {onVolver && (
+          // Botón secundario con contorno marcado y texto principal: se distingue de los chips
+          // sin pasar del alto de los botones de acciones (mismo relleno que "Seleccionar lote completo").
           <button type="button" onClick={onVolver} style={{
-            padding: '2px 8px', background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 999,
-            cursor: 'pointer', color: 'var(--text-secondary)', fontWeight: 600, fontSize: 'var(--text-3xs)', flexShrink: 0,
-          }}>{textoVolver}</button>
+            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 10px',
+            background: 'var(--bg-card-solid)', border: '1px solid var(--border-strong)', borderRadius: 7,
+            cursor: 'pointer', color: 'var(--text-primary)', fontFamily: 'var(--font-ui)',
+            fontWeight: 700, fontSize: 'var(--text-2xs)', flexShrink: 0, whiteSpace: 'nowrap',
+          }}>
+            <IconoVolver size={13} aria-hidden="true" />
+            {textoVolver}
+          </button>
         )}
         <span title={`Lote: ${lote.nombre}`} style={{
           fontWeight: 700, fontSize: 'var(--text-xs)', color: 'var(--text-primary)',
