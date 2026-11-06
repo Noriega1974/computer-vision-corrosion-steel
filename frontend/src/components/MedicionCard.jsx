@@ -13,9 +13,9 @@ import { tiempoRelativo } from '../lib/tiempoRelativo';
 // `contexto` (opcional): texto que antecede a la fecha en el subtítulo, p. ej.
 // "Empresa · Punto" en los resultados de búsqueda; por defecto el punto, solo si
 // la foto tiene nombre propio (el nombre pasa a ser el título).
-// `seleccion` (opcional): { marcada, onToggle } en modo selección. La tarjeta
+// `seleccion` (opcional): { marcada, onToggle(id) } en modo selección. La tarjeta
 // deja de navegar, muestra una casilla y un clic alterna la selección.
-export default function MedicionCard({ medicion, to, state, contexto, seleccion }) {
+function MedicionCard({ medicion, to, state, contexto, seleccion }) {
   const nivel = medicion.nivel_corrosion ?? 0;
   const color = nivelColor(nivel);
   const nombrePunto = medicion.bloque_nombre ?? 'Sin punto asignado';
@@ -30,7 +30,7 @@ export default function MedicionCard({ medicion, to, state, contexto, seleccion 
       className="medicion-card"
       role={seleccion ? 'checkbox' : undefined}
       aria-checked={seleccion ? seleccion.marcada : undefined}
-      onClick={seleccion ? (e) => { e.preventDefault(); seleccion.onToggle(); } : undefined}
+      onClick={seleccion ? (e) => { e.preventDefault(); seleccion.onToggle(medicion.id_medicion); } : undefined}
       style={{
         position: 'relative',
         display: 'flex',
@@ -80,6 +80,7 @@ export default function MedicionCard({ medicion, to, state, contexto, seleccion 
             alt="Medición"
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
             loading="lazy"
+            decoding="async"
           />
         ) : (
           <div style={{
@@ -150,3 +151,14 @@ export default function MedicionCard({ medicion, to, state, contexto, seleccion 
     </Link>
   );
 }
+
+// Memoizada: `seleccion` llega como objeto nuevo en cada render del padre, así que
+// se compara por contenido (marcada + onToggle, que es estable); el resto por identidad.
+function mismasProps(a, b) {
+  return a.medicion === b.medicion && a.to === b.to && a.state === b.state && a.contexto === b.contexto
+    && Boolean(a.seleccion) === Boolean(b.seleccion)
+    && a.seleccion?.marcada === b.seleccion?.marcada
+    && a.seleccion?.onToggle === b.seleccion?.onToggle;
+}
+
+export default React.memo(MedicionCard, mismasProps);

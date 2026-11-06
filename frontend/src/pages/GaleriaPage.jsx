@@ -1,5 +1,5 @@
 import ErrorEstado from '../components/ErrorEstado';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation, useParams, useSearchParams, Link } from 'react-router-dom';
 import { IconoBuscar, IconoCerrar, IconoSinImagen, IconoSubir } from '../components/Iconos';
 import { useMediciones } from '../hooks/useMediciones';
@@ -196,14 +196,21 @@ export default function GaleriaPage() {
   const nombrePunto = (m) => m.bloque_nombre ?? 'Sin punto asignado';
 
   // ─── Carpetas ─────────────────────────────────────────────────────────────
-  const carpetasEmpresa = carpetasDeEmpresas(mediciones);
+  const carpetasEmpresa = useMemo(() => carpetasDeEmpresas(mediciones), [mediciones]);
   // Solo un super_admin con datos de varias empresas necesita ese nivel.
   const variasEmpresas = esSuperAdmin && (carpetasEmpresa.length > 1 || empresas.length > 1);
   const empresaActual = empresaId ?? carpetasEmpresa[0]?.id ?? perfil?.empresa_id ?? bloques[0]?.empresa_id;
-  const deEmpresa = mediciones.filter(m => claveEmpresa(m) === empresaActual);
-  const carpetasPunto = carpetasDePuntos(deEmpresa, bloquesDeEmpresa(bloques, empresaActual));
-  const fotosDelPunto = idPuntoApi ? medicionesPunto
-    : bloqueId ? deEmpresa.filter(m => clavePunto(m) === bloqueId) : [];
+  const deEmpresa = useMemo(
+    () => mediciones.filter(m => claveEmpresa(m) === empresaActual),
+    [mediciones, empresaActual],
+  );
+  const carpetasPunto = useMemo(
+    () => carpetasDePuntos(deEmpresa, bloquesDeEmpresa(bloques, empresaActual)),
+    [deEmpresa, bloques, empresaActual],
+  );
+  const fotosDelPunto = useMemo(() => (idPuntoApi ? medicionesPunto
+    : bloqueId ? deEmpresa.filter(m => clavePunto(m) === bloqueId) : []),
+  [idPuntoApi, medicionesPunto, bloqueId, deEmpresa]);
 
   const nivelVista = consulta ? 'busqueda'
     : bloqueId ? 'fotos'
@@ -226,9 +233,9 @@ export default function GaleriaPage() {
     if (nivelVista === 'fotos') tramos.push({ label: tituloPunto });
   }
 
-  const resultados = nivelVista === 'busqueda'
+  const resultados = useMemo(() => (nivelVista === 'busqueda'
     ? mediciones.filter(m => normalizar(`${m.nombre ?? ''} ${m.notas ?? ''}`).includes(consulta))
-    : [];
+    : []), [nivelVista, mediciones, consulta]);
 
   let titulo = 'Galería de mediciones';
   let subtitulo = '';
