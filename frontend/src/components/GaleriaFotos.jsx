@@ -138,7 +138,7 @@ export default function GaleriaFotos({
   // point) starts again from the first window.
   const [limite, setLimite] = useState(PASO_RENDER);
   useEffect(() => { setLimite(PASO_RENDER); },
-    [nivelFilter, fechaInicio, fechaFin, orden, loteAbiertoId, mostrarTodas, puntoActual, mediciones]);
+    [nivelFilter, fechaInicio, fechaFin, orden, loteAbiertoId, mostrarTodas, puntoActual]);
   const tarjetas = useMemo(() => recortarVisibles(visibles, limite), [visibles, limite]);
   const hayMas = tarjetas.length < visibles.length;
   const [centinela, setCentinela] = useState(null);
