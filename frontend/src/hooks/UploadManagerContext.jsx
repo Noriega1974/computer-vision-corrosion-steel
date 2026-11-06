@@ -10,7 +10,7 @@ import {
   FASE_PREVIA,
   LOTE_MAX,
   calcularProgresoSubida,
-  debeInvalidar,
+  debeRefrescarAlTerminar,
   debeActualizarProgreso,
   ejecutarColaConcurrencia,
   esReanudable,
@@ -68,7 +68,6 @@ function useGestorSubida() {
   const sesionRef = useRef(sesion);
   sesionRef.current = sesion;
   const runningRef = useRef(false);
-  const ultimoInvalidarRef = useRef(null);
   // Cancellation: every run captures `genRef`; logout bumps it, so in-flight workers
   // see `cancelado()` and stop. `abortRef` aborts the S3 transfers in flight.
   const genRef = useRef(0);
@@ -215,8 +214,8 @@ function useGestorSubida() {
     }
   }, [patch]);
 
-  // Runs the given rows with bounded concurrency. The global refresh is
-  // throttled: at most every ~10 s while running, plus once at the end.
+  // Runs the given rows with bounded concurrency. The global gallery refresh
+  // happens once when the run ends (not while it runs).
   const correr = useCallback(async (ids) => {
     if (runningRef.current || !sesionRef.current) return;
     const filas = ids.map((id) => itemsRef.current.find((x) => x.id === id)).filter(Boolean);
@@ -230,7 +229,7 @@ function useGestorSubida() {
     const cancelado = () => genRef.current !== gen;
     abortRef.current = new AbortController();
     filas.forEach((f) => patch(f.id, { estado: 'cola', error: null, incierto: false, reintentando: false }));
-    let pendienteInvalidar = false;
+    const estadosFinales = [];
     try {
       await ejecutarColaConcurrencia({
         items: filas,
@@ -240,16 +239,7 @@ function useGestorSubida() {
         onItemUpdate: (id, cambios) => {
           patch(id, cambios);
           if (cambios.estado === 'listo' || cambios.estado === 'error') anunciar(id, cambios.estado === 'listo');
-          if (cambios.estado === 'listo') {
-            const ahora = Date.now();
-            if (debeInvalidar(ahora, ultimoInvalidarRef.current)) {
-              ultimoInvalidarRef.current = ahora;
-              pendienteInvalidar = false;
-              invalidate();
-            } else {
-              pendienteInvalidar = true;
-            }
-          }
+          if (cambios.estado === 'listo' || cambios.estado === 'error') estadosFinales.push(cambios.estado);
         },
       });
     } finally {
@@ -267,10 +257,7 @@ function useGestorSubida() {
         setRunning(false);
         ultimoProgresoRef.current.clear();
       }
-      if (pendienteInvalidar && !cancelado()) {
-        ultimoInvalidarRef.current = Date.now();
-        invalidate();
-      }
+      if (!cancelado() && debeRefrescarAlTerminar(estadosFinales)) invalidate();
     }
   }, [patch, tarea, anunciar, invalidate]);
 

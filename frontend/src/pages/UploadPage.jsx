@@ -130,7 +130,7 @@ export default function UploadPage() {
 
   // Estado del formulario
   const [imagen, setImagen] = useState(null);         // File object
-  const [preview, setPreview] = useState(null);       // data URL
+  const [preview, setPreview] = useState(null);       // object URL (revoked on change/unmount)
   const [exifGps, setExifGps] = useState(null);       // {latitude, longitude}
   const [dragOver, setDragOver] = useState(false);
 
@@ -177,10 +177,6 @@ export default function UploadPage() {
     setImagen(file);
     // El nombre arranca con el del archivo (sin extensión); el usuario lo edita.
     setNombre(file.name.replace(/\.[^.]+$/, '').slice(0, NOMBRE_MAX));
-    // Preview
-    const reader = new FileReader();
-    reader.onload = e => setPreview(e.target.result);
-    reader.readAsDataURL(file);
     // EXIF GPS -- metadata informativa de la foto (dónde se tomó exactamente),
     // independiente de la ubicación fija del punto elegido abajo.
     // Clear any GPS from a previous photo first so a new photo without GPS
@@ -191,6 +187,15 @@ export default function UploadPage() {
       if (gps?.latitude && gps?.longitude) setExifGps(gps);
     } catch { /* sin EXIF */ }
   }, []);
+
+  // Preview of the single photo: an object URL (no base64 copy of the file in
+  // state), revoked when the photo changes or the page unmounts.
+  useEffect(() => {
+    if (!imagen) { setPreview(null); return undefined; }
+    const url = URL.createObjectURL(imagen);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [imagen]);
 
   // Entry point for the file input and the drop zone. Each file is validated
   // individually; in batch mode, files go to the batch queue (capped at LOTE_MAX).

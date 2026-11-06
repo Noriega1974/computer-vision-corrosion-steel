@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import { IconoCasillaMarcada, IconoEditar, IconoEliminar, IconoMoverACarpeta, IconoSinResultados, IconoVolver } from './Iconos';
@@ -15,6 +15,7 @@ import { enRangoDiasColombia, hoyColombiaISO, fechaUltimaMedicionISO } from '../
 import { agruparPorLote, contarOcultasPorFiltro, formatearConteoMediciones, medicionesDeLote } from '../lib/galeriaCarpetas';
 import TarjetaLote, { FichaDetalleLote } from './TarjetaLote';
 import MenuMasAcciones from './MenuMasAcciones';
+import { PASO_RENDER, siguienteLimite, recortarVisibles } from '../lib/renderProgresivo';
 
 const ORDENES = [
   { key: 'recientes', label: 'Más recientes' },
@@ -102,17 +103,23 @@ export default function GaleriaFotos({
   }, [seleccionando, onSeleccionChange]);
 
   const hayFiltros = nivelFilter !== 'all' || fechaInicio || fechaFin;
-  const medicionesPorNivel = mediciones.filter(
+  const medicionesPorNivel = useMemo(() => mediciones.filter(
     m => nivelFilter === 'all' || (m.nivel_corrosion ?? 0) === Number(nivelFilter),
-  );
-  const filtradas = medicionesPorNivel
+  ), [mediciones, nivelFilter]);
+  const filtradas = useMemo(() => medicionesPorNivel
     .filter(m => enRangoDiasColombia(m.timestamp, fechaInicio, fechaFin))
-    .sort(COMPARADORES[orden]);
+    .sort(COMPARADORES[orden]), [medicionesPorNivel, fechaInicio, fechaFin, orden]);
 
-  const agrupado = puntoActual ? agruparPorLote(filtradas) : { lotes: [], sueltas: filtradas };
+  const agrupado = useMemo(
+    () => (puntoActual ? agruparPorLote(filtradas) : { lotes: [], sueltas: filtradas }),
+    [puntoActual, filtradas],
+  );
   const lotes = agrupado.lotes;
-  const sueltas = [...agrupado.sueltas].sort(COMPARADORES[orden]);
-  const loteAbierto = loteAbiertoId ? lotes.find(l => l.id === loteAbiertoId) ?? null : null;
+  const sueltas = useMemo(() => [...agrupado.sueltas].sort(COMPARADORES[orden]), [agrupado, orden]);
+  const loteAbierto = useMemo(
+    () => (loteAbiertoId ? lotes.find(l => l.id === loteAbiertoId) ?? null : null),
+    [loteAbiertoId, lotes],
+  );
 
   useEffect(() => {
     if (loteAbiertoId && !loteAbierto) {
@@ -120,9 +127,35 @@ export default function GaleriaFotos({
     }
   }, [loteAbiertoId, loteAbierto]);
 
-  const visibles = loteAbierto
+  const visibles = useMemo(() => (loteAbierto
     ? [...loteAbierto.mediciones].sort(COMPARADORES[orden])
-    : (lotes.length > 0 && !mostrarTodas ? sueltas : filtradas);
+    : (lotes.length > 0 && !mostrarTodas ? sueltas : filtradas)),
+  [loteAbierto, orden, lotes, mostrarTodas, sueltas, filtradas]);
+
+  // Progressive rendering: only the first PASO_RENDER cards are mounted; a sentinel
+  // below the grid grows the window on scroll. Selection and counts keep using the
+  // full `visibles`, so behavior is unchanged. A new view (filters, order, batch,
+  // point) starts again from the first window.
+  const [limite, setLimite] = useState(PASO_RENDER);
+  useEffect(() => { setLimite(PASO_RENDER); },
+    [nivelFilter, fechaInicio, fechaFin, orden, loteAbiertoId, mostrarTodas, puntoActual]);
+  const tarjetas = useMemo(() => recortarVisibles(visibles, limite), [visibles, limite]);
+  const hayMas = tarjetas.length < visibles.length;
+  const [centinela, setCentinela] = useState(null);
+  useEffect(() => {
+    if (!hayMas || !centinela) return undefined;
+    if (typeof IntersectionObserver === 'undefined') { setLimite(visibles.length); return undefined; }
+    const obs = new IntersectionObserver((entradas) => {
+      if (entradas.some(e => e.isIntersecting)) setLimite(l => siguienteLimite(l, visibles.length));
+    }, { rootMargin: '600px' });
+    obs.observe(centinela);
+    return () => obs.disconnect();
+  }, [hayMas, centinela, visibles.length, limite]);
+
+  // One state object for every card (stable while the filters do not change).
+  const estadoTarjeta = useMemo(() => ({
+    filters: { nivelFilter, fechaInicio, fechaFin, orden, loteAbiertoId }, volver: volverA,
+  }), [nivelFilter, fechaInicio, fechaFin, orden, loteAbiertoId, volverA]);
 
   // Lote abierto con TODAS sus fotos, sin filtros de nivel/fechas (solo datos del punto).
   const loteCompleto = loteAbierto ? medicionesDeLote(mediciones, loteAbierto.id) : [];
@@ -152,11 +185,11 @@ export default function GaleriaFotos({
     setResumen(null);
     setDialogo(dialogoInicial);
   };
-  const alternar = (id) => setMarcadas(prev => {
+  const alternar = useCallback((id) => setMarcadas(prev => {
     const sig = new Set(prev);
     if (sig.has(id)) sig.delete(id); else sig.add(id);
     return sig;
-  });
+  }), []);
   const alternarTodas = () => setMarcadas(
     elegidas.length === elegibles.length ? new Set() : new Set(elegibles.map(m => m.id_medicion)),
   );
@@ -436,21 +469,22 @@ export default function GaleriaFotos({
               display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
               gap: 'var(--space-4)',
             }}>
-              {visibles.map(m => (
+              {tarjetas.map(m => (
                 <MedicionCard
                   key={m.id_medicion}
                   medicion={m}
                   contexto={contexto?.(m)}
                   to={m.bloque_id ? `/galeria/${m.id_medicion}?punto=${encodeURIComponent(m.bloque_id)}` : `/galeria/${m.id_medicion}`}
-                  state={{ filters: { nivelFilter, fechaInicio, fechaFin, orden, loteAbiertoId }, volver: volverA }}
+                  state={estadoTarjeta}
                   seleccion={seleccionando && gestionable(m) ? {
                     marcada: marcadas.has(m.id_medicion),
-                    onToggle: () => alternar(m.id_medicion),
+                    onToggle: alternar,
                   } : undefined}
                 />
               ))}
             </div>
           )}
+          {hayMas && <div ref={setCentinela} aria-hidden="true" style={{ height: 1 }} />}
         </>
       )}
 

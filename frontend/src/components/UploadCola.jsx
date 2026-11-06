@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { IconoAgregarImagen, IconoCheck, IconoError, IconoEliminar, IconoFlechaAdelante, IconoFlechaAtras } from './Iconos';
 import { nivelColor, nivelLabel } from '../lib/statusUtils';
 import { formatoPct, etiquetaBase } from '../lib/textUtils';
@@ -7,6 +7,7 @@ import ConfirmDialog from './ConfirmDialog';
 import NotaPctAproximado from './NotaPctAproximado';
 import { Mosaico } from './Mosaico';
 import { estadoTesteraSubida } from '../lib/mosaico';
+import { obtenerBlobPreview } from '../lib/previewImagen';
 
 const visuallyHidden = {
   position: 'absolute', width: 1, height: 1, overflow: 'hidden',
@@ -28,20 +29,52 @@ const chipBtn = {
 };
 const btnPrimary = { ...btnBase, background: 'var(--accent-amber)', border: 'none', color: 'white' };
 
-// Preview with its own object URL: created on mount and revoked on unmount,
-// so only the tiles on the visible page hold a preview in memory.
+// Small preview per tile. The downscaled Blob (~240px) is generated lazily, only
+// once the tile is visible, with bounded concurrency (see lib/previewImagen). Each
+// mounted tile owns its object URL and revokes it on unmount. If the browser cannot
+// downscale, it falls back to the original file's object URL.
 function Previa({ file }) {
   const [url, setUrl] = useState(null);
+  const [visible, setVisible] = useState(false);
+  const ref = useRef(null);
+
   useEffect(() => {
-    const u = URL.createObjectURL(file);
-    setUrl(u);
-    return () => URL.revokeObjectURL(u);
-  }, [file]);
-  return url ? <img className="mosaico-tile__img" src={url} alt="" decoding="async" loading="lazy" /> : null;
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === 'undefined') { setVisible(true); return undefined; }
+    const obs = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) { setVisible(true); obs.disconnect(); }
+    }, { rootMargin: '200px' });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!visible) return undefined;
+    let vivo = true;
+    let u = null;
+    obtenerBlobPreview(file).then((blob) => {
+      if (!vivo) return;
+      u = URL.createObjectURL(blob ?? file);
+      setUrl(u);
+    });
+    return () => {
+      vivo = false;
+      if (u) URL.revokeObjectURL(u);
+    };
+  }, [file, visible]);
+
+  return (
+    <>
+      <span ref={ref} aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
+      {url ? <img className="mosaico-tile__img" src={url} alt="" decoding="async" loading="lazy" /> : null}
+    </>
+  );
 }
 
 // One square tile of the queue: preview, status overlay and its actions.
-function TesteraCola({ it, ocupado, iniciado, seleccionando, seleccionada, onAlternar, onQuitar, onReintentar }) {
+// Memoized: a patch() of one item keeps the other items' object identity, and the
+// callbacks take the id so the parent can pass stable functions.
+const TesteraCola = memo(function TesteraCola({ it, ocupado, iniciado, seleccionando, seleccionada, onAlternar, onQuitar, onReintentar }) {
   const nombre = it.nombre || it.file.name;
   const estado = it.estado;
   const r = it.resultado ?? {};
@@ -81,14 +114,14 @@ function TesteraCola({ it, ocupado, iniciado, seleccionando, seleccionada, onAlt
         </>
       )}
       {estado === 'error' && (
-        <button type="button" disabled={ocupado} onClick={onReintentar}
+        <button type="button" disabled={ocupado} onClick={() => onReintentar(it.id)}
           className="mosaico-tile__accion mosaico-tile__accion--reintentar"
           style={{ opacity: ocupado ? 0.6 : 1, cursor: ocupado ? 'not-allowed' : 'pointer' }}>
           Reintentar
         </button>
       )}
       {!iniciado && seleccionando && (
-        <button type="button" role="checkbox" aria-checked={seleccionada} onClick={onAlternar}
+        <button type="button" role="checkbox" aria-checked={seleccionada} onClick={() => onAlternar(it.id)}
           aria-label={`Seleccionar ${nombre}`} className="mosaico-tile__selector">
           <span className="mosaico-tile__casilla" aria-hidden="true">
             {seleccionada && <IconoCheck size={13} />}
@@ -96,7 +129,7 @@ function TesteraCola({ it, ocupado, iniciado, seleccionando, seleccionada, onAlt
         </button>
       )}
       {!iniciado && !seleccionando && (
-        <button type="button" onClick={onQuitar}
+        <button type="button" onClick={() => onQuitar(it.id)}
           aria-label={`Quitar ${nombre} de la lista`}
           className="mosaico-tile__accion mosaico-tile__accion--quitar">
           <IconoEliminar size={13} aria-hidden="true" />
@@ -104,7 +137,7 @@ function TesteraCola({ it, ocupado, iniciado, seleccionando, seleccionada, onAlt
       )}
     </div>
   );
-}
+});
 
 // Queue for a batch upload (up to LOTE_MAX rows). Paged, FILAS_POR_PAGINA rows
 // at a time, so a 1000-photo batch never renders 1000 rows or previews at once.
@@ -162,6 +195,13 @@ export default function UploadCola({ lote, onQuitar, onQuitarVarias, onReintenta
       resumenRef.current?.focus();
     }
   }, [running, terminado]);
+
+  // Stable callbacks for the memoized tiles (latest props read through a ref).
+  const accionesRef = useRef({ onQuitar, onReintentar });
+  accionesRef.current = { onQuitar, onReintentar };
+  const alternarUna = useCallback((id) => setSeleccion((prev) => alternarSeleccion(prev, id)), []);
+  const quitarUna = useCallback((id) => accionesRef.current.onQuitar(id), []);
+  const reintentarUna = useCallback((id) => accionesRef.current.onReintentar(id), []);
 
   const irAPagina = (n) => {
     setPaginaPedida(n);
@@ -260,9 +300,9 @@ export default function UploadCola({ lote, onQuitar, onQuitarVarias, onReintenta
             iniciado={iniciado}
             seleccionando={modoSeleccion}
             seleccionada={seleccion.has(it.id)}
-            onAlternar={() => setSeleccion((prev) => alternarSeleccion(prev, it.id))}
-            onQuitar={() => onQuitar(it.id)}
-            onReintentar={() => onReintentar(it.id)}
+            onAlternar={alternarUna}
+            onQuitar={quitarUna}
+            onReintentar={reintentarUna}
           />
         ))}
       </Mosaico>

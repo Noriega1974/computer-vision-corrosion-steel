@@ -15,7 +15,7 @@ import {
   calcularProgresoSubida,
   ejecutarColaConcurrencia,
   paginar,
-  debeInvalidar,
+  debeRefrescarAlTerminar,
   debeActualizarProgreso,
   clasificarArchivos,
   nombreDesdeArchivo,
@@ -318,10 +318,12 @@ describe('gestorSubida: paging and refresh throttle', () => {
     assert.equal(debeActualizarProgreso(1000, 1010, 0), true);
   });
 
-  it('invalidates at most every 10 seconds', () => {
-    assert.equal(debeInvalidar(1000, null), true);
-    assert.equal(debeInvalidar(5000, 1000), false);
-    assert.equal(debeInvalidar(11000, 1000), true);
+  it('refreshes once at the end only if some row finished or failed', () => {
+    assert.equal(debeRefrescarAlTerminar(['listo']), true);
+    assert.equal(debeRefrescarAlTerminar(['detenida', 'error']), true);
+    assert.equal(debeRefrescarAlTerminar(['detenida', 'cola']), false);
+    assert.equal(debeRefrescarAlTerminar([]), false);
+    assert.equal(debeRefrescarAlTerminar(undefined), false);
   });
 });
 

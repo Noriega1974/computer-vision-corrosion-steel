@@ -297,9 +297,10 @@ export function debeActualizarProgreso(ultimoMs, ahoraMs, progreso, intervalo = 
   return ahoraMs - ultimoMs >= intervalo;
 }
 
-// Throttle for the global data refresh: true when enough time has passed.
-export const INTERVALO_INVALIDAR_MS = 10000;
-
-export function debeInvalidar(ahora, ultimo, intervalo = INTERVALO_INVALIDAR_MS) {
-  return ultimo == null || ahora - ultimo >= intervalo;
+// Global data refresh: never during a run (it refetched the whole gallery every
+// ~10 s and made the page lag). One refresh when the run ends, whatever the outcome
+// (finished, stopped, with errors): any 'listo' or 'error' row may have stored a
+// measurement, so the gallery must not stay stale.
+export function debeRefrescarAlTerminar(estadosFinales) {
+  return Array.from(estadosFinales ?? []).some((e) => e === 'listo' || e === 'error');
 }
