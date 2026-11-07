@@ -1,8 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { etiquetaDia, puntosTendencia, resumenAccesible, textoPromedioDia, textoDetalleDia } from './tendenciaDiaria.js';
+import { diaEpoch, etiquetaDia, puntosTendencia, resumenAccesible, textoPromedioDia, textoDetalleDia, textoNivelesDia } from './tendenciaDiaria.js';
 
-const dia = (fecha, extra = {}) => ({ fecha, total: 2, promedio_pct: 10, nivel_ponderado: 2, peor_nivel: 3, max_pct: 30, ...extra });
+const dia = (fecha, extra = {}) => ({ fecha, total: 2, promedio_pct: 10, nivel_ponderado: 2, peor_nivel: 3, max_pct: 30, min_pct: 2, por_nivel: [0, 1, 1, 0], ...extra });
 
 describe('tendenciaDiaria', () => {
   it('formats day labels without time zone shifts', () => {
@@ -22,14 +22,17 @@ describe('tendenciaDiaria', () => {
 
   it('maps average, weighted level and worst values', () => {
     const [p] = puntosTendencia([dia('2026-11-03', { promedio_pct: 12.43, total: 5, nivel_ponderado: 1, peor_nivel: 3, max_pct: 40.5 })]);
-    assert.deepEqual(p, { fecha: '2026-11-03', etiqueta: '3 nov', total: 5, promedio: 12.4, nivel: 1, peorNivel: 3, peorPct: 40.5 });
+    assert.deepEqual(p, {
+      fecha: '2026-11-03', etiqueta: '3 nov', dia: diaEpoch('2026-11-03'), total: 5, promedio: 12.4, nivel: 1, peorNivel: 3,
+      porNivel: [0, 1, 1, 0], minPct: 2, maxPct: 40.5,
+    });
   });
 
   it('tolerates a missing level and keeps only the last N days', () => {
     const [p] = puntosTendencia([dia('2026-11-03', { nivel_ponderado: null, peor_nivel: 9, max_pct: null })]);
     assert.equal(p.nivel, null);
     assert.equal(p.peorNivel, null);
-    assert.equal(p.peorPct, null);
+    assert.equal(p.maxPct, null);
     const muchos = Array.from({ length: 10 }, (_, i) => dia(`2026-10-${String(i + 10)}`));
     assert.deepEqual(puntosTendencia(muchos, 3).map((x) => x.fecha), ['2026-10-17', '2026-10-18', '2026-10-19']);
     assert.deepEqual(puntosTendencia(undefined), []);
@@ -38,8 +41,8 @@ describe('tendenciaDiaria', () => {
   it('writes the header and the hover detail', () => {
     const [p] = puntosTendencia([dia('2026-11-03', { promedio_pct: 12.43, total: 1, max_pct: 12.43, peor_nivel: 2 })]);
     assert.equal(textoPromedioDia(p), '3 nov · 12,4% promedio');
-    assert.equal(textoDetalleDia(p, () => 'Moderada'), '1 medición · Peor: 12,4% (Moderada)');
-    assert.equal(textoDetalleDia({ ...p, peorPct: null }, () => 'x'), '1 medición');
+    assert.equal(textoDetalleDia(p, () => 'Moderada'), '1 medición · Mín. 2,0% · Máx. 12,4% (Moderada)');
+    assert.equal(textoDetalleDia({ ...p, minPct: null, maxPct: null }, () => 'x'), '1 medición');
   });
 
   it('adds the year to the labels only when the days span more than one year', () => {
@@ -54,8 +57,26 @@ describe('tendenciaDiaria', () => {
     const pts = puntosTendencia(Array.from({ length: 9 }, (_, i) => dia(`2026-11-0${i + 1}`)));
     const lineas = resumenAccesible(pts, () => 'Severa');
     assert.equal(lineas.length, 7);
-    assert.equal(lineas[0], '9 nov · 10,0% promedio · 2 mediciones · Peor: 30,0% (Severa)');
+    assert.equal(lineas[0], '9 nov · 10,0% promedio · 2 mediciones · Mín. 2,0% · Máx. 30,0% (Severa) · Severa 1 · Severa 1');
     assert.ok(lineas[6].startsWith('3 nov'));
     assert.deepEqual(resumenAccesible(undefined, () => ''), []);
+  });
+
+  it('carries per-level counts and the min-max range, tolerating a backend without min_pct', () => {
+    const [p] = puntosTendencia([dia('2026-11-03', { por_nivel: [2, 0, 1, 3], min_pct: 0.2 })]);
+    assert.deepEqual(p.porNivel, [2, 0, 1, 3]);
+    assert.equal(p.minPct, 0.2);
+    assert.equal(textoNivelesDia(p, (n) => `N${n}`), 'N0 2 · N2 1 · N3 3');
+    const [viejo] = puntosTendencia([dia('2026-11-03', { min_pct: undefined, por_nivel: undefined })]);
+    assert.equal(viejo.minPct, null);
+    assert.deepEqual(viejo.porNivel, [0, 0, 0, 0]);
+    assert.equal(textoNivelesDia(viejo, () => 'x'), '');
+    assert.deepEqual(puntosTendencia([dia('2026-11-03', { por_nivel: [-1, 'x', 2.5, 4] })])[0].porNivel, [0, 0, 0, 4]);
+  });
+
+  it('turns dates into whole days for a proportional axis', () => {
+    assert.equal(diaEpoch('2026-11-04') - diaEpoch('2026-11-03'), 1);
+    assert.equal(diaEpoch('2026-11-07') - diaEpoch('2026-10-01'), 37);
+    assert.equal(diaEpoch('raro'), null);
   });
 });
