@@ -6,7 +6,7 @@ import { puntosTendencia, textoPromedioDia, resumenAccesible, ejePorcentaje } fr
 import { construirEje, filaConDatosCercana } from '../lib/ejeFechasTendencia';
 import { formatoPct, plural } from '../lib/textUtils';
 import { COLORES_NIVEL, nivelColorTexto, nivelLabel } from '../lib/statusUtils';
-import { ComposedChart, Area, Bar, Line, XAxis, YAxis, Tooltip, ReferenceLine } from 'recharts';
+import { ComposedChart, Area, Bar, Line, XAxis, YAxis, Tooltip, ReferenceLine, Customized } from 'recharts';
 import Skeleton, { SkeletonLinea } from './Skeleton';
 
 // Total height of the two plots (average on top, photos per level below), axis included.
@@ -52,14 +52,46 @@ function PuntoDia({ cx, cy, payload, activo }) {
 }
 const PuntoActivo = (props) => <PuntoDia {...props} activo />;
 
-// Dashed level threshold with a small label at the right end. Skipped when it would sit
-// on a tick label or against the top of the plot.
-function umbralY(valor, y, altoPx) {
-  const px = (v) => (v / y.dominio[1]) * altoPx;
-  const visible = valor < y.dominio[1] && !y.ticks.includes(valor) && px(y.dominio[1]) - px(valor) >= 12;
+// Faint solid gridline at every Y tick, so each label sits on its line.
+const gridY = (y) => y.ticks.map((t) => (
+  <ReferenceLine key={`g${t}`} y={t} stroke="var(--border)" strokeOpacity={0.7} />
+));
+
+// Dashed level threshold tinted with the level's text color. The small label sits just above
+// the line, inside the plot at the left (after the axis); skipped when there is no room above.
+function umbralY(valor, y, altoPx, nivel) {
+  const color = nivelColorTexto(nivel);
+  const visible = valor < y.dominio[1] && ((y.dominio[1] - valor) / y.dominio[1]) * altoPx >= 12;
   return (
-    <ReferenceLine key={valor} y={valor} stroke="var(--text-muted)" strokeDasharray="1 3" strokeOpacity={0.6}
-      label={visible ? { value: `${valor}%`, position: 'insideTopRight', fill: 'var(--text-muted)', fontSize: 9 } : undefined} />
+    <ReferenceLine key={valor} y={valor} stroke={color} strokeDasharray="4 3" strokeOpacity={0.6}
+      label={visible ? { value: `${valor}%`, position: 'insideTopLeft', fill: color, fillOpacity: 0.85, fontSize: 9, dx: 3, dy: -13 } : undefined} />
+  );
+}
+
+// Month separators: short subtle tick at the boundary between the last day of a month and the
+// first of the next (midway between two slots, so it never covers a point). `arriba` draws it at
+// the top with the month name just right of it (left if it would touch the plot edge).
+function SeparadoresMes({ offset, meses, filas, arriba }) {
+  if (!offset || !filas.length) return null;
+  const ranura = offset.width / filas.length;
+  return (
+    <g aria-hidden="true">
+      {meses.map((m) => {
+        const x = offset.left + filas.findIndex((f) => f.clave === m.clave) * ranura;
+        const y1 = arriba ? offset.top : offset.top + offset.height - 6;
+        const y2 = arriba ? offset.top + 14 : offset.top + offset.height;
+        const aDerecha = x + 3 + m.texto.length * 5.6 <= offset.left + offset.width - 2;
+        return (
+          <g key={m.clave}>
+            <line x1={x} x2={x} y1={y1} y2={y2} stroke="var(--text-muted)" strokeOpacity={0.5} />
+            {arriba && (
+              <text x={aDerecha ? x + 3 : x - 3} y={offset.top + 10} textAnchor={aDerecha ? 'start' : 'end'}
+                fill="var(--text-muted)" fontSize={10}>{m.texto}</text>
+            )}
+          </g>
+        );
+      })}
+    </g>
   );
 }
 
@@ -142,13 +174,7 @@ export default function TendenciaPunto({ punto }) {
     const manejadores = { onMouseMove: alHover, onMouseLeave: () => setPuntoActivo(null) };
     const marcas = (conTexto) => (
       <>
-        {eje.meses.map((m) => (
-          <ReferenceLine key={m.clave} x={m.clave} stroke="var(--border-strong)" strokeOpacity={0.6}
-            label={conTexto ? (m.clave === eje.filas[eje.filas.length - 1].clave
-              // A month that starts on the newest day has no room to its right: name it on the left.
-              ? { value: m.texto, position: 'insideTopRight', fill: 'var(--text-muted)', fontSize: 10, dx: -3 }
-              : { value: m.texto, position: 'insideTopLeft', fill: 'var(--text-muted)', fontSize: 10, dx: 3 }) : undefined} />
-        ))}
+        <Customized component={<SeparadoresMes meses={eje.meses} filas={eje.filas} arriba={conTexto} />} />
         {eje.saltos.map((g) => (
           <ReferenceLine key={g.clave} x={g.clave} stroke="var(--text-muted)" strokeDasharray="2 3" strokeOpacity={0.8}
             label={conTexto ? { value: g.texto, angle: -90, position: 'center', fill: 'var(--text-muted)', fontSize: 10 } : undefined} />
@@ -170,7 +196,9 @@ export default function TendenciaPunto({ punto }) {
                 {/* Half a slot of padding puts each point at the center of its bar below. */}
                 <XAxis dataKey="clave" hide padding={{ left: mediaRanura, right: mediaRanura }} />
                 <YAxis width={ANCHO_EJE_Y} domain={y.dominio} ticks={y.ticks} interval={0} tick={TICK} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
-                {[UMBRAL_MODERADA, UMBRAL_SEVERA].map((u) => umbralY(u, y, altoPlotSup))}
+                {gridY(y)}
+                {umbralY(UMBRAL_MODERADA, y, altoPlotSup, 2)}
+                {umbralY(UMBRAL_SEVERA, y, altoPlotSup, 3)}
                 {marcas(true)}
                 <Tooltip content={() => null} cursor={false} />
                 <Area type="monotone" dataKey="banda" stroke="none" fill={COLOR_LINEA} fillOpacity={0.16}
