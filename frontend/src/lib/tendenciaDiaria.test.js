@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { diaEpoch, etiquetaDia, puntosTendencia, resumenAccesible, textoPromedioDia, textoDetalleDia, textoNivelesDia } from './tendenciaDiaria.js';
+import { diaEpoch, ejePorcentaje, etiquetaDia, puntosTendencia, resumenAccesible, textoPromedioDia, textoDetalleDia, textoNivelesDia } from './tendenciaDiaria.js';
 
 const dia = (fecha, extra = {}) => ({ fecha, total: 2, promedio_pct: 10, nivel_ponderado: 2, peor_nivel: 3, max_pct: 30, min_pct: 2, por_nivel: [0, 1, 1, 0], ...extra });
 
@@ -78,5 +78,14 @@ describe('tendenciaDiaria', () => {
     assert.equal(diaEpoch('2026-11-04') - diaEpoch('2026-11-03'), 1);
     assert.equal(diaEpoch('2026-11-07') - diaEpoch('2026-10-01'), 37);
     assert.equal(diaEpoch('raro'), null);
+  });
+
+  it('builds a round percentage axis that always contains the maximum', () => {
+    assert.deepEqual(ejePorcentaje(71.5), { dominio: [0, 80], ticks: [0, 20, 40, 60, 80] });
+    assert.deepEqual(ejePorcentaje(44.7), { dominio: [0, 60], ticks: [0, 20, 40, 60] });
+    assert.deepEqual(ejePorcentaje(8), { dominio: [0, 10], ticks: [0, 5, 10] });
+    assert.deepEqual(ejePorcentaje(0), { dominio: [0, 5], ticks: [0, 5] });
+    assert.deepEqual(ejePorcentaje(97), { dominio: [0, 100], ticks: [0, 25, 50, 75, 100] });
+    assert.deepEqual(ejePorcentaje(undefined).dominio, [0, 5]);
   });
 });

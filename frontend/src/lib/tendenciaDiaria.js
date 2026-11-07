@@ -88,3 +88,16 @@ export function textoDetalleDia(p, labelNivel) {
 export function textoNivelesDia(p, labelNivel) {
   return p.porNivel.map((n, i) => (n > 0 ? `${labelNivel(i)} ${n}` : null)).filter(Boolean).join(' · ');
 }
+
+const PASOS_EJE_PCT = [5, 10, 20, 25, 50];
+
+// Y axis of the average plot: starts at 0, ends at a multiple of a round step (5, 10,
+// 20, 25 or 50) that contains `tope` (max 100), with at most four evenly spaced intervals.
+export function ejePorcentaje(tope) {
+  const t = Math.min(Math.max(Number(tope) || 0, 0), 100);
+  const paso = PASOS_EJE_PCT.find((p) => Math.ceil(t / p) <= 4) ?? 25;
+  const max = Math.min(Math.max(Math.ceil(t / paso), 1) * paso, 100);
+  const ticks = [];
+  for (let v = 0; v <= max; v += paso) ticks.push(v);
+  return { dominio: [0, max], ticks };
+}

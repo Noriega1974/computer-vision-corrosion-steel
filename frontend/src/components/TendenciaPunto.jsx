@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useResumenDiario } from '../hooks/useResumenDiario';
 import { anioColombia } from '../lib/fechas';
 import { aniosDesde } from '../lib/resumenDiario';
-import { puntosTendencia, textoPromedioDia, resumenAccesible } from '../lib/tendenciaDiaria';
-import { construirEje, filaConDatosCercana, MODO_FECHAS_DEFECTO } from '../lib/ejeFechasTendencia';
+import { puntosTendencia, textoPromedioDia, resumenAccesible, ejePorcentaje } from '../lib/tendenciaDiaria';
+import { construirEje, filaConDatosCercana } from '../lib/ejeFechasTendencia';
 import { formatoPct, plural } from '../lib/textUtils';
 import { COLORES_NIVEL, nivelColorTexto, nivelLabel } from '../lib/statusUtils';
 import { ComposedChart, Area, Bar, Line, XAxis, YAxis, Tooltip, ReferenceLine } from 'recharts';
@@ -11,26 +11,17 @@ import Skeleton, { SkeletonLinea } from './Skeleton';
 
 // Total height of the two plots (average on top, photos per level below), axis included.
 const ALTO_GRAFICA = 190;
-const PROPORCION_SUPERIOR = 0.56;
+const PROPORCION_SUPERIOR = 0.58;
 const ANCHO_EJE_Y = 36;
 const COLOR_LINEA = 'var(--accent-amber)';
 const UMBRAL_MODERADA = 10;
 const UMBRAL_SEVERA = 25;
 const NIVELES = [0, 1, 2, 3];
 const MARGEN = { top: 4, right: 6, left: 0, bottom: 0 };
-const MARGEN_SEPARACION = 6;
+const MARGEN_SEPARACION = 12;
 // Below this width the two reading lines wrap, so each reserves two lines (no jumping on hover).
 const ANCHO_LECTURA_ANGOSTA = 480;
 const TICK = { fill: 'var(--text-muted)', fontSize: 11 };
-
-// Temporary, only for the screenshot round of the owner (dev server only):
-// ?tg_alto=140|190|240 and ?tg_fechas=compacto|proporcional|saltos.
-function opcionesDeDesarrollo() {
-  if (!import.meta.env.DEV || typeof window === 'undefined') return {};
-  const q = new URLSearchParams(window.location.search);
-  const alto = Number(q.get('tg_alto'));
-  return { alto: alto > 0 ? alto : undefined, fechas: q.get('tg_fechas') || undefined };
-}
 
 const AVISO_STYLE = {
   flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -52,22 +43,24 @@ function useAncho(el) {
   return ancho;
 }
 
-function PuntoDia({ cx, cy, payload }) {
+// One dot per day, filled with the day's level color; the ring matches the card
+// background so the dot stands out from the line in light and dark themes.
+function PuntoDia({ cx, cy, payload, activo }) {
   if (cx == null || cy == null || payload?.promedio == null) return null;
-  return <circle cx={cx} cy={cy} r={2.5} fill={COLOR_LINEA} stroke="var(--bg-card-solid)" strokeWidth={1} />;
+  const relleno = COLORES_NIVEL[payload.nivel] ?? COLOR_LINEA;
+  return <circle cx={cx} cy={cy} r={activo ? 6.5 : 4.5} fill={relleno} stroke="var(--bg-card-solid)" strokeWidth={activo ? 2 : 1.5} />;
 }
+const PuntoActivo = (props) => <PuntoDia {...props} activo />;
 
-// Y axis of the average plot: the two level thresholds (10 and 25 %) are always the
-// preferred labels; 0 and the top of the range only appear if they do not collide.
-function ejeY(puntos, altoPx) {
-  const tope = Math.max(...puntos.map((p) => p.maxPct ?? p.promedio), 0);
-  const max = tope <= 12 ? 15 : tope <= 30 ? 30 : Math.ceil(tope / 10) * 10;
-  const px = (v) => (v / max) * altoPx;
-  const ticks = [];
-  [UMBRAL_SEVERA, UMBRAL_MODERADA, max, 0].forEach((v) => {
-    if (v <= max && !ticks.includes(v) && ticks.every((t) => Math.abs(px(t) - px(v)) >= 13)) ticks.push(v);
-  });
-  return { dominio: [0, max], ticks: ticks.sort((x, y) => x - y) };
+// Dashed level threshold with a small label at the right end. Skipped when it would sit
+// on a tick label or against the top of the plot.
+function umbralY(valor, y, altoPx) {
+  const px = (v) => (v / y.dominio[1]) * altoPx;
+  const visible = valor < y.dominio[1] && !y.ticks.includes(valor) && px(y.dominio[1]) - px(valor) >= 12;
+  return (
+    <ReferenceLine key={valor} y={valor} stroke="var(--text-muted)" strokeDasharray="1 3" strokeOpacity={0.6}
+      label={visible ? { value: `${valor}%`, position: 'insideTopRight', fill: 'var(--text-muted)', fontSize: 9 } : undefined} />
+  );
 }
 
 // Reading of the hovered day (or the latest one) in two fixed lines; the level
@@ -84,8 +77,8 @@ function Lectura({ d, estrecho }) {
         {NIVELES.map((n) => (
           <span key={n} style={{ whiteSpace: 'nowrap', opacity: d.porNivel[n] === 0 ? 0.6 : 1 }}>
             <span aria-hidden="true" style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: COLORES_NIVEL[n], marginRight: 4 }} />
-            {nivelLabel(n)}{' '}
-            <strong style={{ color: d.porNivel[n] === 0 ? 'inherit' : nivelColorTexto(n) }}>{d.porNivel[n]}</strong>
+            <span style={{ color: nivelColorTexto(n) }}>{nivelLabel(n)}</span>{' '}
+            <strong style={{ color: nivelColorTexto(n) }}>{d.porNivel[n]}</strong>
           </span>
         ))}
       </div>
@@ -97,10 +90,8 @@ function Lectura({ d, estrecho }) {
 // punto elegido en el mapa o en la lista. Un punto por día (promedio de todas
 // las fotos del día), así escala a miles de mediciones. Arriba: promedio y banda
 // mín-máx; abajo: fotos por nivel de cada día. Sin punto muestra un aviso.
-export default function TendenciaPunto({ punto, alturaGrafica = ALTO_GRAFICA, modoFechas = MODO_FECHAS_DEFECTO }) {
-  const dev = useMemo(opcionesDeDesarrollo, []);
-  const alto = dev.alto ?? alturaGrafica;
-  const modo = dev.fechas ?? modoFechas;
+export default function TendenciaPunto({ punto }) {
+  const alto = ALTO_GRAFICA;
   const idPunto = punto?.id_bloque;
   const anios = useMemo(() => aniosDesde(anioColombia()), []);
   const resumen = useResumenDiario({ anios, idPunto, habilitado: Boolean(idPunto) });
@@ -115,12 +106,12 @@ export default function TendenciaPunto({ punto, alturaGrafica = ALTO_GRAFICA, mo
   const [contenedor, setContenedor] = useState(null);
   const ancho = useAncho(contenedor);
   const anchoPlot = Math.max(ancho - ANCHO_EJE_Y - MARGEN.right, 0);
-  const eje = useMemo(() => construirEje(trendData, { modo, anchoPx: anchoPlot }), [trendData, modo, anchoPlot]);
+  const eje = useMemo(() => construirEje(trendData, { anchoPx: anchoPlot }), [trendData, anchoPlot]);
   const filas = useMemo(() => eje.filas.map((f) => (f.vacio ? f : {
     ...f, n0: f.porNivel[0], n1: f.porNivel[1], n2: f.porNivel[2], n3: f.porNivel[3],
     banda: f.minPct != null && f.maxPct != null ? [f.minPct, f.maxPct] : null,
   })), [eje.filas]);
-    const maxFotos = useMemo(() => Math.max(...trendData.map((p) => p.total), 1), [trendData]);
+  const maxFotos = useMemo(() => Math.max(...trendData.map((p) => p.total), 1), [trendData]);
 
   let contenido;
   if (!punto) {
@@ -141,7 +132,9 @@ export default function TendenciaPunto({ punto, alturaGrafica = ALTO_GRAFICA, mo
     const d = puntoActivo ?? ultimo;
     const altoSuperior = Math.round(alto * PROPORCION_SUPERIOR);
     const altoInferior = alto - altoSuperior;
-    const y = ejeY(trendData, altoSuperior - MARGEN.top - MARGEN_SEPARACION);
+    const mediaRanura = anchoPlot / filas.length / 2;
+    const altoPlotSup = altoSuperior - MARGEN.top - MARGEN_SEPARACION;
+    const y = ejePorcentaje(Math.max(...trendData.map((p) => p.maxPct ?? p.promedio), 0));
     const alHover = (e) => {
       const f = filaConDatosCercana(filas, e?.activeTooltipIndex);
       setPuntoActivo((prev) => (prev === f || !f ? prev : trendData.find((p) => p.fecha === f.fecha) ?? prev));
@@ -151,7 +144,10 @@ export default function TendenciaPunto({ punto, alturaGrafica = ALTO_GRAFICA, mo
       <>
         {eje.meses.map((m) => (
           <ReferenceLine key={m.clave} x={m.clave} stroke="var(--border-strong)" strokeOpacity={0.6}
-            label={conTexto ? { value: m.texto, position: 'insideTopLeft', fill: 'var(--text-muted)', fontSize: 10, dx: 3 } : undefined} />
+            label={conTexto ? (m.clave === eje.filas[eje.filas.length - 1].clave
+              // A month that starts on the newest day has no room to its right: name it on the left.
+              ? { value: m.texto, position: 'insideTopRight', fill: 'var(--text-muted)', fontSize: 10, dx: -3 }
+              : { value: m.texto, position: 'insideTopLeft', fill: 'var(--text-muted)', fontSize: 10, dx: 3 }) : undefined} />
         ))}
         {eje.saltos.map((g) => (
           <ReferenceLine key={g.clave} x={g.clave} stroke="var(--text-muted)" strokeDasharray="2 3" strokeOpacity={0.8}
@@ -171,21 +167,16 @@ export default function TendenciaPunto({ punto, alturaGrafica = ALTO_GRAFICA, mo
           {ancho > 0 && (
             <>
               <ComposedChart width={ancho} height={altoSuperior} data={filas} margin={{ ...MARGEN, bottom: MARGEN_SEPARACION }} {...manejadores}>
-                <XAxis dataKey="clave" hide />
+                {/* Half a slot of padding puts each point at the center of its bar below. */}
+                <XAxis dataKey="clave" hide padding={{ left: mediaRanura, right: mediaRanura }} />
                 <YAxis width={ANCHO_EJE_Y} domain={y.dominio} ticks={y.ticks} interval={0} tick={TICK} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
-                <ReferenceLine y={UMBRAL_MODERADA} stroke="var(--text-muted)" strokeDasharray="1 3" strokeOpacity={0.55} />
-                <ReferenceLine y={UMBRAL_SEVERA} stroke="var(--text-muted)" strokeDasharray="1 3" strokeOpacity={0.55} />
+                {[UMBRAL_MODERADA, UMBRAL_SEVERA].map((u) => umbralY(u, y, altoPlotSup))}
                 {marcas(true)}
                 <Tooltip content={() => null} cursor={false} />
                 <Area type="monotone" dataKey="banda" stroke="none" fill={COLOR_LINEA} fillOpacity={0.16}
                   isAnimationActive={false} activeDot={false} />
-                {/* Proportional axis: days without data break the solid line; a thin dashed one bridges them. */}
-                {modo === 'proporcional' && (
-                  <Line type="monotone" dataKey="promedio" stroke={COLOR_LINEA} strokeWidth={1} strokeDasharray="3 3" strokeOpacity={0.7}
-                    connectNulls dot={false} activeDot={false} isAnimationActive={false} />
-                )}
                 <Line type="monotone" dataKey="promedio" stroke={COLOR_LINEA} strokeWidth={1.75}
-                  dot={<PuntoDia />} activeDot={<PuntoDia />} isAnimationActive={false} />
+                  dot={<PuntoDia />} activeDot={<PuntoActivo />} isAnimationActive={false} />
               </ComposedChart>
               <ComposedChart width={ancho} height={altoInferior} data={filas} margin={{ ...MARGEN, top: 2 }} barCategoryGap="14%" {...manejadores}>
                 <XAxis dataKey="clave" ticks={eje.ticks} interval={0} tick={TICK} tickLine={false} axisLine={{ stroke: 'var(--border)' }}
