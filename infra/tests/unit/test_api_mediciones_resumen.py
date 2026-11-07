@@ -84,7 +84,7 @@ def test_agrega_por_dia_local_con_todos_los_niveles_y_lotes(h):
     promedio = d26.pop("promedio_pct")
     assert promedio == pytest.approx((40.5 + 0.2 + 3 + 0) / 4)
     assert d26 == {"fecha": "2026-10-26", "total": 4, "por_nivel": [2, 1, 0, 1],
-                   "lotes": {"count": 2, "imagenes": 3}, "peor_nivel": 3, "max_pct": 40.5,
+                   "lotes": {"count": 2, "imagenes": 3}, "peor_nivel": 3, "max_pct": 40.5, "min_pct": 0,
                    "nivel_promedio": 1.0, "nivel_ponderado": 1}
     assert d27["fecha"] == "2026-10-27" and d27["por_nivel"] == [0, 0, 1, 0] and d27["lotes"] == {"count": 0, "imagenes": 0}
     assert cuerpo["totales"] == {"imagenes": 5, "lotes": 2, "imagenes_en_lotes": 3}
@@ -291,3 +291,16 @@ def test_promedios_son_null_sin_datos_validos_y_ignoran_los_invalidos(h):
     d26, d27 = json.loads(_resumen(h, anio="2026")["body"])["dias"]
     assert d26["promedio_pct"] is None and d26["nivel_promedio"] is None and d26["nivel_ponderado"] is None
     assert d27["promedio_pct"] == 4 and d27["nivel_ponderado"] == 2
+
+
+def test_min_pct_es_el_menor_porcentaje_valido_del_dia(h):
+    _poner(h, [_med("2026-10-26T15:00:00+00:00", 3, "40.5"), _med("2026-10-26T16:00:00+00:00", 1, "3"),
+               _med("2026-10-26T17:00:00+00:00", 2, "x"), _med("2026-10-26T18:00:00+00:00", 0, "12")])
+    d = json.loads(_resumen(h, anio="2026")["body"])["dias"][0]
+    assert d["min_pct"] == 3 and d["max_pct"] == 40.5
+
+
+def test_min_pct_es_null_si_ninguna_foto_del_dia_tiene_porcentaje(h):
+    _poner(h, [_med("2026-10-26T15:00:00+00:00", 1, "nan"), _med("2026-10-26T16:00:00+00:00", 2, "x")])
+    d = json.loads(_resumen(h, anio="2026")["body"])["dias"][0]
+    assert d["min_pct"] is None and d["max_pct"] is None
