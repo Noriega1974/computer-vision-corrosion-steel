@@ -14,8 +14,6 @@ const ALTO_GRAFICA = 190;
 const PROPORCION_SUPERIOR = 0.58;
 const ANCHO_EJE_Y = 36;
 const COLOR_LINEA = 'var(--accent-amber)';
-const UMBRAL_MODERADA = 10;
-const UMBRAL_SEVERA = 25;
 const NIVELES = [0, 1, 2, 3];
 const MARGEN = { top: 4, right: 6, left: 0, bottom: 0 };
 const MARGEN_SEPARACION = 12;
@@ -54,19 +52,8 @@ const PuntoActivo = (props) => <PuntoDia {...props} activo />;
 
 // Faint solid gridline at every Y tick, so each label sits on its line.
 const gridY = (y) => y.ticks.map((t) => (
-  <ReferenceLine key={`g${t}`} y={t} stroke="var(--border)" strokeOpacity={0.7} />
+  <ReferenceLine key={`g${t}`} y={t} stroke="var(--text-muted)" strokeOpacity={0.28} />
 ));
-
-// Dashed level threshold tinted with the level's text color. The small label sits just above
-// the line, inside the plot at the left (after the axis); skipped when there is no room above.
-function umbralY(valor, y, altoPx, nivel) {
-  const color = nivelColorTexto(nivel);
-  const visible = valor < y.dominio[1] && ((y.dominio[1] - valor) / y.dominio[1]) * altoPx >= 12;
-  return (
-    <ReferenceLine key={valor} y={valor} stroke={color} strokeDasharray="4 3" strokeOpacity={0.6}
-      label={visible ? { value: `${valor}%`, position: 'insideTopLeft', fill: color, fillOpacity: 0.85, fontSize: 9, dx: 3, dy: -13 } : undefined} />
-  );
-}
 
 // Month separators: short subtle tick at the boundary between the last day of a month and the
 // first of the next (midway between two slots, so it never covers a point). `arriba` draws it at
@@ -165,7 +152,6 @@ export default function TendenciaPunto({ punto }) {
     const altoSuperior = Math.round(alto * PROPORCION_SUPERIOR);
     const altoInferior = alto - altoSuperior;
     const mediaRanura = anchoPlot / filas.length / 2;
-    const altoPlotSup = altoSuperior - MARGEN.top - MARGEN_SEPARACION;
     const y = ejePorcentaje(Math.max(...trendData.map((p) => p.maxPct ?? p.promedio), 0));
     const alHover = (e) => {
       const f = filaConDatosCercana(filas, e?.activeTooltipIndex);
@@ -197,8 +183,6 @@ export default function TendenciaPunto({ punto }) {
                 <XAxis dataKey="clave" hide padding={{ left: mediaRanura, right: mediaRanura }} />
                 <YAxis width={ANCHO_EJE_Y} domain={y.dominio} ticks={y.ticks} interval={0} tick={TICK} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
                 {gridY(y)}
-                {umbralY(UMBRAL_MODERADA, y, altoPlotSup, 2)}
-                {umbralY(UMBRAL_SEVERA, y, altoPlotSup, 3)}
                 {marcas(true)}
                 <Tooltip content={() => null} cursor={false} />
                 <Area type="monotone" dataKey="banda" stroke="none" fill={COLOR_LINEA} fillOpacity={0.16}
