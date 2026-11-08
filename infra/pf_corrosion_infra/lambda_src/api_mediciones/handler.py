@@ -446,7 +446,7 @@ def _resumen_diario(event: dict) -> dict:
         dia = _dia_local(it.get("timestamp"))
         if not dia or not dia.startswith(f"{anio:04d}-"):
             continue
-        d = dias.setdefault(dia, {"fecha": dia, "total": 0, "por_nivel": [0, 0, 0, 0], "_lotes": {}, "peor_nivel": None, "max_pct": None,
+        d = dias.setdefault(dia, {"fecha": dia, "total": 0, "por_nivel": [0, 0, 0, 0], "_lotes": {}, "peor_nivel": None, "max_pct": None, "min_pct": None,
                                                 "_sum_pct": 0.0, "_n_pct": 0, "_sum_niv": 0, "_n_niv": 0})
         d["total"] += 1
         imagenes += 1
@@ -459,6 +459,7 @@ def _resumen_diario(event: dict) -> dict:
         pct = _numero(it.get("area_corroida_pct"))
         if pct is not None:
             d["max_pct"] = pct if d["max_pct"] is None else max(d["max_pct"], pct)
+            d["min_pct"] = pct if d["min_pct"] is None else min(d["min_pct"], pct)
             d["_sum_pct"] += pct
             d["_n_pct"] += 1
         lote = it.get("lote_id")
